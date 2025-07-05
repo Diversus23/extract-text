@@ -67,7 +67,7 @@
 * **MSG файлы:** Применяется эвристический анализ для извлечения читаемого текста из формата Outlook.
 
 **3.8. Обработка исходного кода:**
-* **Поддерживаемые языки программирования:** Python (`.py`, `.pyx`, `.pyi`, `.pyw`), JavaScript/TypeScript (`.js`, `.jsx`, `.ts`, `.tsx`, `.mjs`, `.cjs`), Java (`.java`, `.jav`), C/C++ (`.c`, `.cpp`, `.cxx`, `.cc`, `.c++`, `.h`, `.hpp`, `.hxx`, `.h++`), C# (`.cs`, `.csx`), PHP (`.php`, `.php3`, `.php4`, `.php5`, `.phtml`), Ruby (`.rb`, `.rbw`, `.rake`, `.gemspec`), Go (`.go`, `.mod`, `.sum`), Rust (`.rs`, `.rlib`), Swift (`.swift`), Kotlin (`.kt`, `.kts`), Scala (`.scala`, `.sc`), R (`.r`, `.R`, `.rmd`, `.Rmd`), SQL (`.sql`, `.ddl`, `.dml`), Shell (`.sh`, `.bash`, `.zsh`, `.fish`, `.ksh`, `.csh`, `.tcsh`), PowerShell (`.ps1`, `.psm1`, `.psd1`), Perl (`.pl`, `.pm`, `.pod`, `.t`), Lua (`.lua`)
+* **Поддерживаемые языки программирования:** Python (`.py`, `.pyx`, `.pyi`, `.pyw`), JavaScript/TypeScript (`.js`, `.jsx`, `.ts`, `.tsx`, `.mjs`, `.cjs`), Java (`.java`, `.jav`), C/C++ (`.c`, `.cpp`, `.cxx`, `.cc`, `.c++`, `.h`, `.hpp`, `.hxx`, `.h++`), C# (`.cs`, `.csx`), PHP (`.php`, `.php3`, `.php4`, `.php5`, `.phtml`), Ruby (`.rb`, `.rbw`, `.rake`, `.gemspec`), Go (`.go`, `.mod`, `.sum`), Rust (`.rs`, `.rlib`), Swift (`.swift`), Kotlin (`.kt`, `.kts`), Scala (`.scala`, `.sc`), R (`.r`, `.R`, `.rmd`, `.Rmd`), SQL (`.sql`, `.ddl`, `.dml`), Shell (`.sh`, `.bash`, `.zsh`, `.fish`, `.ksh`, `.csh`, `.tcsh`), PowerShell (`.ps1`, `.psm1`, `.psd1`), Perl (`.pl`, `.pm`, `.pod`, `.t`), Lua (`.lua`), **1C:Enterprise (`.bsl`)**, **OneScript (`.os`)**, **Российские платформы разработки:** Специальная поддержка для файлов 1С:Предприятие и OneScript - популярных инструментов в российской IT-индустрии
 * **Конфигурационные файлы:** INI (`.ini`), конфигурационные файлы (`.cfg`, `.conf`, `.config`), TOML (`.toml`), Properties (`.properties`)
 * **Веб-технологии:** CSS (`.css`, `.scss`, `.sass`, `.less`, `.styl`)
 * **Разметка и документация:** LaTeX (`.tex`, `.latex`), reStructuredText (`.rst`), AsciiDoc (`.adoc`, `.asciidoc`)
@@ -109,7 +109,7 @@
   "spreadsheets": ["csv", "xls", "xlsx", "ods"],
   "presentations": ["pptx", "ppt"],
   "structured_data": ["json", "xml", "yaml", "yml"],
-  "source_code": ["py", "js", "ts", "java", "c", "cpp", "h", "cs", "php", "rb", "go", "rs", "swift", "kt", "scala", "sql", "sh", "ps1", "pl", "lua", "ini", "css", "tex", "dockerfile", "makefile", "gitignore"],
+  "source_code": ["py", "js", "ts", "java", "c", "cpp", "h", "cs", "php", "rb", "go", "rs", "swift", "kt", "scala", "sql", "sh", "ps1", "pl", "lua", "bsl", "os", "ini", "css", "tex", "dockerfile", "makefile", "gitignore"],
   "other": ["txt", "html", "htm", "md", "markdown", "epub", "eml", "msg"]
 }
 ```

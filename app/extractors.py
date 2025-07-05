@@ -552,7 +552,9 @@ class TextExtractor:
                 'pl': 'Perl', 'pm': 'Perl Module', 'pod': 'Perl Documentation', 't': 'Perl Test',
                 # Lua
                 'lua': 'Lua',
-                # Configuration
+                # 1C and OneScript
+                'bsl': '1C:Enterprise', 'os': 'OneScript',
+                # Configuration files
                 'ini': 'INI Config', 'cfg': 'Config', 'conf': 'Config',
                 'config': 'Config', 'toml': 'TOML', 'properties': 'Properties',
                 # Web

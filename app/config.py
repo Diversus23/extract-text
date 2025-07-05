@@ -67,6 +67,8 @@ class Settings:
             "pl", "pm", "pod", "t",
             # Lua
             "lua",
+            # 1C and OneScript
+            "bsl", "os",
             # Configuration files
             "ini", "cfg", "conf", "config", "toml", "properties",
             # Web

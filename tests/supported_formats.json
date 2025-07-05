@@ -96,6 +96,8 @@
     "pod",
     "t",
     "lua",
+    "bsl",
+    "os",
     "ini",
     "cfg",
     "conf",
