@@ -75,7 +75,7 @@ except ImportError:
     yaml = None
 
 from app.config import settings
-from app.utils import get_file_extension, is_supported_format
+from app.utils import get_file_extension, is_supported_format, is_archive_format
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +89,10 @@ class TextExtractor:
         
     async def extract_text(self, file_content: bytes, filename: str) -> str:
         """Основной метод извлечения текста"""
+        
+        # Проверка, является ли файл архивом
+        if is_archive_format(filename, settings.SUPPORTED_FORMATS):
+            raise ValueError(f"Archive format detected: {filename}. Please extract the archive and send each file separately to the API.")
         
         # Проверка поддержки формата
         if not is_supported_format(filename, settings.SUPPORTED_FORMATS):

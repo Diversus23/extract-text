@@ -10,7 +10,7 @@ class Settings:
     """Настройки приложения"""
     
     # Основные настройки
-    VERSION: str = "1.7"
+    VERSION: str = "1.7.1"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # Настройки API
@@ -84,7 +84,8 @@ class Settings:
             # Git
             "gitignore", "gitattributes", "gitmodules"
         ],
-        "other": ["txt", "html", "htm", "md", "markdown", "epub", "eml", "msg"]
+        "other": ["txt", "html", "htm", "md", "markdown", "epub", "eml", "msg"],
+        "archives": ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz", "tbz2", "txz", "tar.gz", "tar.bz2", "tar.xz", "lzma", "z", "cab", "iso", "dmg", "deb", "rpm", "apk", "msi", "pkg", "exe", "bin", "run", "app", "jar", "war", "ear"]
     }
     
     @property

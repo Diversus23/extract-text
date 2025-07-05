@@ -38,6 +38,15 @@ def get_file_extension(filename: str) -> Optional[str]:
     if not filename or '.' not in filename:
         return None
     
+    # Обработка составных расширений (tar.gz, tar.bz2, tar.xz)
+    filename_lower = filename.lower()
+    if filename_lower.endswith('.tar.gz') or filename_lower.endswith('.tgz'):
+        return 'tar.gz'
+    elif filename_lower.endswith('.tar.bz2') or filename_lower.endswith('.tbz2'):
+        return 'tar.bz2'
+    elif filename_lower.endswith('.tar.xz') or filename_lower.endswith('.txz'):
+        return 'tar.xz'
+    
     return filename.split('.')[-1].lower()
 
 
@@ -52,6 +61,16 @@ def is_supported_format(filename: str, supported_formats: dict) -> bool:
             return True
     
     return False
+
+
+def is_archive_format(filename: str, supported_formats: dict) -> bool:
+    """Проверка, является ли файл архивом"""
+    extension = get_file_extension(filename)
+    if not extension:
+        return False
+    
+    archives = supported_formats.get("archives", [])
+    return extension in archives
 
 
 def safe_filename(filename: str) -> str:

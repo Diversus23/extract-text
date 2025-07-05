@@ -139,6 +139,38 @@ async def extract_text(file: UploadFile = File(...)):
         
     except HTTPException:
         raise
+    except ValueError as e:
+        error_msg = str(e)
+        if "Archive format detected" in error_msg:
+            logger.warning(f"Обнаружен архив: {file.filename}")
+            return JSONResponse(
+                status_code=415,
+                content={
+                    "status": "error",
+                    "filename": file.filename,
+                    "message": "Обнаружен архив. Пожалуйста, распакуйте архив и отправьте каждый файл отдельно в API."
+                }
+            )
+        elif "Unsupported file format" in error_msg:
+            logger.warning(f"Неподдерживаемый формат файла: {file.filename}")
+            return JSONResponse(
+                status_code=415,
+                content={
+                    "status": "error",
+                    "filename": file.filename,
+                    "message": "Неподдерживаемый формат файла."
+                }
+            )
+        else:
+            logger.error(f"Ошибка при обработке файла {file.filename}: {error_msg}", exc_info=True)
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "status": "error",
+                    "filename": file.filename,
+                    "message": "Файл поврежден или формат не поддерживается."
+                }
+            )
     except Exception as e:
         logger.error(f"Ошибка при обработке файла {file.filename}: {str(e)}", exc_info=True)
         return JSONResponse(
@@ -146,7 +178,7 @@ async def extract_text(file: UploadFile = File(...)):
             content={
                 "status": "error",
                 "filename": file.filename,
-                "message": "File is corrupted or format is not supported."
+                "message": "Файл поврежден или формат не поддерживается."
             }
         )
 
