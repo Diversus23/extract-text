@@ -500,7 +500,7 @@ class TextExtractor:
         try:
             # Попытка декодирования в разных кодировках
             text = None
-            for encoding in ['utf-8', 'cp1251', 'latin-1']:
+            for encoding in ['utf-8', 'cp1251', 'latin-1', 'koi8-r', 'windows-1251', 'cp866']:
                 try:
                     text = content.decode(encoding)
                     break
@@ -587,10 +587,8 @@ class TextExtractor:
             if line_count > 1000:
                 header += f"Warning: Large file with {line_count} lines\n"
             
-            header += "=" * 50 + "\n\n"
-            
             # Возвращаем заголовок + содержимое файла
-            return header + text
+            return header + "=" * 50 + "\n" + text
             
         except Exception as e:
             logger.error(f"Ошибка при обработке исходного кода {filename}: {str(e)}")

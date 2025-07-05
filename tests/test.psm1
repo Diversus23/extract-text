@@ -1,0 +1,1 @@
+function Get-Hello { "Hello, PSM1!" } 
