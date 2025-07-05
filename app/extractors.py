@@ -59,6 +59,11 @@ except ImportError:
     P = None
     extractText = None
 
+try:
+    from striprtf.striprtf import rtf_to_text
+except ImportError:
+    rtf_to_text = None
+
 from app.config import settings
 from app.utils import get_file_extension, is_supported_format
 
@@ -402,8 +407,21 @@ class TextExtractor:
     
     async def _extract_from_rtf(self, content: bytes) -> str:
         """Извлечение текста из RTF"""
-        # Для RTF нужна специальная библиотека
-        raise ValueError("RTF format not fully supported yet")
+        if not rtf_to_text:
+            raise ImportError("striprtf не установлен")
+        
+        try:
+            # Декодирование RTF содержимого
+            rtf_text = content.decode('utf-8', errors='replace')
+            
+            # Извлечение текста из RTF с помощью striprtf
+            text = rtf_to_text(rtf_text)
+            
+            return text.strip()
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке RTF: {str(e)}")
+            raise ValueError(f"Error processing RTF: {str(e)}")
     
     async def _extract_from_odt(self, content: bytes) -> str:
         """Извлечение текста из ODT"""
