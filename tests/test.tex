@@ -1,0 +1,252 @@
+\documentclass[12pt,a4paper]{article}
+
+% Пакеты для поддержки русского языка
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage[T2A]{fontenc}
+
+% Дополнительные пакеты
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tabularx}
+\usepackage{caption}
+\usepackage{subcaption}
+
+% Настройка геометрии страницы
+\geometry{left=2.5cm,right=1.5cm,top=2cm,bottom=2cm}
+
+% Настройка колонтитулов
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Система извлечения текста}
+\fancyhead[R]{API v1.7}
+\fancyfoot[C]{\thepage}
+
+% Настройка для отображения кода
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    stringstyle=\color{red},
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    captionpos=b,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    showstringspaces=false
+}
+
+% Заголовок документа
+\title{\textbf{Система извлечения текста из файлов различных форматов} \\
+       \large Техническая документация API v1.7}
+\author{ООО <<СОФТОНИТ>>}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Данный документ описывает систему извлечения текста из файлов различных форматов, включая документы, изображения, таблицы и исходный код. Система предоставляет RESTful API для интеграции с внешними приложениями и поддерживает более 120 различных форматов файлов.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Введение}
+
+Система извлечения текста представляет собой современное решение для обработки документов различных форматов. Основные возможности системы включают:
+
+\begin{itemize}
+    \item Извлечение текста из документов (PDF, DOCX, DOC, RTF)
+    \item OCR распознавание текста на изображениях
+    \item Обработка таблиц и электронных таблиц
+    \item Поддержка исходного кода более 40 языков программирования
+    \item Обработка электронных книг и писем
+\end{itemize}
+
+\section{Математические основы}
+
+\subsection{Алгоритм OCR}
+
+Точность распознавания текста определяется по формуле:
+
+\begin{equation}
+\text{Accuracy} = \frac{\text{Correctly recognized characters}}{\text{Total characters}} \times 100\%
+\end{equation}
+
+Где уверенность распознавания вычисляется как:
+
+\begin{equation}
+\text{Confidence} = \frac{1}{n} \sum_{i=1}^{n} c_i
+\end{equation}
+
+где $c_i$ -- уверенность распознавания $i$-го символа, $n$ -- общее количество символов.
+
+\subsection{Обработка исходного кода}
+
+Для анализа сложности кода используется метрика цикломатической сложности:
+
+\begin{equation}
+M = E - N + 2P
+\end{equation}
+
+где:
+\begin{align}
+E &= \text{количество рёбер в графе потока управления} \\
+N &= \text{количество узлов в графе} \\
+P &= \text{количество связанных компонентов}
+\end{align}
+
+\section{Архитектура системы}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{minipage}{0.8\textwidth}
+        \begin{verbatim}
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Client App    │────│   FastAPI       │────│   Extractors    │
+│                 │    │   Server        │    │   Module        │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                │
+                                │
+                       ┌─────────────────┐
+                       │   File Storage  │
+                       │   & Processing  │
+                       └─────────────────┘
+        \end{verbatim}
+    \end{minipage}
+    \caption{Схема архитектуры системы}
+    \label{fig:architecture}
+\end{figure}
+
+\section{Поддерживаемые форматы}
+
+\begin{table}[htbp]
+\centering
+\caption{Основные категории поддерживаемых форматов}
+\begin{tabularx}{\textwidth}{|l|X|c|}
+\hline
+\textbf{Категория} & \textbf{Описание} & \textbf{Количество} \\
+\hline
+Документы & PDF, DOCX, DOC, RTF, ODT & 5 \\
+Изображения & JPG, PNG, TIFF, BMP, GIF & 7 \\
+Таблицы & XLS, XLSX, CSV, ODS & 4 \\
+Исходный код & Python, JavaScript, Java, C++, 1C и др. & 40+ \\
+Структурированные & JSON, XML, YAML & 3 \\
+\hline
+\textbf{Всего} & & \textbf{120+} \\
+\hline
+\end{tabularx}
+\label{tab:formats}
+\end{table}
+
+\section{Примеры кода}
+
+\subsection{Использование API}
+
+\begin{lstlisting}[caption=Пример запроса к API на Python]
+import requests
+
+# Загрузка файла
+with open('document.pdf', 'rb') as file:
+    response = requests.post(
+        'http://localhost:7555/v1/extract-text/',
+        files={'file': file}
+    )
+
+if response.status_code == 200:
+    result = response.json()
+    print(f"Извлеченный текст: {result['text']}")
+    print(f"Количество слов: {result['word_count']}")
+else:
+    print(f"Ошибка: {response.status_code}")
+\end{lstlisting}
+
+\subsection{Обработка 1С кода}
+
+\begin{lstlisting}[language=C, caption=Пример кода 1С:Предприятие]
+// Функция обработки текста в 1С
+Функция ОбработатьТекст(ВходнойТекст) Экспорт
+    
+    Если НЕ ЗначениеЗаполнено(ВходнойТекст) Тогда
+        ВызватьИсключение "Текст не заполнен";
+    КонецЕсли;
+    
+    Результат = Новый Структура;
+    Результат.Вставить("ОбработанныйТекст", СокрЛП(ВходнойТекст));
+    Результат.Вставить("КоличествоСимволов", СтрДлина(ВходнойТекст));
+    
+    Возврат Результат;
+    
+КонецФункции
+\end{lstlisting}
+
+\section{Производительность}
+
+Система обеспечивает следующие характеристики производительности:
+
+\begin{itemize}
+    \item Максимальный размер файла: 20 МБ
+    \item Время обработки документа: $< 30$ секунд
+    \item Одновременных подключений: до 100
+    \item Поддерживаемые языки OCR: русский, английский
+\end{itemize}
+
+\section{Формулы вычислений}
+
+\subsection{Статистика текста}
+
+Количество слов в тексте:
+\[
+W = |\{w_1, w_2, \ldots, w_n\}|
+\]
+
+Плотность ключевых слов:
+\[
+\text{Density} = \frac{\text{Keyword count}}{\text{Total words}} \times 100\%
+\]
+
+\subsection{Качество распознавания}
+
+Индекс качества OCR:
+\[
+Q = \alpha \cdot \text{Accuracy} + \beta \cdot \text{Confidence} + \gamma \cdot \text{Speed}
+\]
+
+где $\alpha + \beta + \gamma = 1$ и $\alpha, \beta, \gamma \geq 0$.
+
+\section{Заключение}
+
+Система извлечения текста представляет собой комплексное решение для обработки документов различных форматов. Благодаря модульной архитектуре и поддержке множества форматов, система может эффективно использоваться в различных сценариях обработки данных.
+
+\bibliographystyle{plain}
+\begin{thebibliography}{9}
+
+\bibitem{fastapi}
+Sebastian Ramirez.
+\textit{FastAPI framework, high performance, easy to learn, fast to code, ready for production}.
+\url{https://fastapi.tiangolo.com/}, 2018-2024.
+
+\bibitem{tesseract}
+Ray Smith.
+\textit{An Overview of the Tesseract OCR Engine}.
+Proceedings of the Ninth International Conference on Document Analysis and Recognition, 2007.
+
+\bibitem{pypdf}
+Mathieu Fenniak.
+\textit{PyPDF2: A utility to read and write PDFs with Python}.
+\url{https://github.com/py-pdf/PyPDF2}, 2006-2024.
+
+\end{thebibliography}
+
+\end{document} 

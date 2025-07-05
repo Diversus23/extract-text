@@ -1,0 +1,290 @@
+// Тестовый Stylus файл для проверки извлечения текста
+// Демонстрирует возможности CSS препроцессора Stylus
+
+// Переменные
+primary-color = #3498db
+secondary-color = #2c3e50
+accent-color = #e74c3c
+font-family-base = 'Roboto', 'Helvetica Neue', Arial, sans-serif
+font-size-base = 16px
+line-height-base = 1.6
+border-radius = 4px
+transition-duration = 0.3s
+
+// Функции и миксины
+border-radius(radius = border-radius)
+  border-radius radius
+  -webkit-border-radius radius
+  -moz-border-radius radius
+
+box-shadow(shadow)
+  box-shadow shadow
+  -webkit-box-shadow shadow
+  -moz-box-shadow shadow
+
+transition(property = all, duration = transition-duration, easing = ease)
+  transition property duration easing
+  -webkit-transition property duration easing
+  -moz-transition property duration easing
+
+// Миксин для центрирования
+center-content()
+  display flex
+  justify-content center
+  align-items center
+
+// Миксин для респонсивной типографики
+responsive-font(min-size, max-size, min-width = 320px, max-width = 1200px)
+  font-size min-size
+  
+  @media (min-width: min-width)
+    font-size: "calc(%s + (%s - %s) * ((100vw - %s) / (%s - %s)))" % (min-size (max-size - min-size) min-width (max-width - min-width))
+  
+  @media (min-width: max-width)
+    font-size max-size
+
+// Базовые стили
+*
+  box-sizing border-box
+  margin 0
+  padding 0
+
+body
+  font-family font-family-base
+  font-size font-size-base
+  line-height line-height-base
+  color secondary-color
+  background-color #ffffff
+  transition(color)
+
+// Компонент: Кнопки
+.btn
+  display inline-block
+  padding 12px 24px
+  font-size 14px
+  font-weight 600
+  text-decoration none
+  text-align center
+  cursor pointer
+  border none
+  border-radius()
+  transition()
+  
+  &:hover
+    transform translateY(-2px)
+    box-shadow(0 4px 8px rgba(0, 0, 0, 0.1))
+  
+  &:active
+    transform translateY(0)
+  
+  &.btn-primary
+    background-color primary-color
+    color white
+    
+    &:hover
+      background-color darken(primary-color, 10%)
+  
+  &.btn-secondary
+    background-color secondary-color
+    color white
+    
+    &:hover
+      background-color lighten(secondary-color, 10%)
+  
+  &.btn-danger
+    background-color accent-color
+    color white
+    
+    &:hover
+      background-color darken(accent-color, 10%)
+
+// Компонент: Карточки
+.card
+  background white
+  border-radius()
+  box-shadow(0 2px 4px rgba(0, 0, 0, 0.1))
+  padding 20px
+  margin-bottom 20px
+  transition()
+  
+  &:hover
+    box-shadow(0 4px 12px rgba(0, 0, 0, 0.15))
+    transform translateY(-2px)
+  
+  .card-header
+    margin-bottom 15px
+    padding-bottom 10px
+    border-bottom 1px solid #eee
+    
+    h3
+      margin 0
+      font-size 18px
+      color secondary-color
+  
+  .card-body
+    margin-bottom 15px
+    
+    p
+      margin-bottom 10px
+      
+      &:last-child
+        margin-bottom 0
+  
+  .card-footer
+    padding-top 10px
+    border-top 1px solid #eee
+    text-align right
+
+// Компонент: Навигация
+.navbar
+  background-color white
+  box-shadow(0 2px 4px rgba(0, 0, 0, 0.1))
+  padding 15px 0
+  
+  .container
+    max-width 1200px
+    margin 0 auto
+    padding 0 20px
+    center-content()
+    justify-content space-between
+  
+  .navbar-brand
+    font-size 24px
+    font-weight 700
+    color primary-color
+    text-decoration none
+    
+    &:hover
+      color darken(primary-color, 10%)
+  
+  .navbar-nav
+    display flex
+    list-style none
+    margin 0
+    
+    li
+      margin-left 20px
+      
+      a
+        color secondary-color
+        text-decoration none
+        font-weight 500
+        transition()
+        
+        &:hover
+        &.active
+          color primary-color
+
+// Компонент: Форма
+.form-group
+  margin-bottom 20px
+  
+  label
+    display block
+    margin-bottom 5px
+    font-weight 600
+    color secondary-color
+  
+  input
+  textarea
+  select
+    width 100%
+    padding 12px
+    border 1px solid #ddd
+    border-radius()
+    font-size 14px
+    transition()
+    
+    &:focus
+      outline none
+      border-color primary-color
+      box-shadow(0 0 0 3px rgba(primary-color, 0.1))
+    
+    &.error
+      border-color accent-color
+      
+      & + .error-message
+        color accent-color
+        font-size 12px
+        margin-top 5px
+
+// Утилиты
+.text-center
+  text-align center
+
+.text-right
+  text-align right
+
+.text-left
+  text-align left
+
+.mt-
+  for i in (0..5)
+    &{i}
+      margin-top (i * 10)px
+
+.mb-
+  for i in (0..5)
+    &{i}
+      margin-bottom (i * 10)px
+
+// Респонсивность
+@media (max-width: 768px)
+  .navbar
+    .container
+      flex-direction column
+      
+    .navbar-nav
+      margin-top 15px
+      
+      li
+        margin-left 0
+        margin-right 15px
+  
+  .card
+    margin-bottom 15px
+    padding 15px
+  
+  .btn
+    width 100%
+    margin-bottom 10px
+
+// Анимации
+@keyframes fadeIn
+  from
+    opacity 0
+    transform translateY(20px)
+  to
+    opacity 1
+    transform translateY(0)
+
+@keyframes pulse
+  0%, 100%
+    transform scale(1)
+  50%
+    transform scale(1.05)
+
+.fade-in
+  animation fadeIn 0.5s ease-out
+
+.pulse
+  animation pulse 2s infinite
+
+// Темная тема
+.dark-theme
+  background-color #1a1a1a
+  color #ffffff
+  
+  .card
+    background-color #2d2d2d
+    color #ffffff
+  
+  .navbar
+    background-color #2d2d2d
+  
+  input
+  textarea
+  select
+    background-color #3d3d3d
+    border-color #4d4d4d
+    color #ffffff 
