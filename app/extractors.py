@@ -94,6 +94,11 @@ class TextExtractor:
         if not is_supported_format(filename, settings.SUPPORTED_FORMATS):
             raise ValueError(f"Unsupported file format: {filename}")
         
+        # Проверка MIME-типа для безопасности
+        if not self._check_mime_type(file_content, filename):
+            logger.warning(f"MIME-тип файла {filename} не соответствует расширению")
+            # Не блокируем, но предупреждаем
+        
         extension = get_file_extension(filename)
         
         try:
@@ -147,6 +152,12 @@ class TextExtractor:
             return await self._extract_from_xml(content)
         elif extension in ["yaml", "yml"]:
             return await self._extract_from_yaml(content)
+        elif extension in ["epub"]:
+            return await self._extract_from_epub(content)
+        elif extension in ["eml"]:
+            return await self._extract_from_eml(content)
+        elif extension in ["msg"]:
+            return await self._extract_from_msg(content)
         else:
             # Попытка извлечения как обычный текст
             return await self._extract_from_txt(content)
@@ -679,4 +690,318 @@ class TextExtractor:
             
         except Exception as e:
             logger.error(f"Ошибка при обработке ODT: {str(e)}")
-            raise ValueError(f"Error processing ODT: {str(e)}") 
+            raise ValueError(f"Error processing ODT: {str(e)}")
+    
+    async def _extract_from_epub(self, content: bytes) -> str:
+        """Извлечение текста из EPUB файлов"""
+        if not BeautifulSoup:
+            raise ImportError("beautifulsoup4 не установлен")
+        
+        try:
+            # Ограничиваем размер распакованного содержимого (защита от zip-бомб)
+            max_extract_size = 100 * 1024 * 1024  # 100 MB
+            extracted_size = 0
+            text_parts = []
+            
+            with zipfile.ZipFile(io.BytesIO(content), 'r') as zip_file:
+                # Проверка на zip-бомбы
+                for file_info in zip_file.infolist():
+                    extracted_size += file_info.file_size
+                    if extracted_size > max_extract_size:
+                        raise ValueError("Archive too large - potential zip bomb")
+                
+                # Поиск HTML/XHTML файлов с контентом
+                for file_info in zip_file.infolist():
+                    if file_info.filename.endswith(('.html', '.xhtml', '.htm')):
+                        # Исключаем служебные файлы и обрабатываем основной контент
+                        if not file_info.filename.startswith('_static/') and not file_info.filename.startswith('META-INF/'):
+                            try:
+                                file_content = zip_file.read(file_info.filename)
+                                html_text = file_content.decode('utf-8', errors='replace')
+                                
+                                # Извлекаем текст из HTML
+                                soup = BeautifulSoup(html_text, 'html.parser')
+                                
+                                # Удаляем служебные теги
+                                for script in soup(["script", "style", "head", "title", "meta", "link"]):
+                                    script.decompose()
+                                
+                                # Извлекаем чистый текст
+                                clean_text = soup.get_text()
+                                
+                                # Очищаем от лишних пробелов
+                                lines = (line.strip() for line in clean_text.splitlines())
+                                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                                chapter_text = '\n'.join(chunk for chunk in chunks if chunk)
+                                
+                                if chapter_text.strip():
+                                    text_parts.append(chapter_text)
+                                    
+                            except Exception as e:
+                                logger.warning(f"Ошибка при обработке файла {file_info.filename}: {str(e)}")
+                                continue
+            
+            return "\n\n".join(text_parts)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке EPUB: {str(e)}")
+            raise ValueError(f"Error processing EPUB: {str(e)}")
+    
+    async def _extract_from_eml(self, content: bytes) -> str:
+        """Извлечение текста из EML файлов (email)"""
+        import email
+        from email.policy import default
+        
+        try:
+            # Парсинг EML содержимого
+            msg = email.message_from_bytes(content, policy=default)
+            
+            text_parts = []
+            
+            # Заголовки
+            text_parts.append("=== EMAIL HEADERS ===")
+            for header in ['From', 'To', 'Subject', 'Date']:
+                if msg.get(header):
+                    text_parts.append(f"{header}: {msg.get(header)}")
+            
+            text_parts.append("\n=== EMAIL BODY ===")
+            
+            # Извлечение текста из тела письма
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        try:
+                            text_parts.append(part.get_content())
+                        except Exception as e:
+                            logger.warning(f"Ошибка при извлечении текста из части письма: {str(e)}")
+                    elif part.get_content_type() == "text/html":
+                        try:
+                            html_content = part.get_content()
+                            if BeautifulSoup:
+                                soup = BeautifulSoup(html_content, 'html.parser')
+                                text_parts.append(soup.get_text())
+                            else:
+                                text_parts.append(html_content)
+                        except Exception as e:
+                            logger.warning(f"Ошибка при извлечении HTML из части письма: {str(e)}")
+            else:
+                # Обычное письмо
+                try:
+                    text_parts.append(msg.get_content())
+                except Exception as e:
+                    logger.warning(f"Ошибка при извлечении содержимого письма: {str(e)}")
+            
+            return "\n".join(text_parts)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке EML: {str(e)}")
+            raise ValueError(f"Error processing EML: {str(e)}")
+    
+    async def _extract_from_msg(self, content: bytes) -> str:
+        """Извлечение текста из MSG файлов (Outlook)"""
+        import email
+        import base64
+        import re
+        from email.policy import default
+        
+        try:
+            # MSG файлы часто содержат embedded EML данные
+            # Попробуем найти и извлечь EML части
+            text_parts = []
+            
+            # Декодируем содержимое как текст для поиска структур
+            try:
+                text_content = content.decode('utf-8', errors='replace')
+            except:
+                text_content = content.decode('latin-1', errors='replace')
+            
+            # Ищем заголовки письма в стиле EML
+            headers = {}
+            email_body_parts = []
+            
+            # Поиск заголовков
+            header_patterns = {
+                'Subject': r'Subject:\s*(.+?)(?:\r?\n(?!\s)|$)',
+                'From': r'From:\s*(.+?)(?:\r?\n(?!\s)|$)', 
+                'To': r'To:\s*(.+?)(?:\r?\n(?!\s)|$)',
+                'Date': r'Date:\s*(.+?)(?:\r?\n(?!\s)|$)'
+            }
+            
+            for header_name, pattern in header_patterns.items():
+                matches = re.findall(pattern, text_content, re.MULTILINE | re.IGNORECASE)
+                if matches:
+                    header_value = matches[0].strip()
+                    
+                    # Декодируем encoded-word заголовки (=?utf-8?b?...?=)
+                    try:
+                        if '=?' in header_value and '?=' in header_value:
+                            # Используем email.header для декодирования
+                            import email.header
+                            decoded_parts = email.header.decode_header(header_value)
+                            decoded_value = ''
+                            for part, encoding in decoded_parts:
+                                if isinstance(part, bytes):
+                                    if encoding:
+                                        decoded_value += part.decode(encoding)
+                                    else:
+                                        decoded_value += part.decode('utf-8', errors='replace')
+                                else:
+                                    decoded_value += part
+                            headers[header_name] = decoded_value
+                        else:
+                            headers[header_name] = header_value
+                    except:
+                        headers[header_name] = header_value
+            
+            # Ищем base64 закодированный контент
+            base64_pattern = r'Content-Transfer-Encoding:\s*base64\s*\r?\n(?:[^\r\n]*\r?\n)*?\r?\n([A-Za-z0-9+/\r\n=]+)'
+            base64_matches = re.findall(base64_pattern, text_content, re.MULTILINE | re.IGNORECASE | re.DOTALL)
+            
+            # Также ищем отдельно стоящие base64 блоки (часто в MSG файлах)
+            standalone_base64_pattern = r'\b([A-Za-z0-9+/]{20,}={0,2})\b'
+            standalone_matches = re.findall(standalone_base64_pattern, text_content)
+            
+            # Объединяем все найденные base64 строки
+            all_base64_candidates = base64_matches + standalone_matches
+            
+            for base64_data in all_base64_candidates:
+                try:
+                    # Очищаем base64 данные от переносов строк и пробелов
+                    clean_base64 = re.sub(r'[\r\n\s]', '', base64_data)
+                    
+                    # Проверяем, что это действительно base64
+                    if len(clean_base64) < 20 or len(clean_base64) % 4 > 2:
+                        continue
+                    
+                    # Добавляем нужное количество padding
+                    padding_needed = 4 - (len(clean_base64) % 4)
+                    if padding_needed != 4:
+                        clean_base64 += '=' * padding_needed
+                    
+                    decoded_bytes = base64.b64decode(clean_base64)
+                    decoded_text = decoded_bytes.decode('utf-8', errors='replace')
+                    
+                    # Проверяем, что декодированный текст содержит читаемые символы
+                    if decoded_text.strip() and len(decoded_text.strip()) > 5:
+                        # Проверяем, что это не мусор (больше читаемых символов чем нечитаемых)
+                        readable_chars = sum(1 for c in decoded_text if c.isprintable() or c.isspace())
+                        if readable_chars > len(decoded_text) * 0.7:  # 70% читаемых символов
+                            email_body_parts.append(decoded_text.strip())
+                except Exception as e:
+                    logger.warning(f"Ошибка при декодировании base64: {str(e)}")
+                    continue
+            
+            # Ищем quoted-printable контент
+            qp_pattern = r'Content-Transfer-Encoding:\s*quoted-printable\s*\r?\n\r?\n([^-]+?)(?=\r?\n--|\r?\nContent-|$)'
+            qp_matches = re.findall(qp_pattern, text_content, re.MULTILINE | re.IGNORECASE | re.DOTALL)
+            
+            for qp_data in qp_matches:
+                try:
+                    import quopri
+                    decoded_bytes = quopri.decodestring(qp_data.encode())
+                    decoded_text = decoded_bytes.decode('utf-8', errors='replace')
+                    if decoded_text.strip():
+                        email_body_parts.append(decoded_text.strip())
+                except Exception as e:
+                    logger.warning(f"Ошибка при декодировании quoted-printable: {str(e)}")
+                    continue
+            
+            # Ищем обычный текстовый контент
+            text_pattern = r'Content-Type:\s*text/plain[^\r\n]*\r?\n(?:[^\r\n]*\r?\n)*?\r?\n([^-]+?)(?=\r?\n--|\r?\nContent-|$)'
+            text_matches = re.findall(text_pattern, text_content, re.MULTILINE | re.IGNORECASE | re.DOTALL)
+            
+            for text_data in text_matches:
+                clean_text = text_data.strip()
+                if clean_text and len(clean_text) > 10:
+                    email_body_parts.append(clean_text)
+            
+            # Формируем результат
+            result_parts = []
+            
+            if headers:
+                result_parts.append("=== EMAIL HEADERS ===")
+                for header_name, header_value in headers.items():
+                    result_parts.append(f"{header_name}: {header_value}")
+                result_parts.append("")
+            
+            if email_body_parts:
+                result_parts.append("=== EMAIL BODY ===")
+                result_parts.extend(email_body_parts)
+            
+            # Если ничего не найдено, используем fallback метод
+            if not result_parts:
+                # Простая эвристика для извлечения читаемого текста
+                lines = text_content.split('\n')
+                readable_lines = []
+                
+                for line in lines:
+                    # Пропускаем бинарные данные и служебную информацию
+                    if len(line) > 10 and line.count('\x00') / len(line) < 0.3:
+                        cleaned_line = ''.join(c for c in line if c.isprintable() or c.isspace())
+                        if cleaned_line.strip() and not cleaned_line.startswith(('Content-', 'MIME-', '--')):
+                            readable_lines.append(cleaned_line.strip())
+                
+                # Удаляем дубликаты и короткие строки
+                unique_lines = []
+                seen = set()
+                for line in readable_lines:
+                    if len(line) > 5 and line not in seen:
+                        seen.add(line)
+                        unique_lines.append(line)
+                
+                if unique_lines:
+                    result_parts = unique_lines[:50]  # Ограничиваем количество строк
+                else:
+                    result_parts = ["Не удалось извлечь текстовое содержимое из MSG файла"]
+            
+            return "\n".join(result_parts)
+                
+        except Exception as e:
+            logger.error(f"Ошибка при обработке MSG: {str(e)}")
+            raise ValueError(f"Error processing MSG: {str(e)}")
+    
+    def _check_mime_type(self, content: bytes, filename: str) -> bool:
+        """Проверка MIME-типа файла для предотвращения подделки расширений"""
+        import mimetypes
+        
+        try:
+            # Определяем MIME-тип по содержимому (первые байты)
+            mime_signatures = {
+                b'\x50\x4B\x03\x04': ['application/zip', 'application/epub+zip', 'application/vnd.openxmlformats'],
+                b'\x50\x4B\x07\x08': ['application/zip', 'application/epub+zip'],
+                b'\x50\x4B\x05\x06': ['application/zip', 'application/epub+zip'],
+                b'%PDF': ['application/pdf'],
+                b'\xD0\xCF\x11\xE0': ['application/msword', 'application/vnd.ms-excel', 'application/vnd.ms-powerpoint'],
+                b'\x89PNG': ['image/png'],
+                b'\xFF\xD8\xFF': ['image/jpeg'],
+                b'GIF8': ['image/gif'],
+                b'BM': ['image/bmp'],
+                b'II*\x00': ['image/tiff'],
+                b'MM\x00*': ['image/tiff'],
+                b'<!DOCTYPE': ['text/html'],
+                b'<html': ['text/html'],
+                b'<?xml': ['text/xml', 'application/xml'],
+            }
+            
+            # Проверяем сигнатуру файла
+            file_start = content[:10]
+            detected_mime = None
+            
+            for signature, mime_types in mime_signatures.items():
+                if file_start.startswith(signature):
+                    detected_mime = mime_types[0]
+                    break
+            
+            # Определяем ожидаемый MIME-тип по расширению
+            expected_mime, _ = mimetypes.guess_type(filename)
+            
+            # Если не можем определить MIME-тип, разрешаем
+            if not detected_mime or not expected_mime:
+                return True
+                
+            # Проверяем соответствие
+            return detected_mime in mime_signatures.get(file_start[:4], [expected_mime])
+            
+        except Exception as e:
+            logger.warning(f"Ошибка при проверке MIME-типа: {str(e)}")
+            return True  # В случае ошибки разрешаем обработку

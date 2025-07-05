@@ -1,16 +1,11 @@
+Subject: =?utf-8?b?0KLQtdGB0YLQvtCy0L7QtSDQv9C40YHRjNC80L4=?=
 From: sender@example.com
-To: recipient@example.com
-Subject: Тестовое сообщение для извлечения текста
-Date: Thu, 15 Nov 2023 10:30:00 +0000
-Message-ID: <12345@example.com>
-Content-Type: text/plain; charset=UTF-8
+To: receiver@example.com
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: base64
+MIME-Version: 1.0
 
-Это тестовое электронное письмо для проверки извлечения текста.
-
-Данное сообщение содержит:
-- Простой текст
-- Кириллические символы
-- Базовую структуру email
-
-С уважением,
-Тестовая система 
+0JfQtNGA0LDQstGB0YLQstGD0LnRgtC1IQoK0K3RgtC+INGC0LXRgdGC0L7QstC+0LUg0L/QuNGB
+0YzQvNC+INCyINGE0L7RgNC80LDRgtC1IEVNTCDRgSDRgNGD0YHRgdC60LjQvCDRgtC10LrRgdGC
+0L7QvC4KCtChINGD0LLQsNC20LXQvdC40LXQvCwK0KLQtdGB0YLQvtCy0LDRjyDRgdC40YHRgtC1
+0LzQsAo=

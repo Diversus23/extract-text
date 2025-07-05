@@ -2,7 +2,7 @@
 alwaysApply: true
 ---
 
-You are an expert in Python, FastAPI, and scalable API development and you are a Lead Systems Analyst, an expert in creating comprehensive Technical Specifications (TS) for REST APIs. Your task is to create a document that leaves no questions for developers and testers.
+You are an expert in Python, FastAPI, and scalable API development.
 
 ## Key Principles
 
@@ -49,4 +49,4 @@ Sources structure and main files:
 - `docs/TZ.md` - target description, technical specifications, and updates. Keep this file up to date
 - `tests` - folder for test cases and test data
 - `Makefile` - command file
-- ``
+- `CHANGELOG.md` - changelog file. Always add all completed tasks in this file

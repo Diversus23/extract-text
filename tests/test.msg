@@ -1,26 +1,11 @@
-From: test@example.com
-To: recipient@example.com
-Subject: Тестовое сообщение MSG
-Date: 15.11.2023 10:30:00
-MessageClass: IPM.Note
-Importance: Normal
+Subject: =?utf-8?b?0KLQtdGB0YLQvtCy0L7QtSDQv9C40YHRjNC80L4=?=
+From: sender@example.com
+To: receiver@example.com
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: base64
+MIME-Version: 1.0
 
-Это тестовое сообщение в формате MSG для проверки извлечения текста.
-
-Содержимое сообщения:
-- Отправитель: test@example.com
-- Получатель: recipient@example.com
-- Тема: Тестовое сообщение MSG
-- Важность: Обычная
-
-Основной текст сообщения:
-Данное сообщение создано для тестирования системы извлечения текста из файлов формата MSG.
-
-Текст содержит различные символы и кириллицу для проверки корректности обработки.
-
-Дополнительная информация:
-- Время создания: 15.11.2023
-- Размер: небольшой
-- Тип: тестовое сообщение
-
-Конец сообщения MSG. 
+0JfQtNGA0LDQstGB0YLQstGD0LnRgtC1IQoK0K3RgtC+INGC0LXRgdGC0L7QstC+0LUg0L/QuNGB
+0YzQvNC+INCyINGE0L7RgNC80LDRgtC1IEVNTCDRgSDRgNGD0YHRgdC60LjQvCDRgtC10LrRgdGC
+0L7QvC4KCtChINGD0LLQsNC20LXQvdC40LXQvCwK0KLQtdGB0YLQvtCy0LDRjyDRgdC40YHRgtC1
+0LzQsAo=
