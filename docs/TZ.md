@@ -66,7 +66,15 @@
 * **EML файлы:** Извлекаются заголовки письма (From, To, Subject, Date) и текстовое содержимое тела письма (как plain text, так и HTML).
 * **MSG файлы:** Применяется эвристический анализ для извлечения читаемого текста из формата Outlook.
 
-**3.8. Обработка прочих форматов (`.txt`, `.html`, `.md` и др.):**
+**3.8. Обработка исходного кода:**
+* **Поддерживаемые языки программирования:** Python (`.py`, `.pyx`, `.pyi`, `.pyw`), JavaScript/TypeScript (`.js`, `.jsx`, `.ts`, `.tsx`, `.mjs`, `.cjs`), Java (`.java`, `.jav`), C/C++ (`.c`, `.cpp`, `.cxx`, `.cc`, `.c++`, `.h`, `.hpp`, `.hxx`, `.h++`), C# (`.cs`, `.csx`), PHP (`.php`, `.php3`, `.php4`, `.php5`, `.phtml`), Ruby (`.rb`, `.rbw`, `.rake`, `.gemspec`), Go (`.go`, `.mod`, `.sum`), Rust (`.rs`, `.rlib`), Swift (`.swift`), Kotlin (`.kt`, `.kts`), Scala (`.scala`, `.sc`), R (`.r`, `.R`, `.rmd`, `.Rmd`), SQL (`.sql`, `.ddl`, `.dml`), Shell (`.sh`, `.bash`, `.zsh`, `.fish`, `.ksh`, `.csh`, `.tcsh`), PowerShell (`.ps1`, `.psm1`, `.psd1`), Perl (`.pl`, `.pm`, `.pod`, `.t`), Lua (`.lua`)
+* **Конфигурационные файлы:** INI (`.ini`), конфигурационные файлы (`.cfg`, `.conf`, `.config`), TOML (`.toml`), Properties (`.properties`)
+* **Веб-технологии:** CSS (`.css`, `.scss`, `.sass`, `.less`, `.styl`)
+* **Разметка и документация:** LaTeX (`.tex`, `.latex`), reStructuredText (`.rst`), AsciiDoc (`.adoc`, `.asciidoc`)
+* **Специальные форматы:** JSON Lines (`.jsonl`, `.ndjson`), JSON с комментариями (`.jsonc`), Docker (`.dockerfile`, `.containerfile`), Makefile (`.makefile`, `.mk`, `.mak`), Git (`.gitignore`, `.gitattributes`, `.gitmodules`)
+* **Обработка:** Файлы исходного кода обрабатываются с сохранением структуры и форматирования. Добавляется заголовок с указанием языка программирования, имени файла и количества строк для лучшего контекста при использовании в RAG-системах.
+
+**3.9. Обработка прочих форматов (`.txt`, `.html`, `.md` и др.):**
 * Извлекается текстовое содержимое. Из форматов с разметкой разметка удаляется.
 
 ### 4. Требования к API
@@ -79,7 +87,7 @@
 ```json
 {
   "api_name": "Text Extraction API for RAG",
-  "version": "1.6",
+  "version": "1.7",
   "contact": "ООО 'СОФТОНИТ'"
 }
 ```
@@ -101,6 +109,7 @@
   "spreadsheets": ["csv", "xls", "xlsx", "ods"],
   "presentations": ["pptx", "ppt"],
   "structured_data": ["json", "xml", "yaml", "yml"],
+  "source_code": ["py", "js", "ts", "java", "c", "cpp", "h", "cs", "php", "rb", "go", "rs", "swift", "kt", "scala", "sql", "sh", "ps1", "pl", "lua", "ini", "css", "tex", "dockerfile", "makefile", "gitignore"],
   "other": ["txt", "html", "htm", "md", "markdown", "epub", "eml", "msg"]
 }
 ```

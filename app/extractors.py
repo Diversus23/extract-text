@@ -120,6 +120,9 @@ class TextExtractor:
     async def _extract_text_by_format(self, content: bytes, extension: str, filename: str) -> str:
         """Извлечение текста в зависимости от формата"""
         
+        # Проверяем, является ли файл исходным кодом
+        source_code_extensions = settings.SUPPORTED_FORMATS.get("source_code", [])
+        
         if extension == "pdf":
             return await self._extract_from_pdf(content)
         elif extension in ["docx"]:
@@ -136,6 +139,8 @@ class TextExtractor:
             return await self._extract_from_ppt(content)
         elif extension in ["jpg", "jpeg", "png", "tiff", "tif", "bmp", "gif"]:
             return await self._extract_from_image(content)
+        elif extension in source_code_extensions:
+            return await self._extract_from_source_code(content, extension, filename)
         elif extension in ["txt"]:
             return await self._extract_from_txt(content)
         elif extension in ["html", "htm"]:
@@ -489,6 +494,105 @@ class TextExtractor:
         except Exception as e:
             logger.error(f"Ошибка при обработке TXT: {str(e)}")
             raise ValueError(f"Error processing TXT: {str(e)}")
+    
+    async def _extract_from_source_code(self, content: bytes, extension: str, filename: str) -> str:
+        """Извлечение текста из файлов исходного кода"""
+        try:
+            # Попытка декодирования в разных кодировках
+            text = None
+            for encoding in ['utf-8', 'cp1251', 'latin-1']:
+                try:
+                    text = content.decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if text is None:
+                # Если не удалось декодировать, используем замещение символов
+                text = content.decode('utf-8', errors='replace')
+            
+            # Определение языка программирования по расширению
+            language_map = {
+                # Python
+                'py': 'Python', 'pyx': 'Python', 'pyi': 'Python', 'pyw': 'Python',
+                # JavaScript/TypeScript
+                'js': 'JavaScript', 'jsx': 'JavaScript', 'ts': 'TypeScript', 'tsx': 'TypeScript',
+                'mjs': 'JavaScript', 'cjs': 'JavaScript',
+                # Java
+                'java': 'Java', 'jav': 'Java',
+                # C/C++
+                'c': 'C', 'cpp': 'C++', 'cxx': 'C++', 'cc': 'C++', 'c++': 'C++',
+                'h': 'C Header', 'hpp': 'C++ Header', 'hxx': 'C++ Header', 'h++': 'C++ Header',
+                # C#
+                'cs': 'C#', 'csx': 'C#',
+                # PHP
+                'php': 'PHP', 'php3': 'PHP', 'php4': 'PHP', 'php5': 'PHP', 'phtml': 'PHP',
+                # Ruby
+                'rb': 'Ruby', 'rbw': 'Ruby', 'rake': 'Ruby', 'gemspec': 'Ruby',
+                # Go
+                'go': 'Go', 'mod': 'Go Module', 'sum': 'Go Sum',
+                # Rust
+                'rs': 'Rust', 'rlib': 'Rust Library',
+                # Swift
+                'swift': 'Swift',
+                # Kotlin
+                'kt': 'Kotlin', 'kts': 'Kotlin Script',
+                # Scala
+                'scala': 'Scala', 'sc': 'Scala',
+                # R
+                'r': 'R', 'R': 'R', 'rmd': 'R Markdown', 'Rmd': 'R Markdown',
+                # SQL
+                'sql': 'SQL', 'ddl': 'SQL DDL', 'dml': 'SQL DML',
+                # Shell
+                'sh': 'Shell', 'bash': 'Bash', 'zsh': 'Zsh', 'fish': 'Fish',
+                'ksh': 'Ksh', 'csh': 'Csh', 'tcsh': 'Tcsh',
+                # PowerShell
+                'ps1': 'PowerShell', 'psm1': 'PowerShell Module', 'psd1': 'PowerShell Data',
+                # Perl
+                'pl': 'Perl', 'pm': 'Perl Module', 'pod': 'Perl Documentation', 't': 'Perl Test',
+                # Lua
+                'lua': 'Lua',
+                # Configuration
+                'ini': 'INI Config', 'cfg': 'Config', 'conf': 'Config',
+                'config': 'Config', 'toml': 'TOML', 'properties': 'Properties',
+                # Web
+                'css': 'CSS', 'scss': 'SCSS', 'sass': 'Sass', 'less': 'Less', 'styl': 'Stylus',
+                # Markup
+                'tex': 'LaTeX', 'latex': 'LaTeX', 'rst': 'reStructuredText',
+                'adoc': 'AsciiDoc', 'asciidoc': 'AsciiDoc',
+                # Data
+                'jsonl': 'JSON Lines', 'ndjson': 'NDJSON', 'jsonc': 'JSON with Comments',
+                # Docker
+                'dockerfile': 'Dockerfile', 'containerfile': 'Containerfile',
+                # Makefile
+                'makefile': 'Makefile', 'mk': 'Makefile', 'mak': 'Makefile',
+                # Git
+                'gitignore': 'Git Ignore', 'gitattributes': 'Git Attributes',
+                'gitmodules': 'Git Modules'
+            }
+            
+            language = language_map.get(extension.lower(), 'Source Code')
+            
+            # Формирование заголовка с информацией о файле
+            header = f"=== {language} File: {filename} ===\n"
+            
+            # Добавление информации о количестве строк
+            lines = text.split('\n')
+            line_count = len(lines)
+            header += f"Lines: {line_count}\n"
+            
+            # Если файл слишком длинный, добавляем предупреждение
+            if line_count > 1000:
+                header += f"Warning: Large file with {line_count} lines\n"
+            
+            header += "=" * 50 + "\n\n"
+            
+            # Возвращаем заголовок + содержимое файла
+            return header + text
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке исходного кода {filename}: {str(e)}")
+            raise ValueError(f"Error processing source code: {str(e)}")
     
     async def _extract_from_html(self, content: bytes) -> str:
         """Извлечение текста из HTML"""

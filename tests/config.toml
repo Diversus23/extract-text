@@ -1,0 +1,87 @@
+# Конфигурационный файл для тестирования извлечения текста
+# Этот файл используется для проверки поддержки TOML формата
+
+[app]
+name = "Text Extraction API"
+version = "1.7"
+description = "API для извлечения текста из файлов различных форматов"
+debug = false
+
+[server]
+host = "localhost"
+port = 7555
+workers = 4
+timeout = 300
+
+[database]
+host = "localhost"
+port = 5432
+name = "textdb"
+user = "textuser"
+password = "secret123"
+pool_size = 10
+connection_timeout = 30
+
+[ocr]
+languages = ["rus", "eng"]
+engine = "tesseract"
+dpi = 300
+preprocessing = true
+
+[logging]
+level = "info"
+format = "json"
+output = "stdout"
+
+[processing]
+max_file_size = 20971520  # 20MB
+supported_formats = [
+    "pdf", "docx", "doc", "txt", "html", "md",
+    "jpg", "jpeg", "png", "tiff", "bmp", "gif",
+    "xls", "xlsx", "csv", "ppt", "pptx",
+    "json", "xml", "yaml", "yml"
+]
+
+[features]
+ocr_enabled = true
+batch_processing = false
+async_processing = true
+result_caching = true
+statistics_collection = true
+
+[security]
+auth_required = false
+max_requests_per_minute = 100
+allowed_origins = ["*"]
+cors_enabled = true
+
+[monitoring]
+metrics_enabled = true
+health_check_interval = 60
+performance_tracking = true
+
+# Настройки для различных языков программирования
+[languages]
+    [languages.python]
+    extensions = ["py", "pyx", "pyi", "pyw"]
+    syntax_highlighting = true
+    
+    [languages.javascript]
+    extensions = ["js", "jsx", "ts", "tsx", "mjs", "cjs"]
+    syntax_highlighting = true
+    
+    [languages.java]
+    extensions = ["java", "jav"]
+    syntax_highlighting = true
+    
+    [languages.cpp]
+    extensions = ["cpp", "cxx", "cc", "c++", "h", "hpp", "hxx", "h++"]
+    syntax_highlighting = true
+
+# Специальные настройки для RAG системы
+[rag]
+chunk_size = 1000
+chunk_overlap = 200
+embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+vector_store = "faiss"
+similarity_threshold = 0.7 

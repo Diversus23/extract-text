@@ -10,7 +10,7 @@ class Settings:
     """Настройки приложения"""
     
     # Основные настройки
-    VERSION: str = "1.6"
+    VERSION: str = "1.7"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # Настройки API
@@ -30,6 +30,58 @@ class Settings:
         "spreadsheets": ["csv", "xls", "xlsx", "ods"],
         "presentations": ["pptx", "ppt"],
         "structured_data": ["json", "xml", "yaml", "yml"],
+        "source_code": [
+            # Python
+            "py", "pyx", "pyi", "pyw",
+            # JavaScript/TypeScript
+            "js", "jsx", "ts", "tsx", "mjs", "cjs",
+            # Java
+            "java", "jav",
+            # C/C++
+            "c", "cpp", "cxx", "cc", "c++", "h", "hpp", "hxx", "h++",
+            # C#
+            "cs", "csx",
+            # PHP
+            "php", "php3", "php4", "php5", "phtml",
+            # Ruby
+            "rb", "rbw", "rake", "gemspec",
+            # Go
+            "go", "mod", "sum",
+            # Rust
+            "rs", "rlib",
+            # Swift
+            "swift",
+            # Kotlin
+            "kt", "kts",
+            # Scala
+            "scala", "sc",
+            # R
+            "r", "R", "rmd", "Rmd",
+            # SQL
+            "sql", "ddl", "dml",
+            # Shell/Bash
+            "sh", "bash", "zsh", "fish", "ksh", "csh", "tcsh",
+            # PowerShell
+            "ps1", "psm1", "psd1",
+            # Perl
+            "pl", "pm", "pod", "t",
+            # Lua
+            "lua",
+            # Configuration files
+            "ini", "cfg", "conf", "config", "toml", "properties",
+            # Web
+            "css", "scss", "sass", "less", "styl",
+            # Markup
+            "tex", "latex", "rst", "adoc", "asciidoc",
+            # Data formats
+            "jsonl", "ndjson", "jsonc",
+            # Docker
+            "dockerfile", "containerfile",
+            # Makefile
+            "makefile", "mk", "mak",
+            # Git
+            "gitignore", "gitattributes", "gitmodules"
+        ],
         "other": ["txt", "html", "htm", "md", "markdown", "epub", "eml", "msg"]
     }
     
