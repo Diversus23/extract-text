@@ -9,6 +9,7 @@ import zipfile
 from typing import Optional, List
 import tempfile
 import os
+import shutil
 import xml.etree.ElementTree as ET
 
 # Импорты для различных форматов
@@ -394,8 +395,57 @@ class TextExtractor:
             raise ValueError(f"Error processing PPTX: {str(e)}")
     
     async def _extract_from_ppt(self, content: bytes) -> str:
-        """Извлечение текста из PPT (старый формат PowerPoint)"""
-        raise ValueError("PPT format not fully supported yet")
+        """Извлечение текста из PPT через конвертацию в PPTX с помощью LibreOffice"""
+        if not Presentation:
+            raise ImportError("python-pptx не установлен")
+        
+        try:
+            # Создаем временные файлы
+            with tempfile.NamedTemporaryFile(suffix='.ppt', delete=False) as temp_ppt:
+                temp_ppt.write(content)
+                temp_ppt_path = temp_ppt.name
+            
+            # Создаем временную директорию для вывода
+            temp_dir = tempfile.mkdtemp()
+            
+            try:
+                # Конвертируем .ppt в .pptx с помощью LibreOffice
+                result = subprocess.run([
+                    'libreoffice', '--headless', '--convert-to', 'pptx',
+                    '--outdir', temp_dir, temp_ppt_path
+                ], capture_output=True, text=True, timeout=30)
+                
+                if result.returncode != 0:
+                    logger.error(f"LibreOffice conversion failed: {result.stderr}")
+                    raise ValueError("Failed to convert PPT to PPTX")
+                
+                # Находим сконвертированный файл
+                ppt_filename = os.path.splitext(os.path.basename(temp_ppt_path))[0]
+                pptx_path = os.path.join(temp_dir, f"{ppt_filename}.pptx")
+                
+                if not os.path.exists(pptx_path):
+                    raise ValueError("Converted PPTX file not found")
+                
+                # Читаем сконвертированный PPTX файл
+                with open(pptx_path, 'rb') as pptx_file:
+                    pptx_content = pptx_file.read()
+                
+                # Используем существующий метод для извлечения текста из PPTX
+                text = await self._extract_from_pptx(pptx_content)
+                
+                return text
+                
+            finally:
+                # Очищаем временные файлы
+                os.unlink(temp_ppt_path)
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                
+        except subprocess.TimeoutExpired:
+            logger.error("LibreOffice conversion timeout")
+            raise ValueError("PPT conversion timeout")
+        except Exception as e:
+            logger.error(f"Ошибка при обработке PPT: {str(e)}")
+            raise ValueError(f"Error processing PPT: {str(e)}")
     
     async def _extract_from_image(self, content: bytes) -> str:
         """OCR изображения"""
