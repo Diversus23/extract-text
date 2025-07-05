@@ -196,11 +196,49 @@ class TextExtractor:
             return ""
         
         try:
-            # Это упрощенная реализация - в реальности нужно более сложное извлечение изображений
-            return ""
+            # Получаем координаты изображения
+            x0, y0, x1, y1 = img_info['x0'], img_info['y0'], img_info['x1'], img_info['y1']
+            
+            # Обрезаем область изображения из всей страницы
+            cropped_bbox = (x0, y0, x1, y1)
+            cropped_page = page.crop(cropped_bbox)
+            
+            # Конвертируем обрезанную область в изображение с высоким разрешением
+            img_pil = cropped_page.to_image(resolution=300)
+            
+            # Применяем OCR к извлеченному изображению
+            text = pytesseract.image_to_string(img_pil, lang=self.ocr_languages)
+            
+            return text.strip() if text else ""
+            
         except Exception as e:
-            logger.warning(f"Ошибка OCR: {str(e)}")
-            return ""
+            logger.warning(f"Ошибка OCR изображения: {str(e)}")
+            # Альтернативный подход - рендерим всю страницу и обрезаем
+            try:
+                # Конвертируем всю страницу в изображение PIL
+                page_image = page.to_image(resolution=300)
+                pil_image = page_image.original  # Получаем PIL изображение
+                
+                # Вычисляем координаты в пикселях (учитывая resolution=300)
+                scale = 300 / 72  # PDF обычно 72 DPI, мы рендерим в 300 DPI
+                pixel_bbox = (
+                    int(x0 * scale),
+                    int(y0 * scale), 
+                    int(x1 * scale),
+                    int(y1 * scale)
+                )
+                
+                # Обрезаем область изображения
+                cropped_img = pil_image.crop(pixel_bbox)
+                
+                # Применяем OCR
+                text = pytesseract.image_to_string(cropped_img, lang=self.ocr_languages)
+                
+                return text.strip() if text else ""
+                
+            except Exception as e2:
+                logger.warning(f"Альтернативная попытка OCR также не удалась: {str(e2)}")
+                return ""
     
     async def _extract_from_docx(self, content: bytes) -> str:
         """Извлечение текста из DOCX"""
