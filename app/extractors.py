@@ -9,6 +9,7 @@ import zipfile
 from typing import Optional, List
 import tempfile
 import os
+import xml.etree.ElementTree as ET
 
 # Импорты для различных форматов
 try:
@@ -63,6 +64,11 @@ try:
     from striprtf.striprtf import rtf_to_text
 except ImportError:
     rtf_to_text = None
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 from app.config import settings
 from app.utils import get_file_extension, is_supported_format
@@ -133,6 +139,10 @@ class TextExtractor:
             return await self._extract_from_rtf(content)
         elif extension in ["odt"]:
             return await self._extract_from_odt(content)
+        elif extension in ["xml"]:
+            return await self._extract_from_xml(content)
+        elif extension in ["yaml", "yml"]:
+            return await self._extract_from_yaml(content)
         else:
             # Попытка извлечения как обычный текст
             return await self._extract_from_txt(content)
@@ -422,6 +432,89 @@ class TextExtractor:
         except Exception as e:
             logger.error(f"Ошибка при обработке RTF: {str(e)}")
             raise ValueError(f"Error processing RTF: {str(e)}")
+    
+    async def _extract_from_xml(self, content: bytes) -> str:
+        """Извлечение текста из XML"""
+        try:
+            # Декодирование XML содержимого
+            xml_text = content.decode('utf-8', errors='replace')
+            
+            # Попытка использовать BeautifulSoup для лучшего парсинга
+            if BeautifulSoup:
+                soup = BeautifulSoup(xml_text, 'xml')
+                
+                # Извлечение всех текстовых элементов
+                text_parts = []
+                for element in soup.find_all():
+                    if element.string and element.string.strip():
+                        text_parts.append(f"{element.name}: {element.string.strip()}")
+                
+                # Если не найдено структурированных элементов, используем весь текст
+                if not text_parts:
+                    text_parts = [soup.get_text()]
+                
+                return "\n".join(text_parts)
+            
+            # Если BeautifulSoup не доступен, используем встроенный ElementTree
+            root = ET.fromstring(xml_text)
+            text_parts = []
+            
+            def extract_from_element(elem, path=""):
+                """Рекурсивное извлечение текста из элементов XML"""
+                element_path = f"{path}.{elem.tag}" if path else elem.tag
+                
+                if elem.text and elem.text.strip():
+                    text_parts.append(f"{element_path}: {elem.text.strip()}")
+                
+                # Извлечение атрибутов
+                for attr_name, attr_value in elem.attrib.items():
+                    if attr_value.strip():
+                        text_parts.append(f"{element_path}@{attr_name}: {attr_value}")
+                
+                # Рекурсивная обработка дочерних элементов
+                for child in elem:
+                    extract_from_element(child, element_path)
+            
+            extract_from_element(root)
+            return "\n".join(text_parts)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке XML: {str(e)}")
+            raise ValueError(f"Error processing XML: {str(e)}")
+    
+    async def _extract_from_yaml(self, content: bytes) -> str:
+        """Извлечение текста из YAML"""
+        if not yaml:
+            raise ImportError("PyYAML не установлен")
+        
+        try:
+            # Декодирование YAML содержимого
+            yaml_text = content.decode('utf-8', errors='replace')
+            
+            # Парсинг YAML
+            data = yaml.safe_load(yaml_text)
+            
+            # Рекурсивное извлечение всех строковых значений
+            def extract_strings(obj, path=""):
+                strings = []
+                if isinstance(obj, dict):
+                    for key, value in obj.items():
+                        new_path = f"{path}.{key}" if path else str(key)
+                        strings.extend(extract_strings(value, new_path))
+                elif isinstance(obj, list):
+                    for i, value in enumerate(obj):
+                        new_path = f"{path}[{i}]" if path else f"[{i}]"
+                        strings.extend(extract_strings(value, new_path))
+                elif isinstance(obj, (str, int, float, bool)) and str(obj).strip():
+                    strings.append(f"{path}: {obj}")
+                return strings
+            
+            string_values = extract_strings(data)
+            return "\n".join(string_values)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке YAML: {str(e)}")
+            raise ValueError(f"Error processing YAML: {str(e)}")
     
     async def _extract_from_odt(self, content: bytes) -> str:
         """Извлечение текста из ODT"""

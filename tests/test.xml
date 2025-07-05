@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bookstore>
+    <book id="1" category="fiction">
+        <title lang="en">The Great Gatsby</title>
+        <author>F. Scott Fitzgerald</author>
+        <year>1925</year>
+        <price currency="USD">10.99</price>
+        <description>
+            A classic American novel about the decadence and excess of the Jazz Age.
+            The story follows narrator Nick Carraway and his neighbor Jay Gatsby
+            in the summer of 1922 on Long Island.
+        </description>
+        <publisher>
+            <name>Scribner</name>
+            <location>New York</location>
+        </publisher>
+        <tags>
+            <tag>classic</tag>
+            <tag>american literature</tag>
+            <tag>jazz age</tag>
+        </tags>
+    </book>
+    
+    <book id="2" category="science">
+        <title lang="en">A Brief History of Time</title>
+        <author>Stephen Hawking</author>
+        <year>1988</year>
+        <price currency="USD">15.99</price>
+        <description>
+            A popular science book that explores fundamental questions about the universe.
+            Written for the general public, it covers topics like black holes,
+            the big bang, and the nature of time.
+        </description>
+        <publisher>
+            <name>Bantam Doubleday Dell</name>
+            <location>New York</location>
+        </publisher>
+        <tags>
+            <tag>science</tag>
+            <tag>physics</tag>
+            <tag>cosmology</tag>
+        </tags>
+    </book>
+    
+    <book id="3" category="programming">
+        <title lang="en">Clean Code</title>
+        <author>Robert C. Martin</author>
+        <year>2008</year>
+        <price currency="USD">45.99</price>
+        <description>
+            A handbook of agile software craftsmanship.
+            This book presents a revolutionary paradigm with clean code
+            and the practices of writing it.
+        </description>
+        <publisher>
+            <name>Prentice Hall</name>
+            <location>Upper Saddle River</location>
+        </publisher>
+        <tags>
+            <tag>programming</tag>
+            <tag>software development</tag>
+            <tag>best practices</tag>
+        </tags>
+    </book>
+    
+    <metadata>
+        <created>2024-01-15T10:30:00Z</created>
+        <last_updated>2024-01-15T15:45:00Z</last_updated>
+        <version>2.1</version>
+        <total_books>3</total_books>
+    </metadata>
+</bookstore> 

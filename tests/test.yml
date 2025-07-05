@@ -1,0 +1,157 @@
+# Конфигурация приложения для извлечения текста
+app:
+  name: "Text Extraction API"
+  version: "1.5.0"
+  description: "API для извлечения текста из документов различных форматов"
+  author: "Development Team"
+  
+# Настройки сервера
+server:
+  host: "0.0.0.0"
+  port: 7555
+  debug: false
+  timeout: 300
+  max_workers: 4
+  
+# Настройки обработки файлов
+file_processing:
+  max_size_mb: 20
+  allowed_extensions:
+    - pdf
+    - docx
+    - doc
+    - xlsx
+    - xls
+    - pptx
+    - ppt
+    - txt
+    - rtf
+    - html
+    - xml
+    - yaml
+    - yml
+    - json
+    - csv
+    - odt
+    - md
+    - markdown
+  
+  # Настройки OCR
+  ocr:
+    enabled: true
+    languages: ["rus", "eng"]
+    confidence_threshold: 60
+    image_formats:
+      - jpg
+      - jpeg
+      - png
+      - tiff
+      - tif
+      - bmp
+      - gif
+
+# Настройки базы данных
+database:
+  type: "postgresql"
+  host: "localhost"
+  port: 5432
+  name: "text_extraction_db"
+  user: "text_user"
+  password: "secure_password"
+  pool_size: 10
+  
+# Настройки логирования
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "/var/log/text-extraction-api.log"
+  max_size_mb: 100
+  backup_count: 5
+  
+# Настройки кеширования
+cache:
+  enabled: true
+  type: "redis"
+  host: "localhost"
+  port: 6379
+  db: 0
+  ttl_seconds: 3600
+  max_memory_mb: 256
+  
+# Настройки безопасности
+security:
+  api_key_required: true
+  rate_limit:
+    enabled: true
+    requests_per_minute: 100
+    burst_limit: 10
+  cors:
+    enabled: true
+    origins:
+      - "http://localhost:3000"
+      - "https://app.example.com"
+    
+# Настройки мониторинга
+monitoring:
+  metrics:
+    enabled: true
+    endpoint: "/metrics"
+    port: 9090
+  health_check:
+    enabled: true
+    endpoint: "/health"
+    interval_seconds: 30
+    
+# Настройки уведомлений
+notifications:
+  email:
+    enabled: false
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    username: "notifications@example.com"
+    password: "email_password"
+    
+  slack:
+    enabled: false
+    webhook_url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+    channel: "#alerts"
+    
+# Настройки разработки
+development:
+  hot_reload: true
+  debug_mode: true
+  test_data_path: "./tests/"
+  mock_external_apis: true
+  
+# Настройки производства
+production:
+  workers: 8
+  worker_class: "uvicorn.workers.UvicornWorker"
+  worker_connections: 1000
+  max_requests: 1000
+  max_requests_jitter: 50
+  preload_app: true
+  
+# Дополнительные настройки
+features:
+  text_summarization: false
+  language_detection: true
+  sentiment_analysis: false
+  keyword_extraction: true
+  
+# Настройки для различных форматов
+format_specific:
+  pdf:
+    use_ocr_fallback: true
+    extract_images: true
+    preserve_layout: false
+    
+  excel:
+    read_all_sheets: true
+    skip_empty_rows: true
+    include_formulas: false
+    
+  images:
+    enhance_quality: true
+    auto_rotate: true
+    remove_noise: true 

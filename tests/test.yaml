@@ -1,0 +1,205 @@
+# Данные сотрудников компании
+company:
+  name: "ТехИнновации ООО"
+  industry: "Информационные технологии"
+  founded: 2015
+  headquarters: "Москва, Россия"
+  website: "https://tech-innovations.ru"
+  
+departments:
+  - name: "Разработка"
+    budget: 2500000
+    head: "Иванов Алексей Петрович"
+    employees_count: 25
+    
+  - name: "Тестирование"
+    budget: 800000
+    head: "Петрова Мария Сергеевна"
+    employees_count: 12
+    
+  - name: "Аналитика"
+    budget: 1200000
+    head: "Сидоров Дмитрий Александрович"
+    employees_count: 8
+    
+  - name: "DevOps"
+    budget: 1500000
+    head: "Козлова Анна Викторовна"
+    employees_count: 6
+
+employees:
+  - id: 1
+    name: "Иванов Алексей Петрович"
+    position: "Руководитель отдела разработки"
+    department: "Разработка"
+    email: "a.ivanov@tech-innovations.ru"
+    phone: "+7 (495) 123-45-67"
+    hire_date: "2015-03-15"
+    salary: 180000
+    skills:
+      - "Python"
+      - "JavaScript"
+      - "Docker"
+      - "Kubernetes"
+      - "PostgreSQL"
+    projects:
+      - name: "API для извлечения текста"
+        role: "Архитектор"
+        duration: "6 месяцев"
+      - name: "Система мониторинга"
+        role: "Разработчик"
+        duration: "4 месяца"
+    
+  - id: 2
+    name: "Петрова Мария Сергеевна"
+    position: "Ведущий QA инженер"
+    department: "Тестирование"
+    email: "m.petrova@tech-innovations.ru"
+    phone: "+7 (495) 123-45-68"
+    hire_date: "2016-07-22"
+    salary: 150000
+    skills:
+      - "Selenium"
+      - "Postman"
+      - "JIRA"
+      - "TestRail"
+      - "Python"
+    projects:
+      - name: "Автоматизация тестирования"
+        role: "Тест-лид"
+        duration: "8 месяцев"
+      - name: "Нагрузочное тестирование"
+        role: "Исполнитель"
+        duration: "3 месяца"
+    
+  - id: 3
+    name: "Сидоров Дмитрий Александрович"
+    position: "Системный аналитик"
+    department: "Аналитика"
+    email: "d.sidorov@tech-innovations.ru"
+    phone: "+7 (495) 123-45-69"
+    hire_date: "2017-11-10"
+    salary: 140000
+    skills:
+      - "UML"
+      - "BPMN"
+      - "SQL"
+      - "Power BI"
+      - "Confluence"
+    projects:
+      - name: "Анализ требований"
+        role: "Аналитик"
+        duration: "12 месяцев"
+    
+  - id: 4
+    name: "Козлова Анна Викторовна"
+    position: "DevOps инженер"
+    department: "DevOps"
+    email: "a.kozlova@tech-innovations.ru"
+    phone: "+7 (495) 123-45-70"
+    hire_date: "2018-01-15"
+    salary: 170000
+    skills:
+      - "AWS"
+      - "Terraform"
+      - "Ansible"
+      - "Jenkins"
+      - "Grafana"
+    projects:
+      - name: "Миграция в облако"
+        role: "DevOps инженер"
+        duration: "10 месяцев"
+      - name: "CI/CD pipeline"
+        role: "Разработчик"
+        duration: "5 месяцев"
+    
+  - id: 5
+    name: "Новиков Сергей Владимирович"
+    position: "Fullstack разработчик"
+    department: "Разработка"
+    email: "s.novikov@tech-innovations.ru"
+    phone: "+7 (495) 123-45-71"
+    hire_date: "2019-09-01"
+    salary: 130000
+    skills:
+      - "React"
+      - "Node.js"
+      - "MongoDB"
+      - "Express"
+      - "Redux"
+    projects:
+      - name: "Веб-приложение"
+        role: "Fullstack разработчик"
+        duration: "7 месяцев"
+      - name: "Мобильное приложение"
+        role: "Backend разработчик"
+        duration: "4 месяца"
+
+projects:
+  - name: "API для извлечения текста"
+    description: "Разработка REST API для извлечения текста из документов"
+    status: "В процессе"
+    start_date: "2023-10-01"
+    end_date: "2024-04-01"
+    budget: 1500000
+    team_size: 8
+    technologies:
+      - "Python"
+      - "FastAPI"
+      - "Docker"
+      - "PostgreSQL"
+      - "Redis"
+    
+  - name: "Система мониторинга"
+    description: "Внедрение системы мониторинга инфраструктуры"
+    status: "Завершен"
+    start_date: "2023-05-01"
+    end_date: "2023-12-31"
+    budget: 800000
+    team_size: 4
+    technologies:
+      - "Prometheus"
+      - "Grafana"
+      - "Kubernetes"
+      - "Helm"
+    
+  - name: "Миграция в облако"
+    description: "Перенос инфраструктуры в AWS"
+    status: "В планах"
+    start_date: "2024-02-01"
+    end_date: "2024-12-31"
+    budget: 2000000
+    team_size: 6
+    technologies:
+      - "AWS"
+      - "Terraform"
+      - "Kubernetes"
+      - "RDS"
+
+office_locations:
+  - city: "Москва"
+    address: "ул. Тверская, 15"
+    employees: 45
+    floor_area: 800
+    
+  - city: "Санкт-Петербург"
+    address: "Невский проспект, 28"
+    employees: 15
+    floor_area: 400
+    
+benefits:
+  - name: "Медицинская страховка"
+    coverage: "Полное покрытие"
+    provider: "Росгосстрах"
+    
+  - name: "Обучение и развитие"
+    budget_per_employee: 50000
+    courses_available: 25
+    
+  - name: "Отпуск"
+    days_per_year: 28
+    additional_days: 5
+    
+  - name: "Гибкий график"
+    remote_work: true
+    flexible_hours: true 

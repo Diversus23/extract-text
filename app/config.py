@@ -29,7 +29,7 @@ class Settings:
         "documents": ["doc", "docx", "pdf", "rtf", "odt"],
         "spreadsheets": ["csv", "xls", "xlsx", "ods"],
         "presentations": ["pptx", "ppt"],
-        "other": ["txt", "html", "htm", "md", "markdown", "json", "epub", "eml", "msg"]
+        "other": ["txt", "html", "htm", "md", "markdown", "json", "xml", "yaml", "yml", "epub", "eml", "msg"]
     }
     
     @property
