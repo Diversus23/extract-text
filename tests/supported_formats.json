@@ -25,13 +25,18 @@
     "pptx",
     "ppt"
   ],
+  "structured_data": [
+    "json",
+    "xml",
+    "yaml",
+    "yml"
+  ],
   "other": [
     "txt",
     "html",
     "htm",
     "md",
     "markdown",
-    "json",
     "epub",
     "eml",
     "msg"

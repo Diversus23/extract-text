@@ -93,13 +93,7 @@ async def health() -> Dict[str, str]:
 @app.get("/v1/supported-formats/")
 async def supported_formats() -> Dict[str, list]:
     """Поддерживаемые форматы файлов"""
-    return {
-        "images_ocr": ["jpg", "jpeg", "png", "tiff", "tif", "bmp", "gif"],
-        "documents": ["doc", "docx", "pdf", "rtf", "odt"],
-        "spreadsheets": ["csv", "xls", "xlsx", "ods"],
-        "presentations": ["pptx", "ppt"],
-        "other": ["txt", "html", "htm", "md", "markdown", "json", "epub", "eml", "msg"]
-    }
+    return settings.SUPPORTED_FORMATS
 
 
 @app.post("/v1/extract/")

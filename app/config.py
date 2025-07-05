@@ -10,7 +10,7 @@ class Settings:
     """Настройки приложения"""
     
     # Основные настройки
-    VERSION: str = "1.5"
+    VERSION: str = "1.6"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # Настройки API
@@ -29,7 +29,8 @@ class Settings:
         "documents": ["doc", "docx", "pdf", "rtf", "odt"],
         "spreadsheets": ["csv", "xls", "xlsx", "ods"],
         "presentations": ["pptx", "ppt"],
-        "other": ["txt", "html", "htm", "md", "markdown", "json", "xml", "yaml", "yml", "epub", "eml", "msg"]
+        "structured_data": ["json", "xml", "yaml", "yml"],
+        "other": ["txt", "html", "htm", "md", "markdown", "epub", "eml", "msg"]
     }
     
     @property

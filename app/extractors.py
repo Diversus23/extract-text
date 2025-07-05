@@ -24,6 +24,9 @@ try:
 except ImportError:
     Document = None
 
+# Для .doc файлов используем antiword через subprocess
+import subprocess
+
 try:
     import pandas as pd
 except ImportError:
@@ -232,10 +235,58 @@ class TextExtractor:
             raise ValueError(f"Error processing DOCX: {str(e)}")
     
     async def _extract_from_doc(self, content: bytes) -> str:
-        """Извлечение текста из DOC (старый формат Word)"""
-        # Для DOC файлов нужен более сложный подход
-        # Можно использовать python-docx2txt или antiword
-        raise ValueError("DOC format not fully supported yet")
+        """Извлечение текста из DOC через конвертацию в DOCX с помощью LibreOffice"""
+        if not Document:
+            raise ImportError("python-docx не установлен")
+        
+        try:
+            # Создаем временные файлы
+            with tempfile.NamedTemporaryFile(suffix='.doc', delete=False) as temp_doc:
+                temp_doc.write(content)
+                temp_doc_path = temp_doc.name
+            
+            # Создаем временную директорию для вывода
+            temp_dir = tempfile.mkdtemp()
+            
+            try:
+                # Конвертируем .doc в .docx с помощью LibreOffice
+                result = subprocess.run([
+                    'libreoffice', '--headless', '--convert-to', 'docx',
+                    '--outdir', temp_dir, temp_doc_path
+                ], capture_output=True, text=True, timeout=30)
+                
+                if result.returncode != 0:
+                    logger.error(f"LibreOffice conversion failed: {result.stderr}")
+                    raise ValueError("Failed to convert DOC to DOCX")
+                
+                # Находим сконвертированный файл
+                doc_filename = os.path.splitext(os.path.basename(temp_doc_path))[0]
+                docx_path = os.path.join(temp_dir, f"{doc_filename}.docx")
+                
+                if not os.path.exists(docx_path):
+                    raise ValueError("Converted DOCX file not found")
+                
+                # Читаем сконвертированный DOCX файл
+                with open(docx_path, 'rb') as docx_file:
+                    docx_content = docx_file.read()
+                
+                # Используем существующий метод для извлечения текста из DOCX
+                text = await self._extract_from_docx(docx_content)
+                
+                return text
+                
+            finally:
+                # Очищаем временные файлы
+                os.unlink(temp_doc_path)
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                
+        except subprocess.TimeoutExpired:
+            logger.error("LibreOffice conversion timeout")
+            raise ValueError("DOC conversion timeout")
+        except Exception as e:
+            logger.error(f"Ошибка при обработке DOC: {str(e)}")
+            raise ValueError(f"Error processing DOC: {str(e)}")
     
     async def _extract_from_excel(self, content: bytes) -> str:
         """Извлечение данных из Excel файлов"""

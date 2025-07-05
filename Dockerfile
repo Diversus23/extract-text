@@ -24,8 +24,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY ./app /code/app
 
 # Создаем пользователя для безопасности
-RUN groupadd -r appuser && useradd -r -g appuser appuser && \
-    chown -R appuser:appuser /code
+RUN groupadd -r appuser && useradd -r -g appuser -m appuser && \
+    chown -R appuser:appuser /code && \
+    mkdir -p /home/appuser/.cache && \
+    chown -R appuser:appuser /home/appuser
 USER appuser
 
 # Переменные окружения
