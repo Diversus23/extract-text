@@ -1,0 +1,12 @@
+# Настройки API
+API_PORT=7555
+DEBUG=true
+
+# Настройки OCR
+OCR_LANGUAGES=rus+eng
+
+# Настройки обработки
+PROCESSING_TIMEOUT_SECONDS=300
+
+# Логирование
+LOG_LEVEL=INFO 

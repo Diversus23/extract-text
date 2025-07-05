@@ -1,0 +1,72 @@
+[
+    {
+      "id": 1,
+      "title": "Инициализация проекта",
+      "description": "Создать структуру проекта на Go с использованием модуля go.mod.",
+      "tags": ["golang", "init", "project"],
+      "status": "todo"
+    },
+    {
+      "id": 2,
+      "title": "Реализация определения формата файла",
+      "description": "Определять MIME-тип и расширение файла для выбора соответствующего обработчика.",
+      "tags": ["file", "mime", "detection"],
+      "status": "todo"
+    },
+    {
+      "id": 3,
+      "title": "Извлечение текста из PDF",
+      "description": "Интеграция с rsc.io/pdf (или Unidoc) для извлечения текста из PDF-документов.",
+      "tags": ["pdf", "text", "parser"],
+      "status": "todo"
+    },
+    {
+      "id": 4,
+      "title": "Извлечение текста из DOCX",
+      "description": "Использовать библиотеку gooxml для парсинга и извлечения текста из DOCX.",
+      "tags": ["docx", "word", "parser"],
+      "status": "todo"
+    },
+    {
+      "id": 5,
+      "title": "Извлечение текста из Markdown",
+      "description": "Реализовать парсинг Markdown через gomarkdown/markdown с последующим выделением текста.",
+      "tags": ["markdown", "md", "parser"],
+      "status": "todo"
+    },
+    {
+      "id": 6,
+      "title": "Парсинг HTML и извлечение текста",
+      "description": "Использовать goquery или golang.org/x/net/html для получения чистого текста из HTML-документов.",
+      "tags": ["html", "text", "clean"],
+      "status": "todo"
+    },
+    {
+      "id": 7,
+      "title": "OCR для изображений",
+      "description": "Интеграция с gosseract или вызов tesseract через os/exec для распознавания текста на JPG/PNG.",
+      "tags": ["ocr", "image", "tesseract"],
+      "status": "todo"
+    },
+    {
+      "id": 8,
+      "title": "Реализация REST API",
+      "description": "Создать HTTP API с загрузкой файла и возвратом извлечённого текста в JSON.",
+      "tags": ["api", "rest", "http"],
+      "status": "todo"
+    },
+    {
+      "id": 9,
+      "title": "Dockerfile и сборка образа",
+      "description": "Написать Dockerfile с установкой необходимых утилит и зависимостей.",
+      "tags": ["docker", "image", "build"],
+      "status": "todo"
+    },
+    {
+      "id": 10,
+      "title": "Логирование и обработка ошибок",
+      "description": "Добавить централизованное логирование и корректную обработку ошибок на всех этапах.",
+      "tags": ["logging", "error", "debug"],
+      "status": "todo"
+    }
+  ]
