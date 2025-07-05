@@ -20,7 +20,11 @@ echo "✅ API доступен"
 
 # Получение поддерживаемых форматов
 echo "Получение поддерживаемых форматов..."
-curl -s "$API_URL/v1/supported-formats/" | jq . > "$TESTS_DIR/supported_formats.json" 2>/dev/null || echo "⚠️ jq не установлен, пропускаем сохранение форматов"
+if curl -s "$API_URL/v1/supported-formats/" | jq . > "$TESTS_DIR/supported_formats.json" 2>/dev/null; then
+    echo "✅ Поддерживаемые форматы сохранены в supported_formats.json"
+else
+    echo "⚠️ jq не установлен, пропускаем сохранение форматов"
+fi
 
 # Очистка предыдущих результатов тестов
 echo "Очистка предыдущих результатов тестов..."
@@ -81,6 +85,84 @@ echo "=== Результаты тестирования ==="
 echo "Всего файлов: $total_files"
 echo "Успешно: $success_count"
 echo "Ошибок: $error_count"
+
+# Проверка покрытия поддерживаемых форматов
+echo ""
+echo "=== Проверка покрытия форматов ==="
+
+if [[ -f "$TESTS_DIR/supported_formats.json" ]] && command -v jq >/dev/null 2>&1; then
+    # Извлекаем все поддерживаемые расширения из API (из всех категорий)
+    supported_extensions=($(jq -r '.[] | .[]' "$TESTS_DIR/supported_formats.json" 2>/dev/null | sort -u))
+    
+    # Собираем расширения всех тестовых файлов
+    tested_extensions=()
+    for file in "$TESTS_DIR"/*; do
+        if [[ -f "$file" ]]; then
+            filename=$(basename "$file")
+            
+            # Пропускаем служебные файлы
+            if [[ "$filename" == "supported_formats.json" || "$filename" == *.ok.txt || "$filename" == *.err.txt ]]; then
+                continue
+            fi
+            
+            # Извлекаем расширение (может быть составным, например .image.pdf)
+            if [[ "$filename" == *.* ]]; then
+                extension="${filename##*.}"
+                tested_extensions+=("$extension")
+            fi
+        fi
+    done
+    
+    # Убираем дубликаты и сортируем
+    tested_extensions=($(printf '%s\n' "${tested_extensions[@]}" | sort -u))
+    
+    # Находим непокрытые форматы
+    uncovered_extensions=()
+    for ext in "${supported_extensions[@]}"; do
+        found=false
+        for tested_ext in "${tested_extensions[@]}"; do
+            if [[ "$ext" == "$tested_ext" ]]; then
+                found=true
+                break
+            fi
+        done
+        if [[ "$found" == false ]]; then
+            uncovered_extensions+=("$ext")
+        fi
+    done
+    
+    # Вычисляем процент покрытия
+    if [[ ${#supported_extensions[@]} -gt 0 ]]; then
+        covered_count=$(( ${#supported_extensions[@]} - ${#uncovered_extensions[@]} ))
+        coverage_percent=$(( covered_count * 100 / ${#supported_extensions[@]} ))
+    else
+        coverage_percent=0
+    fi
+    
+    echo "📊 Поддерживаемые форматы: ${#supported_extensions[@]}"
+    echo "🧪 Протестированные форматы: ${#tested_extensions[@]}"
+    echo "📈 Покрытие тестами: ${coverage_percent}%"
+    
+    if [[ ${#uncovered_extensions[@]} -eq 0 ]]; then
+        echo "✅ Все поддерживаемые форматы покрыты тестами!"
+    else
+        echo "⚠️  Непокрытые форматы (${#uncovered_extensions[@]}):"
+        for ext in "${uncovered_extensions[@]}"; do
+            # Получаем категорию формата из API ответа
+            category=$(jq -r --arg ext "$ext" 'to_entries[] | select(.value[] == $ext) | .key' "$TESTS_DIR/supported_formats.json" 2>/dev/null | head -1)
+            if [[ -n "$category" && "$category" != "null" ]]; then
+                echo "  🔸 .$ext ($category)"
+            else
+                echo "  🔸 .$ext"
+            fi
+        done
+        echo ""
+        echo "💡 Рекомендация: добавьте тестовые файлы для непокрытых форматов"
+    fi
+else
+    echo "⚠️ Не удается проверить покрытие форматов (требуется jq и supported_formats.json)"
+fi
+
 echo ""
 echo "📁 Результаты сохранены в папке tests/:"
 if [[ $success_count -gt 0 ]]; then
