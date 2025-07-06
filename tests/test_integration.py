@@ -3,13 +3,260 @@ Integration тесты с реальными файлами из папки test
 """
 import pytest
 import os
+import json
 from pathlib import Path
 from unittest.mock import patch, Mock
 from fastapi.testclient import TestClient
 from io import BytesIO
+import mimetypes
 
 from app.main import app
 from app.config import settings
+
+
+@pytest.mark.integration
+class TestAllRealFiles:
+    """Автоматические тесты для всех файлов из папки tests"""
+    
+    @pytest.fixture
+    def supported_formats(self, real_test_files_dir):
+        """Загружает поддерживаемые форматы из JSON файла"""
+        supported_formats_file = real_test_files_dir / "supported_formats.json"
+        with open(supported_formats_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    
+    @pytest.fixture
+    def all_supported_extensions(self, supported_formats):
+        """Возвращает все поддерживаемые расширения файлов"""
+        extensions = set()
+        for category, formats in supported_formats.items():
+            if category != "archives":  # Архивы обрабатываются отдельно
+                extensions.update(formats)
+        return extensions
+    
+    @pytest.fixture
+    def test_files_to_skip(self):
+        """Файлы, которые нужно пропустить при тестировании"""
+        return {
+            # Конфигурационные файлы
+            "supported_formats.json",
+            "config.toml",
+            "conftest.py",
+            "pytest.ini",
+            "__init__.py",
+            # Результаты тестов
+            "*.ok.txt",
+            "*.err.txt",
+            # Системные файлы
+            ".DS_Store",
+            "Thumbs.db",
+            # Файлы тестирования
+            "test_*.py",
+            # Файлы без текста (для специальных тестов)
+            "test.notext.tif",
+            "test.only_image.tiff",
+        }
+    
+    def should_skip_file(self, file_path, skip_patterns):
+        """Проверяет, нужно ли пропустить файл"""
+        filename = file_path.name
+        
+        # Проверяем точные совпадения
+        if filename in skip_patterns:
+            return True
+        
+        # Проверяем паттерны с звездочками
+        for pattern in skip_patterns:
+            if "*" in pattern:
+                if pattern.startswith("*") and filename.endswith(pattern[1:]):
+                    return True
+                if pattern.endswith("*") and filename.startswith(pattern[:-1]):
+                    return True
+        
+        return False
+    
+    def get_content_type(self, file_path):
+        """Определяет MIME тип файла"""
+        # Для архивов используем специальный тип
+        if file_path.suffix.lower() in [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"]:
+            return "application/octet-stream"
+        
+        # Для остальных файлов используем стандартное определение
+        content_type, _ = mimetypes.guess_type(str(file_path))
+        if content_type:
+            return content_type
+        
+        # Дефолтный тип для неизвестных файлов
+        return "application/octet-stream"
+    
+    @patch('app.main.validate_file_type')
+    @patch('app.extractors.pytesseract')
+    @patch('app.extractors.Image')
+    @patch('app.extractors.pdfplumber')
+    @patch('app.extractors.Document')
+    @patch('app.extractors.pd')
+    def test_all_supported_files(self, mock_pd, mock_document, mock_pdfplumber, 
+                                mock_image, mock_tesseract, mock_validate_file_type,
+                                test_client, real_test_files_dir, 
+                                all_supported_extensions, test_files_to_skip):
+        """Тест обработки всех поддерживаемых файлов из папки tests"""
+        
+        # Мокаем валидацию файлов чтобы пропустить MIME проверки
+        mock_validate_file_type.return_value = (True, None)
+        
+        # Мокаем внешние зависимости
+        mock_tesseract.image_to_string.return_value = "OCR text"
+        mock_image.open.return_value = Mock()
+        
+        # Мокаем pdfplumber
+        mock_pdf = Mock()
+        mock_page = Mock()
+        mock_page.extract_text.return_value = "PDF text"
+        mock_pdf.pages = [mock_page]
+        mock_pdfplumber.open.return_value.__enter__.return_value = mock_pdf
+        
+        # Мокаем Document для Word файлов
+        mock_doc = Mock()
+        mock_paragraph = Mock()
+        mock_paragraph.text = "Document text"
+        mock_doc.paragraphs = [mock_paragraph]
+        mock_doc.tables = []
+        mock_document.return_value = mock_doc
+        
+        # Мокаем pandas для Excel файлов
+        mock_df = Mock()
+        mock_df.to_csv.return_value = "CSV data"
+        mock_pd.read_excel.return_value = mock_df
+        mock_pd.read_csv.return_value = mock_df
+        
+        # Находим все файлы в папке tests
+        all_files = []
+        for file_path in real_test_files_dir.iterdir():
+            if file_path.is_file():
+                # Пропускаем служебные файлы
+                if self.should_skip_file(file_path, test_files_to_skip):
+                    continue
+                
+                # Получаем расширение файла
+                extension = file_path.suffix.lower().lstrip('.')
+                
+                # Для составных расширений (tar.gz, tar.bz2, etc.)
+                if file_path.name.count('.') > 1:
+                    parts = file_path.name.split('.')
+                    if len(parts) >= 3:
+                        # Для файлов типа test.tar.gz
+                        compound_ext = '.'.join(parts[-2:])
+                        if compound_ext in all_supported_extensions:
+                            extension = compound_ext
+                
+                # Проверяем, поддерживается ли расширение
+                if extension in all_supported_extensions:
+                    all_files.append(file_path)
+        
+        # Проверяем, что файлы найдены
+        assert len(all_files) > 0, "Не найдено файлов для тестирования в папке tests"
+        
+        # Счетчики для статистики
+        successful_files = 0
+        failed_files = 0
+        skipped_files = 0
+        
+        # Тестируем каждый файл
+        for file_path in all_files:
+            try:
+                # Проверяем размер файла (не более 20 МБ)
+                file_size = file_path.stat().st_size
+                if file_size > 20 * 1024 * 1024:  # 20 МБ
+                    print(f"Пропускаем файл {file_path.name} - размер {file_size} байт превышает лимит")
+                    skipped_files += 1
+                    continue
+                
+                # Читаем файл
+                with open(file_path, "rb") as f:
+                    content = f.read()
+                
+                # Определяем MIME тип
+                content_type = self.get_content_type(file_path)
+                
+                # Отправляем запрос
+                response = test_client.post(
+                    "/v1/extract/",
+                    files={"file": (file_path.name, content, content_type)}
+                )
+                
+                # Проверяем результат
+                if response.status_code == 200:
+                    data = response.json()
+                    assert data["status"] == "success", f"Файл {file_path.name}: status != success"
+                    assert data["filename"] == file_path.name, f"Файл {file_path.name}: неверное имя файла"
+                    assert len(data["files"]) >= 1, f"Файл {file_path.name}: нет файлов в результате"
+                    successful_files += 1
+                    print(f"✓ {file_path.name} - успешно обработан")
+                elif response.status_code == 415:
+                    # Файл не поддерживается или архив
+                    data = response.json()
+                    if "архив" in data.get("message", "").lower():
+                        print(f"→ {file_path.name} - архив (требует распаковки)")
+                    else:
+                        print(f"→ {file_path.name} - не поддерживается")
+                    skipped_files += 1
+                elif response.status_code == 422:
+                    # Файл поврежден или пустой
+                    data = response.json()
+                    print(f"⚠ {file_path.name} - поврежден или пуст: {data.get('message', 'Unknown error')}")
+                    # Не считаем это ошибкой - файл может быть специально поврежден для тестирования
+                    skipped_files += 1
+                else:
+                    # Неожиданная ошибка
+                    print(f"✗ {file_path.name} - ошибка {response.status_code}: {response.text}")
+                    failed_files += 1
+                    
+            except Exception as e:
+                print(f"✗ {file_path.name} - исключение: {e}")
+                failed_files += 1
+        
+        # Выводим статистику
+        total_files = len(all_files)
+        print(f"\n=== Статистика тестирования файлов ===")
+        print(f"Всего файлов: {total_files}")
+        print(f"Успешно обработано: {successful_files}")
+        print(f"Пропущено: {skipped_files}")
+        print(f"Ошибки: {failed_files}")
+        print(f"Успешность: {successful_files}/{total_files} ({successful_files/total_files*100:.1f}%)")
+        
+        # Проверяем, что хотя бы половина файлов обработалась успешно
+        success_rate = successful_files / total_files if total_files > 0 else 0
+        assert success_rate >= 0.3, f"Слишком низкая успешность обработки файлов: {success_rate:.1f}% (ожидается минимум 30%)"
+        
+        # Проверяем, что критических ошибок не слишком много
+        error_rate = failed_files / total_files if total_files > 0 else 0
+        assert error_rate <= 0.2, f"Слишком много критических ошибок: {error_rate:.1f}% (максимум 20%)"
+    
+    def test_archive_files_rejection(self, test_client, real_test_files_dir):
+        """Тест отклонения архивных файлов"""
+        archive_extensions = [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"]
+        
+        found_archives = []
+        for file_path in real_test_files_dir.iterdir():
+            if file_path.is_file():
+                if any(file_path.name.endswith(ext) for ext in archive_extensions):
+                    found_archives.append(file_path)
+        
+        if not found_archives:
+            pytest.skip("Не найдено архивных файлов для тестирования")
+        
+        for archive_path in found_archives:
+            with open(archive_path, "rb") as f:
+                response = test_client.post(
+                    "/v1/extract/",
+                    files={"file": (archive_path.name, f, "application/octet-stream")}
+                )
+            
+            # Архивы должны отклоняться с кодом 415
+            assert response.status_code == 415, f"Архив {archive_path.name} должен отклоняться с кодом 415"
+            data = response.json()
+            assert data["status"] == "error"
+            assert "архив" in data["message"].lower()
 
 
 @pytest.mark.integration

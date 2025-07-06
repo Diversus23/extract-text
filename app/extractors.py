@@ -590,13 +590,60 @@ class TextExtractor:
         """Синхронное извлечение текста из TXT файлов"""
         try:
             # Попытка декодирования в разных кодировках
-            for encoding in ['utf-8', 'cp1251', 'latin-1']:
+            # Расширенный список кодировок для лучшей поддержки русского языка
+            # Порядок важен: более специфичные кодировки проверяются первыми
+            encodings = [
+                'utf-8',            # Стандартная UTF-8
+                'mac-cyrillic',     # Macintosh кодировка для кириллицы  
+                'cp1251',           # Windows-1251 (основная кодировка Windows для русского)
+                'windows-1251',     # Альтернативное название для cp1251
+                'koi8-r',           # КОИ-8 (старая советская кодировка)
+                'cp866',            # DOS кодировка для русского
+                'iso-8859-5',       # ISO кодировка для кириллицы
+                'utf-16',           # UTF-16 (иногда используется в Windows)
+                'utf-16le',         # UTF-16 Little Endian
+                'utf-16be',         # UTF-16 Big Endian
+                'latin-1',          # ISO-8859-1 (fallback)
+                'ascii'             # ASCII (базовая кодировка)
+            ]
+            
+            for encoding in encodings:
                 try:
-                    return content.decode(encoding)
-                except UnicodeDecodeError:
+                    decoded_text = content.decode(encoding)
+                    # Проверяем, что текст корректно декодирован
+                    # Если в тексте есть заменяющие символы, пробуем следующую кодировку
+                    if '�' in decoded_text:
+                        replacement_ratio = decoded_text.count('�') / len(decoded_text)
+                        if replacement_ratio > 0.1:  # Если больше 10% заменяющих символов
+                            continue
+                    
+                    # Дополнительная проверка для кириллицы - если есть подозрительные символы
+                    # в начале строки, возможно, это неправильная кодировка
+                    if encoding == 'mac-cyrillic' and decoded_text and len(decoded_text) > 0:
+                        # Проверяем первые символы на наличие кавычек или других странных символов
+                        suspicious_chars = ['"', "'", '`', '«', '»', '"', '"', ''', ''', chr(8220), chr(8221)]
+                        if decoded_text[0] in suspicious_chars and len(decoded_text) > 1:
+                            # Это может быть неправильная кодировка, продолжаем поиск
+                            continue
+                        
+                        # Дополнительная проверка - если в тексте есть кириллица смешанная с латиницей
+                        # в неестественном порядке, это может быть неправильная кодировка
+                        cyrillic_count = sum(1 for char in decoded_text if '\u0400' <= char <= '\u04FF')
+                        latin_count = sum(1 for char in decoded_text if 'a' <= char.lower() <= 'z')
+                        total_letters = cyrillic_count + latin_count
+                        
+                        if total_letters > 0:
+                            # Если кириллица составляет менее 70% от общего количества букв, 
+                            # и есть подозрительные комбинации, пробуем следующую кодировку
+                            if cyrillic_count / total_letters < 0.7 and cyrillic_count > 0:
+                                continue
+                    
+                    return decoded_text
+                except (UnicodeDecodeError, UnicodeError):
                     continue
             
-            # Если не удалось декодировать, используем замещение символов
+            # Если не удалось декодировать ни одной кодировкой, используем замещение символов
+            logger.warning("Не удалось определить кодировку файла, используем UTF-8 с заменой символов")
             return content.decode('utf-8', errors='replace')
             
         except Exception as e:
@@ -607,16 +654,63 @@ class TextExtractor:
         """Синхронное извлечение текста из файлов исходного кода"""
         try:
             # Попытка декодирования в разных кодировках
+            # Расширенный список кодировок для лучшей поддержки различных языков
+            # Порядок важен: более специфичные кодировки проверяются первыми
+            encodings = [
+                'utf-8',            # Стандартная UTF-8
+                'mac-cyrillic',     # Macintosh кодировка для кириллицы
+                'cp1251',           # Windows-1251 (основная кодировка Windows для русского)
+                'windows-1251',     # Альтернативное название для cp1251
+                'koi8-r',           # КОИ-8 (старая советская кодировка)
+                'cp866',            # DOS кодировка для русского
+                'iso-8859-5',       # ISO кодировка для кириллицы
+                'utf-16',           # UTF-16 (иногда используется в Windows)
+                'utf-16le',         # UTF-16 Little Endian
+                'utf-16be',         # UTF-16 Big Endian
+                'latin-1',          # ISO-8859-1 (fallback для европейских языков)
+                'ascii'             # ASCII (базовая кодировка)
+            ]
+            
             text = None
-            for encoding in ['utf-8', 'cp1251', 'latin-1', 'koi8-r', 'windows-1251', 'cp866']:
+            for encoding in encodings:
                 try:
-                    text = content.decode(encoding)
+                    decoded_text = content.decode(encoding)
+                    # Проверяем, что текст корректно декодирован
+                    # Если в тексте есть заменяющие символы, пробуем следующую кодировку
+                    if '�' in decoded_text:
+                        replacement_ratio = decoded_text.count('�') / len(decoded_text)
+                        if replacement_ratio > 0.1:  # Если больше 10% заменяющих символов
+                            continue
+                    
+                    # Дополнительная проверка для кириллицы - если есть подозрительные символы
+                    # в начале строки, возможно, это неправильная кодировка
+                    if encoding == 'mac-cyrillic' and decoded_text and len(decoded_text) > 0:
+                        # Проверяем первые символы на наличие кавычек или других странных символов
+                        suspicious_chars = ['"', "'", '`', '«', '»', '"', '"', ''', ''', chr(8220), chr(8221)]
+                        if decoded_text[0] in suspicious_chars and len(decoded_text) > 1:
+                            # Это может быть неправильная кодировка, продолжаем поиск
+                            continue
+                        
+                        # Дополнительная проверка - если в тексте есть кириллица смешанная с латиницей
+                        # в неестественном порядке, это может быть неправильная кодировка
+                        cyrillic_count = sum(1 for char in decoded_text if '\u0400' <= char <= '\u04FF')
+                        latin_count = sum(1 for char in decoded_text if 'a' <= char.lower() <= 'z')
+                        total_letters = cyrillic_count + latin_count
+                        
+                        if total_letters > 0:
+                            # Если кириллица составляет менее 70% от общего количества букв, 
+                            # и есть подозрительные комбинации, пробуем следующую кодировку
+                            if cyrillic_count / total_letters < 0.7 and cyrillic_count > 0:
+                                continue
+                    
+                    text = decoded_text
                     break
-                except UnicodeDecodeError:
+                except (UnicodeDecodeError, UnicodeError):
                     continue
             
             if text is None:
-                # Если не удалось декодировать, используем замещение символов
+                # Если не удалось декодировать ни одной кодировкой, используем замещение символов
+                logger.warning(f"Не удалось определить кодировку файла {filename}, используем UTF-8 с заменой символов")
                 text = content.decode('utf-8', errors='replace')
             
             # Определение языка программирования по расширению

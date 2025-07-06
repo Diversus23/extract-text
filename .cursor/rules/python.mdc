@@ -49,5 +49,8 @@ Sources structure and main files:
 - `docs/TZ.md` - target description, technical specifications, and updates. Keep this file up to date
 - `tests` - folder for test cases and test data
 - `Makefile` - command file
-- `CHANGELOG.md` - changelog file. Always add all completed tasks in this file (use current day and sh command for get it)
+- `CHANGELOG.md` - changelog file. Always add all completed tasks in this file (use current day and sh command don't forget it). Version for changelog in files `config.py` variable `VERSION` (use this variable to head the list of changes).
+  - For example: VERSION: str = "1.8.0", current day `2025-07-06` -> Heading in CHANGELOG.md `## [1.8.0] - 2025-07-06`.
 - `README.md` - readme file. Update this file if need it
+
+Command `make test` run tests.
