@@ -47,4 +47,11 @@ python-magic==0.4.27
 extract-msg==0.54.1
 
 # Логирование
-structlog==25.4.0 
+structlog==25.4.0
+
+# Тестирование
+pytest==8.4.1
+pytest-asyncio==1.0.0
+pytest-cov==6.2.1
+httpx==0.28.1
+pytest-mock==3.14.1 

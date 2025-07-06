@@ -1,0 +1,50 @@
+# Минимальные зависимости для тестирования
+# Совместимы с Python 3.13+
+
+# Веб-фреймворк и сервер
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# Обработка файлов
+python-multipart>=0.0.9
+
+# PDF обработка (основные пакеты)
+PyPDF2>=3.0.1
+pdfplumber>=0.10.3
+
+# Word и Office документы
+python-docx>=1.1.2
+python-pptx>=0.6.23
+
+# RTF документы
+striprtf>=0.0.26
+
+# Таблицы
+pandas>=2.2.2
+openpyxl>=3.1.2
+
+# Изображения (без OCR для начала)
+Pillow>=10.3.0
+
+# HTML и Markdown
+beautifulsoup4>=4.12.2
+lxml>=5.2.2
+markdown>=3.6
+
+# YAML и XML
+PyYAML>=6.0.1
+
+# Общие утилиты
+python-dotenv>=1.0.0
+werkzeug>=3.1.3
+
+# Логирование
+structlog>=25.4.0
+
+# Тестирование
+pytest==7.4.4
+pytest-asyncio==0.23.2
+pytest-cov==4.1.0
+httpx==0.25.2
+pytest-mock==3.12.0
+requests==2.31.0 

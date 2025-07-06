@@ -17,7 +17,7 @@ class Settings:
     API_PORT: int = int(os.getenv("API_PORT", "7555"))
     
     # Настройки обработки файлов
-    MAX_FILE_SIZE: int = 20 * 1024 * 1024  # 20 MB
+    MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", str(20 * 1024 * 1024)))  # 20 MB
     PROCESSING_TIMEOUT_SECONDS: int = int(os.getenv("PROCESSING_TIMEOUT_SECONDS", "300"))
     
     # Настройки OCR
@@ -64,7 +64,7 @@ class Settings:
             # Scala
             "scala", "sc",
             # R
-            "r", "R", "rmd", "Rmd",
+            "r", "rmd",
             # SQL
             "sql", "ddl", "dml",
             # Shell/Bash
