@@ -43,7 +43,6 @@ try:
 except ImportError:
     Document = None
 
-# Для .doc файлов используем antiword через subprocess
 import subprocess
 
 try:
@@ -1077,10 +1076,95 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке MSG: {str(e)}")
             raise ValueError(f"Error processing MSG: {str(e)}")
     
+    def _safe_tesseract_ocr(self, image, temp_image_path: str = None) -> str:
+        """
+        Безопасный вызов Tesseract с ограничениями ресурсов
+        
+        Args:
+            image: PIL Image объект
+            temp_image_path: Путь к временному файлу (если None, создается автоматически)
+        
+        Returns:
+            str: Распознанный текст
+        """
+        import tempfile
+        import os
+        from .utils import run_subprocess_with_limits
+        from .config import settings
+        
+        temp_file_created = False
+        
+        try:
+            # Если путь к временному файлу не указан, создаем его
+            if temp_image_path is None:
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+                    temp_image_path = temp_file.name
+                    temp_file_created = True
+                
+                # Сохраняем изображение во временный файл
+                # Конвертируем в RGB для совместимости с PNG
+                if image.mode in ('RGBA', 'LA', 'P'):
+                    image = image.convert('RGB')
+                image.save(temp_image_path, 'PNG')
+            
+            # Создаем временный файл для вывода
+            with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as output_file:
+                output_path = output_file.name
+            
+            try:
+                # Вызываем tesseract через безопасную функцию
+                result = run_subprocess_with_limits(
+                    command=[
+                        'tesseract', temp_image_path, output_path.replace('.txt', ''),
+                        '-l', self.ocr_languages
+                    ],
+                    timeout=30,
+                    memory_limit=settings.MAX_TESSERACT_MEMORY,
+                    capture_output=True,
+                    text=True
+                )
+                
+                if result.returncode != 0:
+                    logger.warning(f"Tesseract завершился с кодом {result.returncode}: {result.stderr}")
+                    return ""
+                
+                # Читаем результат OCR
+                if os.path.exists(output_path):
+                    with open(output_path, 'r', encoding='utf-8') as f:
+                        return f.read().strip()
+                else:
+                    logger.warning("Файл результата OCR не найден")
+                    return ""
+                
+            finally:
+                # Удаляем временный файл вывода
+                try:
+                    if os.path.exists(output_path):
+                        os.unlink(output_path)
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить временный файл {output_path}: {e}")
+                    
+        except subprocess.TimeoutExpired:
+            logger.error("Tesseract OCR timeout")
+            return ""
+        except MemoryError as e:
+            logger.error(f"Tesseract превысил лимит памяти: {str(e)}")
+            return ""
+        except Exception as e:
+            logger.error(f"Ошибка при OCR: {str(e)}")
+            return ""
+        finally:
+            # Удаляем временный файл изображения, если мы его создали
+            if temp_file_created and temp_image_path and os.path.exists(temp_image_path):
+                try:
+                    os.unlink(temp_image_path)
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить временный файл {temp_image_path}: {e}")
+
     def _extract_from_image_sync(self, content: bytes) -> str:
         """Синхронный OCR изображения"""
-        if not pytesseract or not Image:
-            raise ImportError("pytesseract или PIL не установлены")
+        if not Image:
+            raise ImportError("PIL не установлен")
         
         try:
             # Валидация изображения для предотвращения DoS атак
@@ -1093,11 +1177,9 @@ class TextExtractor:
             
             image = Image.open(io.BytesIO(content))
             
-            # OCR на русском и английском языках с защитой от превышения памяти
-            # pytesseract не поддерживает прямые ограничения памяти,
-            # поэтому полагаемся на валидацию изображения и общие ограничения системы
-            text = pytesseract.image_to_string(image, lang=self.ocr_languages)
-            return text.strip()
+            # Безопасный OCR с ограничениями ресурсов
+            text = self._safe_tesseract_ocr(image)
+            return text
             
         except Exception as e:
             logger.error(f"Ошибка при OCR изображения: {str(e)}")
@@ -1491,7 +1573,7 @@ class TextExtractor:
 
     def _ocr_from_pdf_image_sync(self, page, img_info) -> str:
         """Синхронный OCR изображения из PDF"""
-        if not pytesseract or not Image:
+        if not Image:
             return ""
         
         try:
@@ -1515,10 +1597,10 @@ class TextExtractor:
             # Конвертируем обрезанную область в изображение с высоким разрешением
             img_pil = cropped_page.to_image(resolution=300)
             
-            # Применяем OCR к извлеченному изображению
-            text = pytesseract.image_to_string(img_pil, lang=self.ocr_languages)
+            # Безопасный OCR с ограничениями ресурсов
+            text = self._safe_tesseract_ocr(img_pil.original)
             
-            return text.strip() if text else ""
+            return text
             
         except Exception as e:
             logger.warning(f"Ошибка OCR изображения: {str(e)}")
@@ -1548,10 +1630,10 @@ class TextExtractor:
                 # Обрезаем область изображения
                 cropped_img = pil_image.crop(pixel_bbox)
                 
-                # Применяем OCR
-                text = pytesseract.image_to_string(cropped_img, lang=self.ocr_languages)
+                # Безопасный OCR с ограничениями ресурсов
+                text = self._safe_tesseract_ocr(cropped_img)
                 
-                return text.strip() if text else ""
+                return text
                 
             except Exception as e2:
                 logger.warning(f"Альтернативная попытка OCR также не удалась: {str(e2)}")

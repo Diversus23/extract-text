@@ -1,6 +1,6 @@
 # Техническое задание: API для извлечения текста для RAG
 
-**Версия:** 1.8.4
+**Версия:** 1.8.5
 **Дата:** 06.07.2025
 **Заказчик:** ООО "СОФТОНИТ"
 
@@ -100,7 +100,7 @@
 ```json
 {
   "api_name": "Text Extraction API for RAG",
-  "version": "1.8.4",
+  "version": "1.8.5",
   "contact": "ООО 'СОФТОНИТ'"
 }
 ```
@@ -352,6 +352,28 @@
 - Процессы, превышающие лимит памяти, завершаются с кодом 137 (SIGKILL)
 - Система логирует превышения и возвращает понятные ошибки пользователю
 - Временные файлы очищаются в блоках `finally` даже при ошибках
+
+* **Безопасный вызов Tesseract для OCR:**
+  ```python
+  def _safe_tesseract_ocr(self, image, temp_image_path: str = None) -> str:
+      # Создание временного файла изображения
+      with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+          image.save(temp_file.name, 'PNG')
+      
+      # Безопасный вызов tesseract через run_subprocess_with_limits
+      result = run_subprocess_with_limits(
+          command=['tesseract', temp_image_path, output_path, '-l', languages],
+          timeout=30,
+          memory_limit=settings.MAX_TESSERACT_MEMORY,
+          capture_output=True
+      )
+  ```
+
+* **Все вызовы Tesseract защищены:**
+  - `_extract_from_image_sync()` - OCR обычных изображений
+  - `_ocr_from_pdf_image_sync()` - OCR изображений из PDF файлов
+  - Заменен небезопасный `pytesseract.image_to_string()` на `_safe_tesseract_ocr()`
+  - Предотвращены DoS атаки через специально подготовленные изображения
 
 #### 5.3.4. Архитектура производительности и Event Loop
 * **Критическое требование:** Все ресурсоемкие операции должны выполняться вне основного потока Event Loop для предотвращения блокировки сервера.
