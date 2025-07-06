@@ -36,6 +36,10 @@ PyYAML==6.0.1
 # ODT файлы
 odfpy==1.4.1
 
+# Архивы
+rarfile==4.1
+py7zr==0.20.8
+
 # Общие утилиты
 python-dotenv==1.0.0
 werkzeug==3.0.3

@@ -152,35 +152,28 @@ async def extract_text(file: UploadFile = File(...)):
         
         # Извлечение текста
         start_time = time.time()
-        extracted_text = await text_extractor.extract_text(content, safe_filename_for_processing)
+        extracted_files = await text_extractor.extract_text(content, safe_filename_for_processing)
         process_time = time.time() - start_time
+        
+        # Подсчет общей длины текста
+        total_text_length = sum(len(file_data.get("text", "")) for file_data in extracted_files)
         
         logger.info(
             f"Текст успешно извлечен из {original_filename} за {process_time:.3f}s. "
-            f"Длина текста: {len(extracted_text)} символов"
+            f"Обработано файлов: {len(extracted_files)}, общая длина текста: {total_text_length} символов"
         )
         
         return {
             "status": "success",
             "filename": original_filename,
-            "text": extracted_text
+            "files": extracted_files
         }
         
     except HTTPException:
         raise
     except ValueError as e:
         error_msg = str(e)
-        if "Archive format detected" in error_msg:
-            logger.warning(f"Обнаружен архив: {original_filename}")
-            return JSONResponse(
-                status_code=415,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": "Обнаружен архив. Пожалуйста, распакуйте архив и отправьте каждый файл отдельно в API."
-                }
-            )
-        elif "Unsupported file format" in error_msg:
+        if "Unsupported file format" in error_msg:
             logger.warning(f"Неподдерживаемый формат файла: {original_filename}")
             return JSONResponse(
                 status_code=415,

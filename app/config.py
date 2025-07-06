@@ -10,7 +10,7 @@ class Settings:
     """Настройки приложения"""
     
     # Основные настройки
-    VERSION: str = "1.7.3"
+    VERSION: str = "1.8.0"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # Настройки API
@@ -25,6 +25,11 @@ class Settings:
     
     # Настройки производительности
     WORKERS: int = int(os.getenv("WORKERS", "1"))
+    
+    # Настройки архивов
+    MAX_ARCHIVE_SIZE: int = int(os.getenv("MAX_ARCHIVE_SIZE", "20971520"))  # 20 MB
+    MAX_EXTRACTED_SIZE: int = int(os.getenv("MAX_EXTRACTED_SIZE", "104857600"))  # 100 MB
+    MAX_ARCHIVE_NESTING: int = int(os.getenv("MAX_ARCHIVE_NESTING", "3"))
     
     # Поддерживаемые форматы
     SUPPORTED_FORMATS = {
@@ -88,7 +93,7 @@ class Settings:
             "gitignore", "gitattributes", "gitmodules"
         ],
         "other": ["txt", "html", "htm", "md", "markdown", "epub", "eml", "msg"],
-        "archives": ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz", "tbz2", "txz", "tar.gz", "tar.bz2", "tar.xz", "lzma", "z", "cab", "iso", "dmg", "deb", "rpm", "apk", "msi", "pkg", "exe", "bin", "run", "app", "jar", "war", "ear"]
+        "archives": ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz", "tbz2", "txz", "tar.gz", "tar.bz2", "tar.xz"]
     }
     
     @property

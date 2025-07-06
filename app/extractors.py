@@ -6,11 +6,26 @@ import asyncio
 import io
 import logging
 import zipfile
-from typing import Optional, List
+import tarfile
+from typing import Optional, List, Dict, Any
 import tempfile
 import os
 import shutil
 import xml.etree.ElementTree as ET
+import subprocess
+import time
+from pathlib import Path
+
+# Импорты для архивов
+try:
+    import rarfile
+except ImportError:
+    rarfile = None
+
+try:
+    import py7zr
+except ImportError:
+    py7zr = None
 
 # Импорты для различных форматов
 try:
@@ -87,12 +102,12 @@ class TextExtractor:
         self.ocr_languages = settings.OCR_LANGUAGES
         self.timeout = settings.PROCESSING_TIMEOUT_SECONDS
         
-    async def extract_text(self, file_content: bytes, filename: str) -> str:
+    async def extract_text(self, file_content: bytes, filename: str) -> List[Dict[str, Any]]:
         """Основной метод извлечения текста"""
         
         # Проверка, является ли файл архивом
         if is_archive_format(filename, settings.SUPPORTED_FORMATS):
-            raise ValueError(f"Archive format detected: {filename}. Please extract the archive and send each file separately to the API.")
+            return await self._extract_from_archive(file_content, filename)
         
         # Проверка поддержки формата
         if not is_supported_format(filename, settings.SUPPORTED_FORMATS):
@@ -112,7 +127,14 @@ class TextExtractor:
                 timeout=self.timeout
             )
             
-            return text.strip() if text else ""
+            # Возвращаем массив с одним элементом для единообразия
+            return [{
+                "filename": filename,
+                "path": filename,
+                "size": len(file_content),
+                "type": extension,
+                "text": text.strip() if text else ""
+            }]
             
         except asyncio.TimeoutError:
             logger.error(f"Timeout при обработке файла {filename}")
@@ -1113,3 +1135,343 @@ class TextExtractor:
         except Exception as e:
             logger.warning(f"Ошибка при проверке MIME-типа: {str(e)}")
             return True  # В случае ошибки разрешаем обработку
+
+    async def _extract_from_archive(self, content: bytes, filename: str, nesting_level: int = 0) -> List[Dict[str, Any]]:
+        """Безопасное извлечение файлов из архива"""
+        
+        # Проверка глубины вложенности
+        if nesting_level >= settings.MAX_ARCHIVE_NESTING:
+            logger.warning(f"Превышена максимальная глубина вложенности архивов: {filename}")
+            raise ValueError("Maximum archive nesting level exceeded")
+        
+        # Проверка размера архива
+        if len(content) > settings.MAX_ARCHIVE_SIZE:
+            logger.warning(f"Архив {filename} слишком большой: {len(content)} байт")
+            raise ValueError("Archive size exceeds maximum allowed size")
+        
+        extension = get_file_extension(filename)
+        logger.info(f"Обработка архива {filename} (тип: {extension}, размер: {len(content)} байт)")
+        
+        extracted_files = []
+        
+        # Создаем временную директорию для безопасной работы
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            archive_path = temp_path / f"archive_{int(time.time())}.{extension}"
+            
+            try:
+                # Записываем архив во временный файл
+                with open(archive_path, 'wb') as f:
+                    f.write(content)
+                
+                # Извлекаем файлы в зависимости от типа архива
+                extract_dir = temp_path / "extracted"
+                extract_dir.mkdir(exist_ok=True)
+                
+                if extension == "zip":
+                    extracted_files = await self._extract_zip_files(archive_path, extract_dir, filename, nesting_level)
+                elif extension in ["tar", "gz", "bz2", "xz", "tar.gz", "tar.bz2", "tar.xz", "tgz", "tbz2", "txz"]:
+                    extracted_files = await self._extract_tar_files(archive_path, extract_dir, filename, nesting_level)
+                elif extension == "rar":
+                    extracted_files = await self._extract_rar_files(archive_path, extract_dir, filename, nesting_level)
+                elif extension == "7z":
+                    extracted_files = await self._extract_7z_files(archive_path, extract_dir, filename, nesting_level)
+                else:
+                    raise ValueError(f"Unsupported archive format: {extension}")
+                
+                logger.info(f"Успешно обработано {len(extracted_files)} файлов из архива {filename}")
+                return extracted_files
+                
+            except Exception as e:
+                logger.error(f"Ошибка при обработке архива {filename}: {str(e)}")
+                raise ValueError(f"Error processing archive: {str(e)}")
+    
+    async def _extract_zip_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
+        """Извлечение файлов из ZIP-архива"""
+        extracted_files = []
+        total_size = 0
+        
+        try:
+            with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                # Проверяем размер распакованных файлов
+                for info in zip_ref.infolist():
+                    if info.is_dir():
+                        continue
+                    total_size += info.file_size
+                    
+                    if total_size > settings.MAX_EXTRACTED_SIZE:
+                        raise ValueError("Extracted files size exceeds maximum allowed size (zip bomb protection)")
+                
+                # Извлекаем файлы
+                for info in zip_ref.infolist():
+                    if info.is_dir():
+                        continue
+                    
+                    # Санитизируем имя файла
+                    safe_filename = self._sanitize_archive_filename(info.filename)
+                    if not safe_filename:
+                        continue
+                    
+                    # Фильтруем системные файлы
+                    if self._is_system_file(safe_filename):
+                        continue
+                    
+                    # Создаем безопасный путь для извлечения
+                    safe_path = extract_dir / safe_filename
+                    safe_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    try:
+                        # Извлекаем файл
+                        with zip_ref.open(info) as source, open(safe_path, 'wb') as target:
+                            shutil.copyfileobj(source, target)
+                        
+                        # Обрабатываем файл
+                        file_content = safe_path.read_bytes()
+                        file_result = await self._process_extracted_file(
+                            file_content, safe_filename, safe_path.name, archive_name, nesting_level
+                        )
+                        
+                        if file_result:
+                            extracted_files.extend(file_result)
+                            
+                    except Exception as e:
+                        logger.warning(f"Ошибка при обработке файла {safe_filename} из архива {archive_name}: {str(e)}")
+                        continue
+                
+        except zipfile.BadZipFile:
+            raise ValueError("Invalid ZIP file")
+        
+        return extracted_files
+    
+    async def _extract_tar_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
+        """Извлечение файлов из TAR-архива"""
+        extracted_files = []
+        total_size = 0
+        
+        try:
+            with tarfile.open(archive_path, 'r:*') as tar_ref:
+                # Проверяем размер распакованных файлов
+                for member in tar_ref.getmembers():
+                    if member.isfile():
+                        total_size += member.size
+                        
+                        if total_size > settings.MAX_EXTRACTED_SIZE:
+                            raise ValueError("Extracted files size exceeds maximum allowed size (tar bomb protection)")
+                
+                # Извлекаем файлы
+                for member in tar_ref.getmembers():
+                    if not member.isfile():
+                        continue
+                    
+                    # Санитизируем имя файла
+                    safe_filename = self._sanitize_archive_filename(member.name)
+                    if not safe_filename:
+                        continue
+                    
+                    # Фильтруем системные файлы
+                    if self._is_system_file(safe_filename):
+                        continue
+                    
+                    # Создаем безопасный путь для извлечения
+                    safe_path = extract_dir / safe_filename
+                    safe_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    try:
+                        # Извлекаем файл
+                        with tar_ref.extractfile(member) as source, open(safe_path, 'wb') as target:
+                            if source:
+                                shutil.copyfileobj(source, target)
+                        
+                        # Обрабатываем файл
+                        file_content = safe_path.read_bytes()
+                        file_result = await self._process_extracted_file(
+                            file_content, safe_filename, safe_path.name, archive_name, nesting_level
+                        )
+                        
+                        if file_result:
+                            extracted_files.extend(file_result)
+                            
+                    except Exception as e:
+                        logger.warning(f"Ошибка при обработке файла {safe_filename} из архива {archive_name}: {str(e)}")
+                        continue
+                
+        except tarfile.TarError:
+            raise ValueError("Invalid TAR file")
+        
+        return extracted_files
+    
+    async def _extract_rar_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
+        """Извлечение файлов из RAR-архива"""
+        if not rarfile:
+            raise ValueError("RAR support not available. Install rarfile library.")
+        
+        extracted_files = []
+        total_size = 0
+        
+        try:
+            with rarfile.RarFile(archive_path, 'r') as rar_ref:
+                # Проверяем размер распакованных файлов
+                for info in rar_ref.infolist():
+                    if info.is_dir():
+                        continue
+                    total_size += info.file_size
+                    
+                    if total_size > settings.MAX_EXTRACTED_SIZE:
+                        raise ValueError("Extracted files size exceeds maximum allowed size (rar bomb protection)")
+                
+                # Извлекаем файлы
+                for info in rar_ref.infolist():
+                    if info.is_dir():
+                        continue
+                    
+                    # Санитизируем имя файла
+                    safe_filename = self._sanitize_archive_filename(info.filename)
+                    if not safe_filename:
+                        continue
+                    
+                    # Фильтруем системные файлы
+                    if self._is_system_file(safe_filename):
+                        continue
+                    
+                    # Создаем безопасный путь для извлечения
+                    safe_path = extract_dir / safe_filename
+                    safe_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    try:
+                        # Извлекаем файл
+                        with rar_ref.open(info) as source, open(safe_path, 'wb') as target:
+                            shutil.copyfileobj(source, target)
+                        
+                        # Обрабатываем файл
+                        file_content = safe_path.read_bytes()
+                        file_result = await self._process_extracted_file(
+                            file_content, safe_filename, safe_path.name, archive_name, nesting_level
+                        )
+                        
+                        if file_result:
+                            extracted_files.extend(file_result)
+                            
+                    except Exception as e:
+                        logger.warning(f"Ошибка при обработке файла {safe_filename} из архива {archive_name}: {str(e)}")
+                        continue
+                
+        except rarfile.RarError:
+            raise ValueError("Invalid RAR file")
+        
+        return extracted_files
+    
+    async def _extract_7z_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
+        """Извлечение файлов из 7Z-архива"""
+        if not py7zr:
+            raise ValueError("7Z support not available. Install py7zr library.")
+        
+        extracted_files = []
+        total_size = 0
+        
+        try:
+            with py7zr.SevenZipFile(archive_path, 'r') as sz_ref:
+                # Проверяем размер распакованных файлов
+                for info in sz_ref.list():
+                    if info.is_dir:
+                        continue
+                    total_size += info.uncompressed
+                    
+                    if total_size > settings.MAX_EXTRACTED_SIZE:
+                        raise ValueError("Extracted files size exceeds maximum allowed size (7z bomb protection)")
+                
+                # Извлекаем файлы
+                sz_ref.extractall(extract_dir)
+                
+                # Обрабатываем извлеченные файлы
+                for root, dirs, files in os.walk(extract_dir):
+                    for file in files:
+                        file_path = Path(root) / file
+                        relative_path = file_path.relative_to(extract_dir)
+                        
+                        # Санитизируем имя файла
+                        safe_filename = self._sanitize_archive_filename(str(relative_path))
+                        if not safe_filename:
+                            continue
+                        
+                        # Фильтруем системные файлы
+                        if self._is_system_file(safe_filename):
+                            continue
+                        
+                        try:
+                            # Обрабатываем файл
+                            file_content = file_path.read_bytes()
+                            file_result = await self._process_extracted_file(
+                                file_content, safe_filename, file_path.name, archive_name, nesting_level
+                            )
+                            
+                            if file_result:
+                                extracted_files.extend(file_result)
+                                
+                        except Exception as e:
+                            logger.warning(f"Ошибка при обработке файла {safe_filename} из архива {archive_name}: {str(e)}")
+                            continue
+                
+        except py7zr.Bad7zFile:
+            raise ValueError("Invalid 7Z file")
+        
+        return extracted_files
+    
+    async def _process_extracted_file(self, content: bytes, filename: str, basename: str, archive_name: str, nesting_level: int) -> Optional[List[Dict[str, Any]]]:
+        """Обработка извлеченного файла"""
+        try:
+            # Если файл является архивом, рекурсивно обрабатываем его
+            if is_archive_format(basename, settings.SUPPORTED_FORMATS):
+                return await self._extract_from_archive(content, basename, nesting_level + 1)
+            
+            # Если файл поддерживается, извлекаем текст
+            if is_supported_format(basename, settings.SUPPORTED_FORMATS):
+                extension = get_file_extension(basename)
+                text = await self._extract_text_by_format(content, extension, basename)
+                
+                return [{
+                    "filename": basename,
+                    "path": f"{archive_name}/{filename}",
+                    "size": len(content),
+                    "type": extension,
+                    "text": text.strip() if text else ""
+                }]
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Ошибка при обработке файла {filename}: {str(e)}")
+            return None
+    
+    def _sanitize_archive_filename(self, filename: str) -> str:
+        """Санитизация имени файла из архива"""
+        if not filename:
+            return ""
+        
+        # Удаляем опасные пути
+        filename = filename.replace('..', '').replace('\\', '/').strip('/')
+        
+        # Проверяем на абсолютные пути
+        if filename.startswith('/'):
+            filename = filename[1:]
+        
+        # Удаляем пустые части пути
+        parts = [part for part in filename.split('/') if part and part != '.']
+        
+        if not parts:
+            return ""
+        
+        return '/'.join(parts)
+    
+    def _is_system_file(self, filename: str) -> bool:
+        """Проверка, является ли файл системным"""
+        system_files = [
+            '.DS_Store', 'Thumbs.db', '.git/', '.svn/', '.hg/',
+            '__MACOSX/', '.localized', 'desktop.ini', 'folder.ini'
+        ]
+        
+        filename_lower = filename.lower()
+        for system_file in system_files:
+            if system_file in filename_lower:
+                return True
+        
+        return False
