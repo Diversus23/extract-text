@@ -63,7 +63,7 @@ dev: build ## 🚀 Запустить в режиме разработки
 	@echo "$(CYAN)📖 Документация: http://localhost:7555/docs$(RESET)"
 	@echo ""
 	@echo "$(YELLOW)Для остановки нажмите Ctrl+C$(RESET)"
-	@docker-compose -f docker-compose.yml up
+	@docker compose -f docker-compose.yml up
 
 prod: build ## 🏭 Запустить в продакшене
 	@echo "$(BOLD)$(GREEN)🏭 Запуск в продакшене...$(RESET)"
@@ -72,7 +72,7 @@ prod: build ## 🏭 Запустить в продакшене
 	@echo "  - Автоперезапуск при сбоях"
 	@echo "  - Оптимизированная производительность"
 	@echo ""
-	@docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+	@docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 	@echo "$(GREEN)✅ Сервис запущен в фоновом режиме!$(RESET)"
 	@echo "$(CYAN)🌐 API доступен по адресу: http://localhost:7555$(RESET)"
 	@echo "$(CYAN)📖 Документация: http://localhost:7555/docs$(RESET)"
@@ -82,19 +82,19 @@ prod: build ## 🏭 Запустить в продакшене
 
 stop: ## 🛑 Остановить все контейнеры
 	@echo "$(BOLD)$(RED)🛑 Остановка всех контейнеров...$(RESET)"
-	@docker-compose -f docker-compose.yml -f docker-compose.prod.yml down
+	@docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 	@echo "$(GREEN)✅ Все контейнеры остановлены!$(RESET)"
 
 logs: ## 📋 Показать логи приложения
 	@echo "$(BOLD)$(CYAN)📋 Показ логов приложения...$(RESET)"
 	@echo "$(YELLOW)Для выхода нажмите Ctrl+C$(RESET)"
 	@echo ""
-	@docker-compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
+	@docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
 
 status: ## 📊 Показать статус контейнеров
 	@echo "$(BOLD)$(CYAN)📊 Статус контейнеров:$(RESET)"
 	@echo ""
-	@docker-compose -f docker-compose.yml ps 2>/dev/null || echo "$(YELLOW)Контейнеры не запущены$(RESET)"
+	@docker compose -f docker-compose.yml ps 2>/dev/null || echo "$(YELLOW)Контейнеры не запущены$(RESET)"
 	@echo ""
 	@echo "$(BOLD)$(CYAN)📈 Использование ресурсов:$(RESET)"
 	@docker stats --no-stream 2>/dev/null | grep text-extraction || echo "$(YELLOW)Контейнеры не запущены$(RESET)"
@@ -180,7 +180,7 @@ clean: ## 🧹 Полная очистка
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
 		echo ""; \
 		echo "$(RED)🗑️  Удаление контейнеров и томов...$(RESET)"; \
-		docker-compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes --remove-orphans; \
+		docker compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes --remove-orphans; \
 		echo "$(RED)🗑️  Удаление результатов тестов...$(RESET)"; \
 		rm -f tests/*.ok.txt tests/*.err.txt tests/supported_formats.json 2>/dev/null || true; \
 		echo "$(RED)🗑️  Удаление отчетов покрытия...$(RESET)"; \
@@ -195,7 +195,7 @@ clean: ## 🧹 Полная очистка
 debug: ## 🐛 Запустить в режиме отладки
 	@echo "$(BOLD)$(YELLOW)🐛 Режим отладки...$(RESET)"
 	@echo "$(CYAN)Подключение к контейнеру для отладки$(RESET)"
-	@docker-compose -f docker-compose.yml exec api /bin/bash
+	@docker compose -f docker-compose.yml exec api /bin/bash
 
 quick-test: ## ⚡ Быстрый тест API
 	@echo "$(BOLD)$(BLUE)⚡ Быстрый тест API...$(RESET)"
