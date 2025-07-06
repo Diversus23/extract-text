@@ -49,4 +49,5 @@ Sources structure and main files:
 - `docs/TZ.md` - target description, technical specifications, and updates. Keep this file up to date
 - `tests` - folder for test cases and test data
 - `Makefile` - command file
-- `CHANGELOG.md` - changelog file. Always add all completed tasks in this file
+- `CHANGELOG.md` - changelog file. Always add all completed tasks in this file (use current day and sh command for get it)
+- `README.md` - readme file. Update this file if need it

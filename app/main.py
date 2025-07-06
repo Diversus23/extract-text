@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 
 from app.config import settings
 from app.extractors import TextExtractor
-from app.utils import setup_logging
+from app.utils import setup_logging, sanitize_filename, validate_file_type
 
 # Настройка логирования
 setup_logging()
@@ -100,11 +100,27 @@ async def supported_formats() -> Dict[str, list]:
 async def extract_text(file: UploadFile = File(...)):
     """Извлечение текста из файла"""
     try:
-        logger.info(f"Получен файл для обработки: {file.filename}")
+        # Санитизация имени файла
+        original_filename = file.filename or "unknown_file"
+        safe_filename_for_processing = sanitize_filename(original_filename)
+        
+        logger.info(f"Получен файл для обработки: {original_filename}")
+        
+        # Проверка наличия размера файла (защита от DoS)
+        if file.size is None:
+            logger.warning(f"Файл {original_filename} не содержит заголовок Content-Length")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "filename": original_filename,
+                    "message": "Отсутствует заголовок Content-Length. Пожалуйста, убедитесь, что размер файла указан в запросе."
+                }
+            )
         
         # Проверка размера файла
-        if file.size and file.size > settings.MAX_FILE_SIZE:
-            logger.warning(f"Файл {file.filename} слишком большой: {file.size} bytes")
+        if file.size > settings.MAX_FILE_SIZE:
+            logger.warning(f"Файл {original_filename} слишком большой: {file.size} bytes")
             raise HTTPException(
                 status_code=413,
                 detail="File size exceeds maximum allowed size"
@@ -115,25 +131,38 @@ async def extract_text(file: UploadFile = File(...)):
         
         # Проверка на пустой файл
         if not content:
-            logger.warning(f"Файл {file.filename} пуст")
+            logger.warning(f"Файл {original_filename} пуст")
             raise HTTPException(
                 status_code=422,
                 detail="File is empty"
             )
         
+        # Проверка соответствия расширения файла его содержимому
+        is_valid, validation_error = validate_file_type(content, original_filename)
+        if not is_valid:
+            logger.warning(f"Файл {original_filename} не прошел проверку типа: {validation_error}")
+            return JSONResponse(
+                status_code=415,
+                content={
+                    "status": "error",
+                    "filename": original_filename,
+                    "message": "Расширение файла не соответствует его содержимому. Возможная подделка типа файла."
+                }
+            )
+        
         # Извлечение текста
         start_time = time.time()
-        extracted_text = await text_extractor.extract_text(content, file.filename)
+        extracted_text = await text_extractor.extract_text(content, safe_filename_for_processing)
         process_time = time.time() - start_time
         
         logger.info(
-            f"Текст успешно извлечен из {file.filename} за {process_time:.3f}s. "
+            f"Текст успешно извлечен из {original_filename} за {process_time:.3f}s. "
             f"Длина текста: {len(extracted_text)} символов"
         )
         
         return {
             "status": "success",
-            "filename": file.filename,
+            "filename": original_filename,
             "text": extracted_text
         }
         
@@ -142,42 +171,44 @@ async def extract_text(file: UploadFile = File(...)):
     except ValueError as e:
         error_msg = str(e)
         if "Archive format detected" in error_msg:
-            logger.warning(f"Обнаружен архив: {file.filename}")
+            logger.warning(f"Обнаружен архив: {original_filename}")
             return JSONResponse(
                 status_code=415,
                 content={
                     "status": "error",
-                    "filename": file.filename,
+                    "filename": original_filename,
                     "message": "Обнаружен архив. Пожалуйста, распакуйте архив и отправьте каждый файл отдельно в API."
                 }
             )
         elif "Unsupported file format" in error_msg:
-            logger.warning(f"Неподдерживаемый формат файла: {file.filename}")
+            logger.warning(f"Неподдерживаемый формат файла: {original_filename}")
             return JSONResponse(
                 status_code=415,
                 content={
                     "status": "error",
-                    "filename": file.filename,
+                    "filename": original_filename,
                     "message": "Неподдерживаемый формат файла."
                 }
             )
         else:
-            logger.error(f"Ошибка при обработке файла {file.filename}: {error_msg}", exc_info=True)
+            logger.error(f"Ошибка при обработке файла {original_filename}: {error_msg}", exc_info=True)
             return JSONResponse(
                 status_code=422,
                 content={
                     "status": "error",
-                    "filename": file.filename,
+                    "filename": original_filename,
                     "message": "Файл поврежден или формат не поддерживается."
                 }
             )
     except Exception as e:
-        logger.error(f"Ошибка при обработке файла {file.filename}: {str(e)}", exc_info=True)
+        # Определяем имя файла для логирования
+        filename_for_error = getattr(file, 'filename', 'unknown_file') or 'unknown_file'
+        logger.error(f"Ошибка при обработке файла {filename_for_error}: {str(e)}", exc_info=True)
         return JSONResponse(
             status_code=422,
             content={
                 "status": "error",
-                "filename": file.filename,
+                "filename": filename_for_error,
                 "message": "Файл поврежден или формат не поддерживается."
             }
         )

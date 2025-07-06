@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-eng \
     libreoffice \
     antiword \
+    libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Устанавливаем рабочую директорию
