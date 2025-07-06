@@ -1,27 +1,12 @@
-version: '3.8'
 services:
   api:
-    image: text-extraction-api:latest
     build: .
+    container_name: extract-text-dev
     command: uvicorn app.main:app --host 0.0.0.0 --port ${API_PORT:-7555} --workers ${WORKERS:-1} --reload
-    ports:
-      - "${API_PORT:-7555}:${API_PORT:-7555}"
-    volumes:
-      - ./app:/code/app
-      - ./tests:/code/tests
-    env_file:
-      - .env
-    environment:
-      - PYTHONPATH=/code 
-
-  extract-text:
-    build: .
-    container_name: extract-text
-    restart: unless-stopped
     ports:
       - "7555:7555"
     environment:
-      - DEBUG=false
+      - DEBUG=true
       - API_PORT=7555
       - MAX_FILE_SIZE=20971520  # 20MB
       - PROCESSING_TIMEOUT_SECONDS=300
@@ -69,6 +54,9 @@ services:
         max-file: "3"
     
     volumes:
+      # Горячая перезагрузка для режима разработки
+      - ./app:/code/app
+      - ./tests:/code/tests
       # Ограничиваем размер временных файлов
       - type: tmpfs
         target: /tmp
