@@ -42,7 +42,16 @@ app = FastAPI(
     title="Text Extraction API for RAG",
     description="API для извлечения текста из файлов различных форматов",
     version=settings.VERSION,
-    lifespan=lifespan
+    lifespan=lifespan,
+    license_info={
+        "name": "MIT License",
+        "url": "https://opensource.org/licenses/MIT"
+    },
+    contact={
+        "name": "Софтонит",
+        "email": "support@softonit.ru",
+        "url": "https://softonit.ru"
+    }
 )
 
 # Добавление CORS middleware
