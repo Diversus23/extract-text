@@ -6,6 +6,7 @@ Text Extraction API for RAG
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 import uvicorn
 import os
 import logging
@@ -154,9 +155,11 @@ async def extract_text(file: UploadFile = File(...)):
                 }
             )
         
-        # Извлечение текста
+        # Извлечение текста - КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: выполняем в пуле потоков
         start_time = time.time()
-        extracted_files = await text_extractor.extract_text(content, safe_filename_for_processing)
+        extracted_files = await run_in_threadpool(
+            text_extractor.extract_text, content, safe_filename_for_processing
+        )
         process_time = time.time() - start_time
         
         # Подсчет общей длины текста

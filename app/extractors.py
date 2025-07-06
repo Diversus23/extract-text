@@ -107,25 +107,19 @@ class TextExtractor:
         # Создаем пул потоков для CPU-bound операций
         self._thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
         
-    async def extract_text(self, file_content: bytes, filename: str) -> List[Dict[str, Any]]:
-        """Основной метод извлечения текста"""
+    def extract_text(self, file_content: bytes, filename: str) -> List[Dict[str, Any]]:
+        """Основной метод извлечения текста (теперь синхронный для выполнения в threadpool)"""
         
         # Проверка, является ли файл архивом
         if is_archive_format(filename, settings.SUPPORTED_FORMATS):
-            return await self._extract_from_archive(file_content, filename)
+            return self._extract_from_archive(file_content, filename)
         
         # Проверка поддержки формата
         if not is_supported_format(filename, settings.SUPPORTED_FORMATS):
             raise ValueError(f"Unsupported file format: {filename}")
         
         # Проверка MIME-типа для безопасности (синхронная операция)
-        loop = asyncio.get_event_loop()
-        is_valid_mime = await loop.run_in_executor(
-            self._thread_pool,
-            self._check_mime_type,
-            file_content,
-            filename
-        )
+        is_valid_mime = self._check_mime_type(file_content, filename)
         
         if not is_valid_mime:
             logger.warning(f"MIME-тип файла {filename} не соответствует расширению")
@@ -133,12 +127,13 @@ class TextExtractor:
         
         extension = get_file_extension(filename)
         
+        # Проверка, что extension не None
+        if not extension:
+            raise ValueError(f"Could not determine file extension for: {filename}")
+        
         try:
-            # Выполнение извлечения с таймаутом в отдельном потоке
-            text = await asyncio.wait_for(
-                self._extract_text_by_format(file_content, extension, filename),
-                timeout=self.timeout
-            )
+            # Извлечение текста синхронно
+            text = self._extract_text_by_format(file_content, extension, filename)
             
             # Возвращаем массив с одним элементом для единообразия
             return [{
@@ -149,64 +144,58 @@ class TextExtractor:
                 "text": text.strip() if text else ""
             }]
             
-        except asyncio.TimeoutError:
-            logger.error(f"Timeout при обработке файла {filename}")
-            raise ValueError("Processing timeout exceeded")
         except Exception as e:
             logger.error(f"Ошибка при извлечении текста из {filename}: {str(e)}")
             raise ValueError(f"Error extracting text: {str(e)}")
     
-    async def _extract_text_by_format(self, content: bytes, extension: str, filename: str) -> str:
-        """Извлечение текста в зависимости от формата"""
+    def _extract_text_by_format(self, content: bytes, extension: str, filename: str) -> str:
+        """Извлечение текста в зависимости от формата (синхронная версия)"""
         
         # Проверяем, является ли файл исходным кодом
         source_code_extensions = settings.SUPPORTED_FORMATS.get("source_code", [])
         
-        loop = asyncio.get_event_loop()
-        
         if extension == "pdf":
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_pdf_sync, content)
+            return self._extract_from_pdf_sync(content)
         elif extension in ["docx"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_docx_sync, content)
+            return self._extract_from_docx_sync(content)
         elif extension in ["doc"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_doc_sync, content)
+            return self._extract_from_doc_sync(content)
         elif extension in ["xls", "xlsx"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_excel_sync, content)
+            return self._extract_from_excel_sync(content)
         elif extension in ["csv"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_csv_sync, content)
+            return self._extract_from_csv_sync(content)
         elif extension in ["pptx"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_pptx_sync, content)
+            return self._extract_from_pptx_sync(content)
         elif extension in ["ppt"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_ppt_sync, content)
+            return self._extract_from_ppt_sync(content)
         elif extension in ["jpg", "jpeg", "png", "tiff", "tif", "bmp", "gif"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_image_sync, content)
+            return self._extract_from_image_sync(content)
         elif extension in source_code_extensions:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_source_code_sync, content, extension, filename)
+            return self._extract_from_source_code_sync(content, extension, filename)
         elif extension in ["txt"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_txt_sync, content)
+            return self._extract_from_txt_sync(content)
         elif extension in ["html", "htm"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_html_sync, content)
+            return self._extract_from_html_sync(content)
         elif extension in ["md", "markdown"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_markdown_sync, content)
+            return self._extract_from_markdown_sync(content)
         elif extension in ["json"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_json_sync, content)
+            return self._extract_from_json_sync(content)
         elif extension in ["rtf"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_rtf_sync, content)
+            return self._extract_from_rtf_sync(content)
         elif extension in ["odt"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_odt_sync, content)
+            return self._extract_from_odt_sync(content)
         elif extension in ["xml"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_xml_sync, content)
+            return self._extract_from_xml_sync(content)
         elif extension in ["yaml", "yml"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_yaml_sync, content)
+            return self._extract_from_yaml_sync(content)
         elif extension in ["epub"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_epub_sync, content)
+            return self._extract_from_epub_sync(content)
         elif extension in ["eml"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_eml_sync, content)
+            return self._extract_from_eml_sync(content)
         elif extension in ["msg"]:
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_msg_sync, content)
+            return self._extract_from_msg_sync(content)
         else:
-            # Попытка извлечения как обычный текст
-            return await loop.run_in_executor(self._thread_pool, self._extract_from_txt_sync, content)
+            raise ValueError(f"Unsupported file format: {extension}")
     
     def _extract_from_pdf_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из PDF"""
@@ -251,170 +240,6 @@ class TextExtractor:
                     os.unlink(temp_file_path)
                 except OSError as e:
                     logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {str(e)}")
-    
-    async def _extract_from_pdf(self, content: bytes) -> str:
-        """Извлечение текста из PDF"""
-        if not pdfplumber:
-            raise ImportError("pdfplumber не установлен")
-        
-        text_parts = []
-        temp_file_path = None
-        
-        try:
-            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
-                temp_file.write(content)
-                temp_file_path = temp_file.name
-            
-            with pdfplumber.open(temp_file_path) as pdf:
-                for page_num, page in enumerate(pdf.pages, 1):
-                    # Извлечение текста со страницы
-                    page_text = page.extract_text()
-                    if page_text:
-                        text_parts.append(f"[Страница {page_num}]\n{page_text}")
-                    
-                    # Извлечение изображений и OCR
-                    if page.images:
-                        text_parts.append("--- OCR ---")
-                        for img_idx, img in enumerate(page.images):
-                            try:
-                                # Попытка извлечения изображения и OCR
-                                image_text = await self._ocr_from_pdf_image(page, img)
-                                if image_text.strip():
-                                    text_parts.append(f"[Изображение {img_idx + 1}]\n{image_text}")
-                            except Exception as e:
-                                logger.warning(f"Ошибка OCR изображения {img_idx + 1}: {str(e)}")
-                        text_parts.append("---")
-            
-            return "\n\n".join(text_parts)
-            
-        except Exception as e:
-            logger.error(f"Ошибка при обработке PDF: {str(e)}")
-            raise ValueError(f"Error processing PDF: {str(e)}")
-        finally:
-            # Гарантированное удаление временного файла
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.unlink(temp_file_path)
-                except OSError as e:
-                    logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {str(e)}")
-    
-    def _ocr_from_pdf_image_sync(self, page, img_info) -> str:
-        """Синхронный OCR изображения из PDF"""
-        if not pytesseract or not Image:
-            return ""
-        
-        try:
-            # Получаем координаты изображения
-            x0, y0, x1, y1 = img_info['x0'], img_info['y0'], img_info['x1'], img_info['y1']
-            
-            # Проверяем разумность размеров области
-            width = abs(x1 - x0)
-            height = abs(y1 - y0)
-            
-            # Ограничиваем размер области для предотвращения DoS
-            max_dimension = 5000  # максимальный размер по любой оси
-            if width > max_dimension or height > max_dimension:
-                logger.warning(f"Область изображения слишком большая: {width}x{height}")
-                return ""
-            
-            # Обрезаем область изображения из всей страницы
-            cropped_bbox = (x0, y0, x1, y1)
-            cropped_page = page.crop(cropped_bbox)
-            
-            # Конвертируем обрезанную область в изображение с высоким разрешением
-            img_pil = cropped_page.to_image(resolution=300)
-            
-            # Применяем OCR к извлеченному изображению
-            text = pytesseract.image_to_string(img_pil, lang=self.ocr_languages)
-            
-            return text.strip() if text else ""
-            
-        except Exception as e:
-            logger.warning(f"Ошибка OCR изображения: {str(e)}")
-            # Альтернативный подход - рендерим всю страницу и обрезаем
-            try:
-                # Конвертируем всю страницу в изображение PIL
-                page_image = page.to_image(resolution=300)
-                pil_image = page_image.original  # Получаем PIL изображение
-                
-                # Вычисляем координаты в пикселях (учитывая resolution=300)
-                scale = 300 / 72  # PDF обычно 72 DPI, мы рендерим в 300 DPI
-                pixel_bbox = (
-                    int(x0 * scale),
-                    int(y0 * scale), 
-                    int(x1 * scale),
-                    int(y1 * scale)
-                )
-                
-                # Проверяем разумность размеров в пикселях
-                pixel_width = abs(pixel_bbox[2] - pixel_bbox[0])
-                pixel_height = abs(pixel_bbox[3] - pixel_bbox[1])
-                
-                if pixel_width * pixel_height > 25000000:  # 25MP максимум
-                    logger.warning(f"Область изображения слишком большая: {pixel_width}x{pixel_height} пикселей")
-                    return ""
-                
-                # Обрезаем область изображения
-                cropped_img = pil_image.crop(pixel_bbox)
-                
-                # Применяем OCR
-                text = pytesseract.image_to_string(cropped_img, lang=self.ocr_languages)
-                
-                return text.strip() if text else ""
-                
-            except Exception as e2:
-                logger.warning(f"Альтернативная попытка OCR также не удалась: {str(e2)}")
-                return ""
-    
-    async def _ocr_from_pdf_image(self, page, img_info) -> str:
-        """OCR изображения из PDF"""
-        if not pytesseract or not Image:
-            return ""
-        
-        try:
-            # Получаем координаты изображения
-            x0, y0, x1, y1 = img_info['x0'], img_info['y0'], img_info['x1'], img_info['y1']
-            
-            # Обрезаем область изображения из всей страницы
-            cropped_bbox = (x0, y0, x1, y1)
-            cropped_page = page.crop(cropped_bbox)
-            
-            # Конвертируем обрезанную область в изображение с высоким разрешением
-            img_pil = cropped_page.to_image(resolution=300)
-            
-            # Применяем OCR к извлеченному изображению
-            text = pytesseract.image_to_string(img_pil, lang=self.ocr_languages)
-            
-            return text.strip() if text else ""
-            
-        except Exception as e:
-            logger.warning(f"Ошибка OCR изображения: {str(e)}")
-            # Альтернативный подход - рендерим всю страницу и обрезаем
-            try:
-                # Конвертируем всю страницу в изображение PIL
-                page_image = page.to_image(resolution=300)
-                pil_image = page_image.original  # Получаем PIL изображение
-                
-                # Вычисляем координаты в пикселях (учитывая resolution=300)
-                scale = 300 / 72  # PDF обычно 72 DPI, мы рендерим в 300 DPI
-                pixel_bbox = (
-                    int(x0 * scale),
-                    int(y0 * scale), 
-                    int(x1 * scale),
-                    int(y1 * scale)
-                )
-                
-                # Обрезаем область изображения
-                cropped_img = pil_image.crop(pixel_bbox)
-                
-                # Применяем OCR
-                text = pytesseract.image_to_string(cropped_img, lang=self.ocr_languages)
-                
-                return text.strip() if text else ""
-                
-            except Exception as e2:
-                logger.warning(f"Альтернативная попытка OCR также не удалась: {str(e2)}")
-                return ""
     
     def _extract_from_docx_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из DOCX"""
@@ -1324,7 +1149,7 @@ class TextExtractor:
             logger.warning(f"Ошибка при проверке MIME-типа: {str(e)}")
             return True  # В случае ошибки разрешаем обработку
 
-    async def _extract_from_archive(self, content: bytes, filename: str, nesting_level: int = 0) -> List[Dict[str, Any]]:
+    def _extract_from_archive(self, content: bytes, filename: str, nesting_level: int = 0) -> List[Dict[str, Any]]:
         """Безопасное извлечение файлов из архива"""
         
         # Проверка глубины вложенности
@@ -1357,13 +1182,13 @@ class TextExtractor:
                 extract_dir.mkdir(exist_ok=True)
                 
                 if extension == "zip":
-                    extracted_files = await self._extract_zip_files(archive_path, extract_dir, filename, nesting_level)
+                    extracted_files = self._extract_zip_files(archive_path, extract_dir, filename, nesting_level)
                 elif extension in ["tar", "gz", "bz2", "xz", "tar.gz", "tar.bz2", "tar.xz", "tgz", "tbz2", "txz"]:
-                    extracted_files = await self._extract_tar_files(archive_path, extract_dir, filename, nesting_level)
+                    extracted_files = self._extract_tar_files(archive_path, extract_dir, filename, nesting_level)
                 elif extension == "rar":
-                    extracted_files = await self._extract_rar_files(archive_path, extract_dir, filename, nesting_level)
+                    extracted_files = self._extract_rar_files(archive_path, extract_dir, filename, nesting_level)
                 elif extension == "7z":
-                    extracted_files = await self._extract_7z_files(archive_path, extract_dir, filename, nesting_level)
+                    extracted_files = self._extract_7z_files(archive_path, extract_dir, filename, nesting_level)
                 else:
                     raise ValueError(f"Unsupported archive format: {extension}")
                 
@@ -1374,7 +1199,7 @@ class TextExtractor:
                 logger.error(f"Ошибка при обработке архива {filename}: {str(e)}")
                 raise ValueError(f"Error processing archive: {str(e)}")
     
-    async def _extract_zip_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
+    def _extract_zip_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
         """Извлечение файлов из ZIP-архива"""
         extracted_files = []
         total_size = 0
@@ -1415,7 +1240,7 @@ class TextExtractor:
                         
                         # Обрабатываем файл
                         file_content = safe_path.read_bytes()
-                        file_result = await self._process_extracted_file(
+                        file_result = self._process_extracted_file(
                             file_content, safe_filename, safe_path.name, archive_name, nesting_level
                         )
                         
@@ -1431,7 +1256,7 @@ class TextExtractor:
         
         return extracted_files
     
-    async def _extract_tar_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
+    def _extract_tar_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
         """Извлечение файлов из TAR-архива"""
         extracted_files = []
         total_size = 0
@@ -1472,7 +1297,7 @@ class TextExtractor:
                         
                         # Обрабатываем файл
                         file_content = safe_path.read_bytes()
-                        file_result = await self._process_extracted_file(
+                        file_result = self._process_extracted_file(
                             file_content, safe_filename, safe_path.name, archive_name, nesting_level
                         )
                         
@@ -1488,7 +1313,7 @@ class TextExtractor:
         
         return extracted_files
     
-    async def _extract_rar_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
+    def _extract_rar_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
         """Извлечение файлов из RAR-архива"""
         if not rarfile:
             raise ValueError("RAR support not available. Install rarfile library.")
@@ -1532,7 +1357,7 @@ class TextExtractor:
                         
                         # Обрабатываем файл
                         file_content = safe_path.read_bytes()
-                        file_result = await self._process_extracted_file(
+                        file_result = self._process_extracted_file(
                             file_content, safe_filename, safe_path.name, archive_name, nesting_level
                         )
                         
@@ -1548,7 +1373,7 @@ class TextExtractor:
         
         return extracted_files
     
-    async def _extract_7z_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
+    def _extract_7z_files(self, archive_path: Path, extract_dir: Path, archive_name: str, nesting_level: int) -> List[Dict[str, Any]]:
         """Извлечение файлов из 7Z-архива"""
         if not py7zr:
             raise ValueError("7Z support not available. Install py7zr library.")
@@ -1588,7 +1413,7 @@ class TextExtractor:
                         try:
                             # Обрабатываем файл
                             file_content = file_path.read_bytes()
-                            file_result = await self._process_extracted_file(
+                            file_result = self._process_extracted_file(
                                 file_content, safe_filename, file_path.name, archive_name, nesting_level
                             )
                             
@@ -1604,17 +1429,17 @@ class TextExtractor:
         
         return extracted_files
     
-    async def _process_extracted_file(self, content: bytes, filename: str, basename: str, archive_name: str, nesting_level: int) -> Optional[List[Dict[str, Any]]]:
+    def _process_extracted_file(self, content: bytes, filename: str, basename: str, archive_name: str, nesting_level: int) -> Optional[List[Dict[str, Any]]]:
         """Обработка извлеченного файла"""
         try:
             # Если файл является архивом, рекурсивно обрабатываем его
             if is_archive_format(basename, settings.SUPPORTED_FORMATS):
-                return await self._extract_from_archive(content, basename, nesting_level + 1)
+                return self._extract_from_archive(content, basename, nesting_level + 1)
             
             # Если файл поддерживается, извлекаем текст
             if is_supported_format(basename, settings.SUPPORTED_FORMATS):
                 extension = get_file_extension(basename)
-                text = await self._extract_text_by_format(content, extension, basename)
+                text = self._extract_text_by_format(content, extension, basename)
                 
                 return [{
                     "filename": basename,
@@ -1663,3 +1488,71 @@ class TextExtractor:
                 return True
         
         return False
+
+    def _ocr_from_pdf_image_sync(self, page, img_info) -> str:
+        """Синхронный OCR изображения из PDF"""
+        if not pytesseract or not Image:
+            return ""
+        
+        try:
+            # Получаем координаты изображения
+            x0, y0, x1, y1 = img_info['x0'], img_info['y0'], img_info['x1'], img_info['y1']
+            
+            # Проверяем разумность размеров области
+            width = abs(x1 - x0)
+            height = abs(y1 - y0)
+            
+            # Ограничиваем размер области для предотвращения DoS
+            max_dimension = 5000  # максимальный размер по любой оси
+            if width > max_dimension or height > max_dimension:
+                logger.warning(f"Область изображения слишком большая: {width}x{height}")
+                return ""
+            
+            # Обрезаем область изображения из всей страницы
+            cropped_bbox = (x0, y0, x1, y1)
+            cropped_page = page.crop(cropped_bbox)
+            
+            # Конвертируем обрезанную область в изображение с высоким разрешением
+            img_pil = cropped_page.to_image(resolution=300)
+            
+            # Применяем OCR к извлеченному изображению
+            text = pytesseract.image_to_string(img_pil, lang=self.ocr_languages)
+            
+            return text.strip() if text else ""
+            
+        except Exception as e:
+            logger.warning(f"Ошибка OCR изображения: {str(e)}")
+            # Альтернативный подход - рендерим всю страницу и обрезаем
+            try:
+                # Конвертируем всю страницу в изображение PIL
+                page_image = page.to_image(resolution=300)
+                pil_image = page_image.original  # Получаем PIL изображение
+                
+                # Вычисляем координаты в пикселях (учитывая resolution=300)
+                scale = 300 / 72  # PDF обычно 72 DPI, мы рендерим в 300 DPI
+                pixel_bbox = (
+                    int(x0 * scale),
+                    int(y0 * scale), 
+                    int(x1 * scale),
+                    int(y1 * scale)
+                )
+                
+                # Проверяем разумность размеров в пикселях
+                pixel_width = abs(pixel_bbox[2] - pixel_bbox[0])
+                pixel_height = abs(pixel_bbox[3] - pixel_bbox[1])
+                
+                if pixel_width * pixel_height > 25000000:  # 25MP максимум
+                    logger.warning(f"Область изображения слишком большая: {pixel_width}x{pixel_height} пикселей")
+                    return ""
+                
+                # Обрезаем область изображения
+                cropped_img = pil_image.crop(pixel_bbox)
+                
+                # Применяем OCR
+                text = pytesseract.image_to_string(cropped_img, lang=self.ocr_languages)
+                
+                return text.strip() if text else ""
+                
+            except Exception as e2:
+                logger.warning(f"Альтернативная попытка OCR также не удалась: {str(e2)}")
+                return ""
