@@ -289,6 +289,70 @@
 
 * **Сетевая безопасность:** Основная защита обеспечивается на уровне сетевой инфраструктуры предприятия (фаерволы, VPN, изоляция сегментов сети), а не CORS-политиками.
 
+#### 5.3.3. Рекомендации по защите от DoS атак через дочерние процессы
+* **Проблема:** Внешние утилиты (LibreOffice, Tesseract) могут потреблять чрезмерное количество памяти при обработке специально подготовленных "файлов-бомб", что может привести к отказу в обслуживании.
+
+* **Многоуровневая защита:**
+  - **Уровень 1:** Ограничения на уровне Docker контейнера (базовая защита)
+  - **Уровень 2:** Ограничения на уровне дочерних процессов (гранулярное управление)
+  - **Уровень 3:** Предварительная валидация файлов и изображений
+
+* **Ограничения ресурсов для дочерних процессов:**
+  ```python
+  # Функция для запуска процессов с ограничениями
+  def run_subprocess_with_limits(command, memory_limit=None, timeout=30):
+      def preexec_fn():
+          # Ограничение виртуальной памяти
+          resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
+          # Ограничение времени CPU
+          resource.setrlimit(resource.RLIMIT_CPU, (timeout * 2, timeout * 2))
+      
+      return subprocess.run(command, preexec_fn=preexec_fn, timeout=timeout)
+  ```
+
+* **Переменные окружения для настройки защиты:**
+  - `ENABLE_RESOURCE_LIMITS=true` - включить/выключить ограничения
+  - `MAX_LIBREOFFICE_MEMORY=1610612736` - лимит памяти для LibreOffice (1.5GB)
+  - `MAX_TESSERACT_MEMORY=536870912` - лимит памяти для Tesseract (512MB)
+  - `MAX_OCR_IMAGE_PIXELS=52428800` - максимальное разрешение изображений для OCR (50MP)
+
+* **Рекомендации по размерам лимитов:**
+  - **Малые системы (2-4GB RAM):** LibreOffice: 1GB, Tesseract: 256MB
+  - **Средние системы (8-16GB RAM):** LibreOffice: 2GB, Tesseract: 512MB
+  - **Крупные системы (32GB+ RAM):** LibreOffice: 4GB, Tesseract: 1GB
+
+* **Docker-контейнер с ограничениями:**
+  ```yaml
+  # docker-compose.yml
+  services:
+    extract-text:
+      mem_limit: 4G                    # Общий лимит контейнера
+      mem_reservation: 1G              # Минимальная память
+      deploy:
+        resources:
+          limits:
+            memory: 4G
+            cpus: "2.0"
+  ```
+
+* **Валидация изображений для OCR:**
+  ```python
+  def validate_image_for_ocr(image_content):
+      with Image.open(io.BytesIO(image_content)) as img:
+          # Проверка разрешения
+          if img.width * img.height > MAX_OCR_IMAGE_PIXELS:
+              raise ValueError("Image too large for OCR")
+          # Проверка формата и цветового режима
+          if img.format not in ['JPEG', 'PNG', 'TIFF', 'BMP']:
+              raise ValueError("Unsupported image format")
+  ```
+
+* **Обработка ошибок превышения лимитов:**
+
+- Процессы, превышающие лимит памяти, завершаются с кодом 137 (SIGKILL)
+- Система логирует превышения и возвращает понятные ошибки пользователю
+- Временные файлы очищаются в блоках `finally` даже при ошибках
+
 **5.4. Среда развертывания:**
 * Сервис должен поставляться в виде **Docker-контейнера**.
 

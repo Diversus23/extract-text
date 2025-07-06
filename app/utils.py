@@ -4,14 +4,19 @@
 
 import logging
 import sys
-from typing import Optional
 import os
-import magic
 import tempfile
 import shutil
 import glob
 import time
+import subprocess
+import resource
+import signal
+import magic
+from typing import Optional, Dict, Any, Union, Callable
+from pathlib import Path
 from werkzeug.utils import secure_filename
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -330,3 +335,164 @@ def cleanup_temp_files() -> None:
             
     except Exception as e:
         logger.error(f"Ошибка при очистке временных файлов: {str(e)}", exc_info=True)
+
+
+def run_subprocess_with_limits(
+    command: list,
+    timeout: int = 30,
+    memory_limit: Optional[int] = None,
+    capture_output: bool = True,
+    text: bool = True,
+    **kwargs
+) -> subprocess.CompletedProcess:
+    """
+    Запуск подпроцесса с ограничениями ресурсов
+    
+    Args:
+        command: Команда для выполнения
+        timeout: Таймаут в секундах
+        memory_limit: Ограничение памяти в байтах (None для использования настроек по умолчанию)
+        capture_output: Захватывать ли вывод
+        text: Использовать ли текстовый режим
+        **kwargs: Дополнительные параметры для subprocess.run
+    
+    Returns:
+        subprocess.CompletedProcess: Результат выполнения
+    
+    Raises:
+        subprocess.TimeoutExpired: При превышении таймаута
+        subprocess.CalledProcessError: При ошибке выполнения
+        MemoryError: При превышении лимита памяти
+    """
+    if not settings.ENABLE_RESOURCE_LIMITS:
+        # Если ограничения отключены, используем стандартный запуск
+        return subprocess.run(
+            command,
+            timeout=timeout,
+            capture_output=capture_output,
+            text=text,
+            **kwargs
+        )
+    
+    # Определяем лимит памяти
+    if memory_limit is None:
+        memory_limit = settings.MAX_SUBPROCESS_MEMORY
+    
+    def preexec_fn():
+        """Функция для установки ограничений ресурсов перед выполнением"""
+        try:
+            # Устанавливаем ограничение на использование виртуальной памяти
+            resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
+            
+            # Устанавливаем ограничение на размер данных
+            resource.setrlimit(resource.RLIMIT_DATA, (memory_limit, memory_limit))
+            
+            # Устанавливаем ограничение на время CPU (в секундах)
+            resource.setrlimit(resource.RLIMIT_CPU, (timeout * 2, timeout * 2))
+            
+            logger.debug(f"Установлены ограничения ресурсов: память={memory_limit}, CPU={timeout * 2}")
+            
+        except Exception as e:
+            logger.warning(f"Не удалось установить ограничения ресурсов: {e}")
+    
+    try:
+        # Запускаем процесс с ограничениями
+        result = subprocess.run(
+            command,
+            timeout=timeout,
+            capture_output=capture_output,
+            text=text,
+            preexec_fn=preexec_fn,
+            **kwargs
+        )
+        
+        return result
+        
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"Процесс превысил таймаут {timeout}s: {' '.join(command)}")
+        raise
+    except subprocess.CalledProcessError as e:
+        # Проверяем, не была ли ошибка связана с превышением лимита памяти
+        if e.returncode == 137:  # SIGKILL, часто означает превышение лимита памяти
+            logger.error(f"Процесс превысил лимит памяти {memory_limit} байт: {' '.join(command)}")
+            raise MemoryError(f"Subprocess exceeded memory limit: {memory_limit} bytes")
+        else:
+            logger.error(f"Процесс завершился с ошибкой {e.returncode}: {' '.join(command)}")
+            raise
+    except Exception as e:
+        logger.error(f"Ошибка при выполнении процесса: {' '.join(command)}, {str(e)}")
+        raise
+
+
+def validate_image_for_ocr(image_content: bytes) -> tuple[bool, Optional[str]]:
+    """
+    Валидация изображения перед OCR для предотвращения DoS атак
+    
+    Args:
+        image_content: Содержимое изображения
+        
+    Returns:
+        tuple[bool, Optional[str]]: (is_valid, error_message)
+    """
+    try:
+        from PIL import Image
+        import io
+        
+        # Открываем изображение без полной загрузки в память
+        with Image.open(io.BytesIO(image_content)) as img:
+            # Проверяем разрешение
+            width, height = img.size
+            total_pixels = width * height
+            
+            if total_pixels > settings.MAX_OCR_IMAGE_PIXELS:
+                return False, f"Изображение слишком большое: {total_pixels} пикселей (макс: {settings.MAX_OCR_IMAGE_PIXELS})"
+            
+            # Проверяем формат
+            if img.format not in ['JPEG', 'PNG', 'TIFF', 'BMP', 'GIF']:
+                return False, f"Неподдерживаемый формат изображения: {img.format}"
+            
+            # Проверяем количество каналов (защита от сложных изображений)
+            if hasattr(img, 'mode'):
+                if img.mode not in ['L', 'RGB', 'RGBA', 'P']:
+                    return False, f"Неподдерживаемый цветовой режим: {img.mode}"
+            
+            logger.debug(f"Валидация изображения пройдена: {width}x{height}, {img.format}, {img.mode}")
+            return True, None
+            
+    except Exception as e:
+        logger.error(f"Ошибка при валидации изображения: {str(e)}")
+        return False, f"Не удалось обработать изображение: {str(e)}"
+
+
+def get_memory_usage() -> Dict[str, Any]:
+    """
+    Получение информации об использовании памяти
+    
+    Returns:
+        Dict[str, Any]: Информация о памяти
+    """
+    try:
+        import psutil
+        
+        # Информация о системе
+        memory = psutil.virtual_memory()
+        
+        # Информация о текущем процессе
+        process = psutil.Process(os.getpid())
+        process_memory = process.memory_info()
+        
+        return {
+            "system_total": memory.total,
+            "system_available": memory.available,
+            "system_used": memory.used,
+            "system_percent": memory.percent,
+            "process_rss": process_memory.rss,
+            "process_vms": process_memory.vms,
+            "process_percent": process.memory_percent()
+        }
+    except ImportError:
+        logger.warning("psutil не установлен, информация о памяти недоступна")
+        return {}
+    except Exception as e:
+        logger.error(f"Ошибка при получении информации о памяти: {e}")
+        return {}

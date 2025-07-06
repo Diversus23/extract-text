@@ -13,3 +13,73 @@ services:
       - .env
     environment:
       - PYTHONPATH=/code 
+
+  extract-text:
+    build: .
+    container_name: extract-text
+    restart: unless-stopped
+    ports:
+      - "7555:7555"
+    environment:
+      - DEBUG=false
+      - API_PORT=7555
+      - MAX_FILE_SIZE=20971520  # 20MB
+      - PROCESSING_TIMEOUT_SECONDS=300
+      - OCR_LANGUAGES=rus+eng
+      - WORKERS=1
+      
+      # Настройки защиты от DoS атак через дочерние процессы
+      - ENABLE_RESOURCE_LIMITS=true
+      - MAX_SUBPROCESS_MEMORY=1073741824     # 1GB
+      - MAX_LIBREOFFICE_MEMORY=1610612736    # 1.5GB
+      - MAX_TESSERACT_MEMORY=536870912       # 512MB
+      - MAX_OCR_IMAGE_PIXELS=52428800        # 50MP
+      
+      # Настройки архивов
+      - MAX_ARCHIVE_SIZE=20971520            # 20MB
+      - MAX_EXTRACTED_SIZE=104857600         # 100MB
+      - MAX_ARCHIVE_NESTING=3
+    
+    # Ограничения ресурсов на уровне контейнера для базовой защиты
+    deploy:
+      resources:
+        limits:
+          # Общее ограничение памяти для контейнера
+          memory: 4G
+          # Ограничение CPU (опционально)
+          cpus: "2.0"
+        reservations:
+          # Минимальные ресурсы для нормальной работы
+          memory: 1G
+          cpus: "0.5"
+    
+    # Альтернативный способ ограничения памяти для Docker Compose v2
+    mem_limit: 4G
+    mem_reservation: 1G
+    
+    # Настройки безопасности
+    security_opt:
+      - no-new-privileges:true
+    
+    # Логирование
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    volumes:
+      # Ограничиваем размер временных файлов
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 2G
+          mode: 1777
+    
+    # Проверка здоровья
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7555/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s 

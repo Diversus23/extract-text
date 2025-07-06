@@ -10,7 +10,7 @@ class Settings:
     """Настройки приложения"""
     
     # Основные настройки
-    VERSION: str = "1.8.3"
+    VERSION: str = "1.8.4"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # Настройки API
@@ -19,6 +19,22 @@ class Settings:
     # Настройки обработки файлов
     MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", str(20 * 1024 * 1024)))  # 20 MB
     PROCESSING_TIMEOUT_SECONDS: int = int(os.getenv("PROCESSING_TIMEOUT_SECONDS", "300"))
+    
+    # Настройки управления ресурсами дочерних процессов
+    # Максимальное потребление памяти дочерними процессами (в байтах)
+    MAX_SUBPROCESS_MEMORY: int = int(os.getenv("MAX_SUBPROCESS_MEMORY", str(1024 * 1024 * 1024)))  # 1 GB
+    
+    # Максимальное потребление памяти для LibreOffice (в байтах)
+    MAX_LIBREOFFICE_MEMORY: int = int(os.getenv("MAX_LIBREOFFICE_MEMORY", str(1536 * 1024 * 1024)))  # 1.5 GB
+    
+    # Максимальное потребление памяти для Tesseract (в байтах)
+    MAX_TESSERACT_MEMORY: int = int(os.getenv("MAX_TESSERACT_MEMORY", str(512 * 1024 * 1024)))  # 512 MB
+    
+    # Максимальное разрешение для OCR изображений (пиксели)
+    MAX_OCR_IMAGE_PIXELS: int = int(os.getenv("MAX_OCR_IMAGE_PIXELS", str(50 * 1024 * 1024)))  # 50 MP
+    
+    # Включить/выключить ограничения ресурсов
+    ENABLE_RESOURCE_LIMITS: bool = os.getenv("ENABLE_RESOURCE_LIMITS", "true").lower() == "true"
     
     # Настройки OCR
     OCR_LANGUAGES: str = os.getenv("OCR_LANGUAGES", "rus+eng")

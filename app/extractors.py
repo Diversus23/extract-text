@@ -307,6 +307,16 @@ class TextExtractor:
             # Получаем координаты изображения
             x0, y0, x1, y1 = img_info['x0'], img_info['y0'], img_info['x1'], img_info['y1']
             
+            # Проверяем разумность размеров области
+            width = abs(x1 - x0)
+            height = abs(y1 - y0)
+            
+            # Ограничиваем размер области для предотвращения DoS
+            max_dimension = 5000  # максимальный размер по любой оси
+            if width > max_dimension or height > max_dimension:
+                logger.warning(f"Область изображения слишком большая: {width}x{height}")
+                return ""
+            
             # Обрезаем область изображения из всей страницы
             cropped_bbox = (x0, y0, x1, y1)
             cropped_page = page.crop(cropped_bbox)
@@ -335,6 +345,14 @@ class TextExtractor:
                     int(x1 * scale),
                     int(y1 * scale)
                 )
+                
+                # Проверяем разумность размеров в пикселях
+                pixel_width = abs(pixel_bbox[2] - pixel_bbox[0])
+                pixel_height = abs(pixel_bbox[3] - pixel_bbox[1])
+                
+                if pixel_width * pixel_height > 25000000:  # 25MP максимум
+                    logger.warning(f"Область изображения слишком большая: {pixel_width}x{pixel_height} пикселей")
+                    return ""
                 
                 # Обрезаем область изображения
                 cropped_img = pil_image.crop(pixel_bbox)
@@ -445,11 +463,20 @@ class TextExtractor:
             temp_dir = tempfile.mkdtemp()
             
             try:
-                # Конвертируем .doc в .docx с помощью LibreOffice
-                result = subprocess.run([
-                    'libreoffice', '--headless', '--convert-to', 'docx',
-                    '--outdir', temp_dir, temp_doc_path
-                ], capture_output=True, text=True, timeout=30)
+                # Конвертируем .doc в .docx с помощью LibreOffice с ограничениями ресурсов
+                from .utils import run_subprocess_with_limits
+                from .config import settings
+                
+                result = run_subprocess_with_limits(
+                    command=[
+                        'libreoffice', '--headless', '--convert-to', 'docx',
+                        '--outdir', temp_dir, temp_doc_path
+                    ],
+                    timeout=30,
+                    memory_limit=settings.MAX_LIBREOFFICE_MEMORY,
+                    capture_output=True,
+                    text=True
+                )
                 
                 if result.returncode != 0:
                     logger.error(f"LibreOffice conversion failed: {result.stderr}")
@@ -473,13 +500,23 @@ class TextExtractor:
                 
             finally:
                 # Очищаем временные файлы
-                os.unlink(temp_doc_path)
-                import shutil
-                shutil.rmtree(temp_dir, ignore_errors=True)
+                try:
+                    os.unlink(temp_doc_path)
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить временный файл {temp_doc_path}: {e}")
+                
+                try:
+                    import shutil
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить временную директорию {temp_dir}: {e}")
                 
         except subprocess.TimeoutExpired:
             logger.error("LibreOffice conversion timeout")
             raise ValueError("DOC conversion timeout")
+        except MemoryError as e:
+            logger.error(f"LibreOffice превысил лимит памяти: {str(e)}")
+            raise ValueError("DOC conversion failed: memory limit exceeded")
         except Exception as e:
             logger.error(f"Ошибка при обработке DOC: {str(e)}")
             raise ValueError(f"Error processing DOC: {str(e)}")
@@ -557,11 +594,20 @@ class TextExtractor:
             temp_dir = tempfile.mkdtemp()
             
             try:
-                # Конвертируем .ppt в .pptx с помощью LibreOffice
-                result = subprocess.run([
-                    'libreoffice', '--headless', '--convert-to', 'pptx',
-                    '--outdir', temp_dir, temp_ppt_path
-                ], capture_output=True, text=True, timeout=30)
+                # Конвертируем .ppt в .pptx с помощью LibreOffice с ограничениями ресурсов
+                from .utils import run_subprocess_with_limits
+                from .config import settings
+                
+                result = run_subprocess_with_limits(
+                    command=[
+                        'libreoffice', '--headless', '--convert-to', 'pptx',
+                        '--outdir', temp_dir, temp_ppt_path
+                    ],
+                    timeout=30,
+                    memory_limit=settings.MAX_LIBREOFFICE_MEMORY,
+                    capture_output=True,
+                    text=True
+                )
                 
                 if result.returncode != 0:
                     logger.error(f"LibreOffice conversion failed: {result.stderr}")
@@ -585,13 +631,23 @@ class TextExtractor:
                 
             finally:
                 # Очищаем временные файлы
-                os.unlink(temp_ppt_path)
-                import shutil
-                shutil.rmtree(temp_dir, ignore_errors=True)
+                try:
+                    os.unlink(temp_ppt_path)
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить временный файл {temp_ppt_path}: {e}")
+                
+                try:
+                    import shutil
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить временную директорию {temp_dir}: {e}")
                 
         except subprocess.TimeoutExpired:
             logger.error("LibreOffice conversion timeout")
             raise ValueError("PPT conversion timeout")
+        except MemoryError as e:
+            logger.error(f"LibreOffice превысил лимит памяти: {str(e)}")
+            raise ValueError("PPT conversion failed: memory limit exceeded")
         except Exception as e:
             logger.error(f"Ошибка при обработке PPT: {str(e)}")
             raise ValueError(f"Error processing PPT: {str(e)}")
@@ -1202,8 +1258,19 @@ class TextExtractor:
             raise ImportError("pytesseract или PIL не установлены")
         
         try:
+            # Валидация изображения для предотвращения DoS атак
+            from .utils import validate_image_for_ocr
+            
+            is_valid, error_message = validate_image_for_ocr(content)
+            if not is_valid:
+                logger.warning(f"Изображение не прошло валидацию: {error_message}")
+                raise ValueError(f"Image validation failed: {error_message}")
+            
             image = Image.open(io.BytesIO(content))
-            # OCR на русском и английском языках
+            
+            # OCR на русском и английском языках с защитой от превышения памяти
+            # pytesseract не поддерживает прямые ограничения памяти,
+            # поэтому полагаемся на валидацию изображения и общие ограничения системы
             text = pytesseract.image_to_string(image, lang=self.ocr_languages)
             return text.strip()
             
