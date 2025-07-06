@@ -180,8 +180,8 @@ class TestValidateFileType:
         """Тест когда magic library недоступна"""
         with patch('app.utils.magic.from_buffer', side_effect=Exception("Magic not available")):
             is_valid, error = validate_file_type(b'content', "file.txt")
-            assert is_valid is True  # Пропускаем проверку при ошибке
-            assert error is None
+            assert is_valid is False  # Fail-closed стратегия при ошибке
+            assert "Не удалось определить тип файла" in error
 
 
 @pytest.mark.unit

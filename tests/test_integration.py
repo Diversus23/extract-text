@@ -452,6 +452,7 @@ class TestRealFiles:
         mock_paragraph.text = "Текст из DOCX документа"
         mock_doc.paragraphs = [mock_paragraph]
         mock_doc.tables = []  # Делаем tables итерируемым
+        mock_doc.sections = []  # Добавляем sections для полного мокинга
         mock_document.return_value = mock_doc
         
         docx_file = real_test_files_dir / "test.docx"

@@ -15,11 +15,14 @@ PROCESSING_TIMEOUT_SECONDS=300
 WORKERS=1
 
 # Настройки обработки файлов
-MAX_FILE_SIZE=20971520  # 20MB в байтах
+# 20MB в байтах
+MAX_FILE_SIZE=20971520
 
 # Настройки архивов
-MAX_ARCHIVE_SIZE=20971520     # 20MB
-MAX_EXTRACTED_SIZE=104857600  # 100MB
+# 20MB
+MAX_ARCHIVE_SIZE=20971520
+# 100MB
+MAX_EXTRACTED_SIZE=104857600
 MAX_ARCHIVE_NESTING=3
 
 # ===========================================
@@ -30,19 +33,23 @@ MAX_ARCHIVE_NESTING=3
 ENABLE_RESOURCE_LIMITS=true
 
 # Максимальное потребление памяти дочерними процессами (в байтах)
-MAX_SUBPROCESS_MEMORY=1073741824  # 1GB - базовый лимит
+# 1GB - базовый лимит
+MAX_SUBPROCESS_MEMORY=1073741824
 
 # Максимальное потребление памяти для LibreOffice (в байтах)
 # LibreOffice может потреблять больше памяти при конвертации сложных документов
-MAX_LIBREOFFICE_MEMORY=1610612736  # 1.5GB
+# 1.5GB
+MAX_LIBREOFFICE_MEMORY=1610612736
 
 # Максимальное потребление памяти для Tesseract (в байтах)
 # Tesseract обычно потребляет меньше памяти, но может быть требователен к большим изображениям
-MAX_TESSERACT_MEMORY=536870912  # 512MB
+# 512MB
+MAX_TESSERACT_MEMORY=536870912
 
 # Максимальное разрешение для OCR изображений (в пикселях)
 # Изображения больше этого размера будут отклонены
-MAX_OCR_IMAGE_PIXELS=52428800  # 50MP (например, 7071x7071 или 10000x5243)
+# 50MP (например, 7071x7071 или 10000x5243)
+MAX_OCR_IMAGE_PIXELS=52428800
 
 # ===========================================
 # РЕКОМЕНДАЦИИ ПО НАСТРОЙКЕ
@@ -53,10 +60,13 @@ MAX_OCR_IMAGE_PIXELS=52428800  # 50MP (например, 7071x7071 или 10000x
 # MAX_LIBREOFFICE_MEMORY=1073741824    # 1GB
 # MAX_TESSERACT_MEMORY=268435456       # 256MB
 
-# Для средних систем (8-16GB RAM):
-MAX_SUBPROCESS_MEMORY=1073741824     # 1GB
-MAX_LIBREOFFICE_MEMORY=2147483648    # 2GB
-MAX_TESSERACT_MEMORY=536870912       # 512MB
+# Для средних систем (8-16GB RAM) - АКТИВНЫЕ НАСТРОЙКИ:
+# 1GB
+MAX_SUBPROCESS_MEMORY=1073741824
+# 2GB
+MAX_LIBREOFFICE_MEMORY=2147483648
+# 512MB
+MAX_TESSERACT_MEMORY=536870912
 
 # Для крупных систем (32GB+ RAM):
 # MAX_SUBPROCESS_MEMORY=2147483648     # 2GB

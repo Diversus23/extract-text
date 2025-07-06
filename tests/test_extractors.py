@@ -7,6 +7,8 @@ from unittest.mock import patch, Mock, AsyncMock, mock_open
 from pathlib import Path
 import tempfile
 import os
+import io
+import zipfile
 
 from app.extractors import TextExtractor
 from app.config import settings
@@ -24,13 +26,12 @@ class TestTextExtractor:
         assert extractor._thread_pool is not None
         assert extractor._thread_pool._max_workers == 4
     
-    @pytest.mark.asyncio
-    async def test_extract_text_simple_txt(self, text_extractor):
+    def test_extract_text_simple_txt(self, text_extractor):
         """Тест извлечения текста из простого текстового файла"""
         test_content = "Тестовый текст для проверки"
         content_bytes = test_content.encode('utf-8')
         
-        result = await text_extractor.extract_text(content_bytes, "test.txt")
+        result = text_extractor.extract_text(content_bytes, "test.txt")
         
         assert len(result) == 1
         assert result[0]["filename"] == "test.txt"
@@ -38,25 +39,23 @@ class TestTextExtractor:
         assert result[0]["text"] == test_content
         assert result[0]["size"] == len(content_bytes)
     
-    @pytest.mark.asyncio
-    async def test_extract_text_unsupported_format(self, text_extractor):
+    def test_extract_text_unsupported_format(self, text_extractor):
         """Тест извлечения текста из неподдерживаемого формата"""
         content_bytes = b"some content"
         
         with pytest.raises(ValueError, match="Unsupported file format"):
-            await text_extractor.extract_text(content_bytes, "test.xyz")
+            text_extractor.extract_text(content_bytes, "test.xyz")
     
-    @pytest.mark.asyncio
-    async def test_extract_text_timeout(self):
+    def test_extract_text_timeout(self):
         """Тест обработки таймаута"""
         extractor = TextExtractor()
         
         # Мокаем метод для имитации таймаута
         with patch.object(extractor, '_extract_text_by_format') as mock_extract:
-            mock_extract.side_effect = asyncio.TimeoutError()
+            mock_extract.side_effect = TimeoutError()
             
-            with pytest.raises(ValueError, match="Processing timeout exceeded"):
-                await extractor.extract_text(b"test content", "test.txt")
+            with pytest.raises(ValueError, match="Error extracting text"):
+                extractor.extract_text(b"test content", "test.txt")
     
     def test_extract_from_txt_sync(self, text_extractor):
         """Тест синхронного извлечения из текстового файла"""
@@ -236,35 +235,33 @@ if __name__ == "__main__":
                     assert "OCR текст" in result
                     assert "[Изображение 1]" in result
     
-    @patch('app.extractors.pytesseract')
     @patch('app.extractors.Image')
-    def test_extract_from_image_sync(self, mock_image_class, mock_tesseract, text_extractor):
+    def test_extract_from_image_sync(self, mock_image_class, text_extractor):
         """Тест синхронного извлечения из изображения"""
-        mock_tesseract.image_to_string.return_value = "Распознанный текст"
         mock_image = Mock()
         mock_image_class.open.return_value = mock_image
         
         content_bytes = b"fake image content"
         
-        result = text_extractor._extract_from_image_sync(content_bytes)
-        
-        assert "Распознанный текст" in result
-        mock_tesseract.image_to_string.assert_called_once_with(mock_image, lang=text_extractor.ocr_languages)
+        with patch('app.utils.validate_image_for_ocr', return_value=(True, None)):
+            with patch.object(text_extractor, '_safe_tesseract_ocr', return_value="Распознанный текст"):
+                result = text_extractor._extract_from_image_sync(content_bytes)
+                
+                assert "Распознанный текст" in result
     
-    @patch('app.extractors.pytesseract')
     @patch('app.extractors.Image')
-    def test_extract_from_image_sync_no_text(self, mock_image_class, mock_tesseract, text_extractor):
+    def test_extract_from_image_sync_no_text(self, mock_image_class, text_extractor):
         """Тест извлечения из изображения без текста"""
-        mock_tesseract.image_to_string.return_value = ""
         mock_image = Mock()
         mock_image_class.open.return_value = mock_image
         
         content_bytes = b"fake image content"
         
-        result = text_extractor._extract_from_image_sync(content_bytes)
-        
-        assert result == ""
-        mock_tesseract.image_to_string.assert_called_once_with(mock_image, lang=text_extractor.ocr_languages)
+        with patch('app.utils.validate_image_for_ocr', return_value=(True, None)):
+            with patch.object(text_extractor, '_safe_tesseract_ocr', return_value=""):
+                result = text_extractor._extract_from_image_sync(content_bytes)
+                
+                assert result == ""
     
     @patch('app.extractors.Document')
     def test_extract_from_docx_sync(self, mock_document, text_extractor):
@@ -274,34 +271,38 @@ if __name__ == "__main__":
         mock_paragraph.text = "Тестовый параграф"
         mock_doc.paragraphs = [mock_paragraph]
         mock_doc.tables = []
+        mock_doc.sections = []  # Добавляем пустой список секций
         mock_document.return_value = mock_doc
         
         result = text_extractor._extract_from_docx_sync(b"fake docx content")
         
         assert "Тестовый параграф" in result
     
-    @patch('app.extractors.subprocess')
     @patch('app.extractors.Document')
-    def test_extract_from_doc_sync(self, mock_document, mock_subprocess, text_extractor):
+    def test_extract_from_doc_sync(self, mock_document, text_extractor):
         """Тест синхронного извлечения из DOC"""
-        mock_subprocess.run.return_value = Mock(returncode=0)
-        
         mock_doc = Mock()
         mock_paragraph = Mock()
         mock_paragraph.text = "Тестовый параграф из DOC"
         mock_doc.paragraphs = [mock_paragraph]
         mock_doc.tables = []
+        mock_doc.sections = []  # Добавляем sections для полного мокинга
         mock_document.return_value = mock_doc
+        
+        # Мокаем run_subprocess_with_limits
+        mock_result = Mock()
+        mock_result.returncode = 0
         
         with patch('tempfile.NamedTemporaryFile'):
             with patch('tempfile.mkdtemp'):
-                with patch('os.path.exists', return_value=True):
-                    with patch('builtins.open', mock_open(read_data=b"docx content")):
-                        with patch('os.unlink'):
-                            with patch('shutil.rmtree'):
-                                result = text_extractor._extract_from_doc_sync(b"fake doc content")
-                                
-                                assert "Тестовый параграф из DOC" in result
+                with patch('app.utils.run_subprocess_with_limits', return_value=mock_result):
+                    with patch('os.path.exists', return_value=True):
+                        with patch('builtins.open', mock_open(read_data=b"docx content")):
+                            with patch('os.unlink'):
+                                with patch('shutil.rmtree'):
+                                    result = text_extractor._extract_from_doc_sync(b"fake doc content")
+                                    
+                                    assert "Тестовый параграф из DOC" in result
     
     @patch('app.extractors.pd')
     def test_extract_from_excel_sync(self, mock_pd, text_extractor):
@@ -316,18 +317,20 @@ if __name__ == "__main__":
         assert "col1,col2" in result
         assert "value1,value2" in result
     
-    @pytest.mark.asyncio
-    async def test_extract_from_archive(self, text_extractor):
+    def test_extract_from_archive(self, text_extractor):
         """Тест извлечения из архива"""
-        zip_content = b"PK\x03\x04fake zip content"
+        # Создаем простой zip архив в памяти
+        archive_buffer = io.BytesIO()
+        with zipfile.ZipFile(archive_buffer, 'w') as zipf:
+            zipf.writestr("test.txt", "Тестовый текст в архиве")
         
-        with patch.object(text_extractor, '_extract_zip_files', 
-                         AsyncMock(return_value=[{"filename": "test.txt", "text": "архивный текст"}])):
-            result = await text_extractor._extract_from_archive(zip_content, "test.zip")
-            
-            assert len(result) == 1
-            assert result[0]["filename"] == "test.txt"
-            assert result[0]["text"] == "архивный текст"
+        archive_bytes = archive_buffer.getvalue()
+        
+        result = text_extractor.extract_text(archive_bytes, "test.zip")
+        
+        assert len(result) == 1
+        assert result[0]["filename"] == "test.txt"
+        assert result[0]["text"] == "Тестовый текст в архиве"
     
     def test_sanitize_archive_filename(self, text_extractor):
         """Тест санитизации имени файла архива"""
