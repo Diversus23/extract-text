@@ -234,7 +234,7 @@ if __name__ == "__main__":
                     
                     assert "Текст страницы" in result
                     assert "OCR текст" in result
-                    assert "--- OCR ---" in result
+                    assert "[Изображение 1]" in result
     
     @patch('app.extractors.pytesseract')
     @patch('app.extractors.Image')

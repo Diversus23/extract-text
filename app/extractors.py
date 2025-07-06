@@ -228,8 +228,7 @@ class TextExtractor:
                         text_parts.append(f"[Страница {page_num}]\n{page_text}")
                     
                     # Извлечение изображений и OCR
-                    if page.images:
-                        text_parts.append("--- OCR ---")
+                    if page.images:                        
                         for img_idx, img in enumerate(page.images):
                             try:
                                 # Попытка извлечения изображения и OCR
@@ -238,7 +237,6 @@ class TextExtractor:
                                     text_parts.append(f"[Изображение {img_idx + 1}]\n{image_text}")
                             except Exception as e:
                                 logger.warning(f"Ошибка OCR изображения {img_idx + 1}: {str(e)}")
-                        text_parts.append("---")
             
             os.unlink(temp_file_path)
             

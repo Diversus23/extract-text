@@ -566,6 +566,58 @@ class TestRealFiles:
                     assert data["status"] == "success"
                     assert data["filename"] == filename
                     assert len(data["files"]) == 1
+    
+    def test_extract_real_docx_file_content(self, test_client, real_test_files_dir):
+        """Тест извлечения конкретного содержимого из реального DOCX файла"""
+        docx_file = real_test_files_dir / "test.docx"
+        
+        if docx_file.exists():
+            with open(docx_file, "rb") as f:
+                response = test_client.post(
+                    "/v1/extract/",
+                    files={"file": ("test.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
+                )
+                
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "success"
+                assert data["filename"] == "test.docx"
+                assert len(data["files"]) >= 1
+                
+                # Проверяем, что текст был извлечен
+                extracted_text = data["files"][0]["text"]
+                assert len(extracted_text) > 0
+                
+                # Проверяем наличие основных элементов из прайс-листа
+                assert "СтройМаркет" in extracted_text
+                assert "Иванов Сергей Сергеевич" in extracted_text
+                assert "+7(800) 500-54-36" in extracted_text
+                assert "support@kub-24.ru" in extracted_text
+                assert "Данные на 02.03.2020" in extracted_text
+                
+                # Проверяем наличие заголовков таблицы
+                assert "Наименование" in extracted_text
+                assert "Остаток" in extracted_text
+                assert "Ед. измерения" in extracted_text
+                assert "Цена" in extracted_text
+                
+                # Проверяем наличие некоторых товаров из прайс-листа
+                assert "Арматура 8мм А3" in extracted_text
+                assert "Болт оцинкованный М8х80" in extracted_text
+                assert "Кирпич лицевой одинарный" in extracted_text
+                assert "Перфоратор Макита HR2450" in extracted_text
+                assert "ТИККУРИЛА Евро 2" in extracted_text
+                
+                # Проверяем некоторые цены
+                assert "30,00" in extracted_text  # Цена арматуры
+                assert "2 999,00" in extracted_text  # Цена грунт-эмали
+                assert "8 490,00" in extracted_text  # Цена перфоратора
+                
+                # Проверяем тип файла
+                assert data["files"][0]["type"] == "docx"
+                
+        else:
+            pytest.skip("test.docx file not found")
 
 
 @pytest.mark.integration
