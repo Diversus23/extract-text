@@ -241,7 +241,7 @@ class TextExtractor:
                     logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {str(e)}")
     
     def _extract_from_docx_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из DOCX"""
+        """Синхронное извлечение текста из DOCX с полным извлечением согласно п.3.3 ТЗ"""
         if not Document:
             raise ImportError("python-docx не установлен")
         
@@ -265,6 +265,58 @@ class TextExtractor:
                 
                 if table_text:
                     text_parts.append("\n".join(table_text))
+            
+            # Колонтитулы (headers и footers) - согласно п.3.3 ТЗ
+            for section in doc.sections:
+                # Извлечение заголовка
+                if section.header:
+                    header_text = []
+                    for paragraph in section.header.paragraphs:
+                        if paragraph.text.strip():
+                            header_text.append(paragraph.text)
+                    if header_text:
+                        text_parts.append(f"[Колонтитул - Заголовок]\n{' '.join(header_text)}")
+                
+                # Извлечение подвала
+                if section.footer:
+                    footer_text = []
+                    for paragraph in section.footer.paragraphs:
+                        if paragraph.text.strip():
+                            footer_text.append(paragraph.text)
+                    if footer_text:
+                        text_parts.append(f"[Колонтитул - Подвал]\n{' '.join(footer_text)}")
+            
+            # Извлечение сносок - согласно п.3.3 ТЗ
+            try:
+                # Сноски могут быть недоступны в некоторых версиях python-docx
+                # Поэтому используем try/except
+                if hasattr(doc, 'footnotes') and doc.footnotes:
+                    footnotes_text = []
+                    for footnote in doc.footnotes:
+                        if hasattr(footnote, 'paragraphs'):
+                            for paragraph in footnote.paragraphs:
+                                if paragraph.text.strip():
+                                    footnotes_text.append(paragraph.text)
+                    if footnotes_text:
+                        text_parts.append(f"[Сноски]\n{' '.join(footnotes_text)}")
+            except Exception as e:
+                logger.debug(f"Не удалось извлечь сноски из DOCX: {str(e)}")
+            
+            # Извлечение комментариев - согласно п.3.3 ТЗ
+            try:
+                # Комментарии могут быть недоступны в некоторых версиях python-docx
+                # Поэтому используем try/except
+                if hasattr(doc, 'comments') and doc.comments:
+                    comments_text = []
+                    for comment in doc.comments:
+                        if hasattr(comment, 'paragraphs'):
+                            for paragraph in comment.paragraphs:
+                                if paragraph.text.strip():
+                                    comments_text.append(paragraph.text)
+                    if comments_text:
+                        text_parts.append(f"[Комментарии]\n{' '.join(comments_text)}")
+            except Exception as e:
+                logger.debug(f"Не удалось извлечь комментарии из DOCX: {str(e)}")
             
             return "\n\n".join(text_parts)
             
@@ -378,7 +430,7 @@ class TextExtractor:
             raise ValueError(f"Error processing CSV: {str(e)}")
     
     def _extract_from_pptx_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из PPTX"""
+        """Синхронное извлечение текста из PPTX с полным извлечением согласно п.3.3 ТЗ"""
         if not Presentation:
             raise ImportError("python-pptx не установлен")
         
@@ -390,9 +442,26 @@ class TextExtractor:
                 slide_text = []
                 slide_text.append(f"[Слайд {slide_num}]")
                 
+                # Извлечение текста из фигур слайда
                 for shape in slide.shapes:
                     if hasattr(shape, "text") and shape.text.strip():
                         slide_text.append(shape.text)
+                
+                # Извлечение заметок спикера - согласно п.3.3 ТЗ
+                try:
+                    if hasattr(slide, 'notes_slide') and slide.notes_slide:
+                        notes_text = []
+                        # Извлечение заметок из текстовых фигур
+                        for shape in slide.notes_slide.shapes:
+                            if hasattr(shape, 'text') and shape.text.strip():
+                                # Фильтруем стандартные заголовки PowerPoint
+                                if shape.text.strip() not in ['Заметки', 'Notes']:
+                                    notes_text.append(shape.text.strip())
+                        
+                        if notes_text:
+                            slide_text.append(f"[Заметки спикера]\n{' '.join(notes_text)}")
+                except Exception as e:
+                    logger.debug(f"Не удалось извлечь заметки спикера со слайда {slide_num}: {str(e)}")
                 
                 if len(slide_text) > 1:  # Больше чем просто заголовок слайда
                     text_parts.append("\n".join(slide_text))

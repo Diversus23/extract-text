@@ -10,6 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 import uvicorn
 import os
 import logging
+import asyncio
 from typing import Dict, Any
 import time
 from contextlib import asynccontextmanager
@@ -155,11 +156,26 @@ async def extract_text(file: UploadFile = File(...)):
                 }
             )
         
-        # Извлечение текста - КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: выполняем в пуле потоков
+        # Извлечение текста - КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: выполняем в пуле потоков с таймаутом
         start_time = time.time()
-        extracted_files = await run_in_threadpool(
-            text_extractor.extract_text, content, safe_filename_for_processing
-        )
+        try:
+            extracted_files = await asyncio.wait_for(
+                run_in_threadpool(
+                    text_extractor.extract_text, content, safe_filename_for_processing
+                ),
+                timeout=settings.PROCESSING_TIMEOUT_SECONDS  # 300 секунд согласно ТЗ п.5.1
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"Таймаут обработки файла {original_filename}: превышен лимит {settings.PROCESSING_TIMEOUT_SECONDS} секунд")
+            return JSONResponse(
+                status_code=504,
+                content={
+                    "status": "error",
+                    "filename": original_filename,
+                    "message": f"Обработка файла превысила установленный лимит времени ({settings.PROCESSING_TIMEOUT_SECONDS} секунд)."
+                }
+            )
+        
         process_time = time.time() - start_time
         
         # Подсчет общей длины текста
