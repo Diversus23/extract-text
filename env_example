@@ -8,5 +8,11 @@ OCR_LANGUAGES=rus+eng
 # Настройки обработки
 PROCESSING_TIMEOUT_SECONDS=300
 
+# Настройки производительности
+# Количество worker-процессов uvicorn
+# Для разработки: 1
+# Для продакшена рекомендуется: 2 * (количество ядер CPU) + 1
+WORKERS=1
+
 # Логирование
 LOG_LEVEL=INFO 

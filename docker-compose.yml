@@ -3,7 +3,7 @@ services:
   api:
     image: text-extraction-api:latest
     build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port ${API_PORT:-7555} --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port ${API_PORT:-7555} --workers ${WORKERS:-1} --reload
     ports:
       - "${API_PORT:-7555}:${API_PORT:-7555}"
     volumes:

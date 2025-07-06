@@ -10,7 +10,7 @@ class Settings:
     """Настройки приложения"""
     
     # Основные настройки
-    VERSION: str = "1.7.2"
+    VERSION: str = "1.7.3"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # Настройки API
@@ -22,6 +22,9 @@ class Settings:
     
     # Настройки OCR
     OCR_LANGUAGES: str = os.getenv("OCR_LANGUAGES", "rus+eng")
+    
+    # Настройки производительности
+    WORKERS: int = int(os.getenv("WORKERS", "1"))
     
     # Поддерживаемые форматы
     SUPPORTED_FORMATS = {
