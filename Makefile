@@ -72,7 +72,7 @@ prod: build ## 🏭 Запустить в продакшене
 	@echo "  - Автоперезапуск при сбоях"
 	@echo "  - Оптимизированная производительность"
 	@echo ""
-	@docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+	@docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 	@echo "$(GREEN)✅ Сервис запущен в фоновом режиме!$(RESET)"
 	@echo "$(CYAN)🌐 API доступен по адресу: http://localhost:7555$(RESET)"
 	@echo "$(CYAN)📖 Документация: http://localhost:7555/docs$(RESET)"
