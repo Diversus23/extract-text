@@ -12,16 +12,21 @@ from app.config import Settings
 class TestSettings:
     """Тесты для класса Settings"""
     
+    @patch.dict(os.environ, {}, clear=True)
     def test_default_settings(self):
-        """Тест настроек по умолчанию"""
-        settings = Settings()
+        """Тест настроек по умолчанию (без переменных окружения)"""
+        # Перезагружаем модуль для учета очищенных переменных окружения
+        import importlib
+        from app import config
+        importlib.reload(config)
+        settings = config.Settings()
         
         assert settings.VERSION == "1.8.0"
         assert settings.API_PORT == 7555
         assert settings.MAX_FILE_SIZE == 20971520  # 20MB
         assert settings.PROCESSING_TIMEOUT_SECONDS == 300
         assert settings.OCR_LANGUAGES == "rus+eng"
-        assert settings.WORKERS == 1
+        assert settings.WORKERS == 1  # Значение по умолчанию из config.py
         assert settings.MAX_ARCHIVE_SIZE == 20971520
         assert settings.MAX_EXTRACTED_SIZE == 104857600  # 100MB
         assert settings.MAX_ARCHIVE_NESTING == 3
