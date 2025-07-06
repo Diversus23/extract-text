@@ -7,7 +7,13 @@ import sys
 from typing import Optional
 import os
 import magic
+import tempfile
+import shutil
+import glob
+import time
 from werkzeug.utils import secure_filename
+
+logger = logging.getLogger(__name__)
 
 
 def setup_logging() -> None:
@@ -233,5 +239,94 @@ def validate_file_type(content: bytes, filename: str) -> tuple[bool, Optional[st
         return False, f"Расширение файла '.{file_extension}' не соответствует его содержимому (MIME-тип: {mime_type})"
         
     except Exception as e:
-        # В случае ошибки определения MIME-типа, пропускаем проверку
-        return True, None
+        # В случае ошибки определения MIME-типа, считаем файл невалидным (fail-closed)
+        logger.warning(f"Ошибка при валидации файла {filename}: {str(e)}")
+        return False, f"Не удалось определить тип файла: {str(e)}"
+
+
+def cleanup_temp_files() -> None:
+    """
+    Очистка временных файлов при старте приложения
+    Удаляет временные файлы, которые могли остаться после предыдущих запусков
+    """
+    try:
+        # Получаем системную папку для временных файлов
+        temp_dir = tempfile.gettempdir()
+        
+        # Паттерны для поиска временных файлов нашего приложения
+        patterns = [
+            "tmp*.pdf",
+            "tmp*.doc",
+            "tmp*.docx", 
+            "tmp*.ppt",
+            "tmp*.pptx",
+            "tmp*.odt",
+            "tmp*.xlsx",
+            "tmp*.xls",
+            "tmp*.csv",
+            "tmp*.txt",
+            "tmp*.zip",
+            "tmp*.rar",
+            "tmp*.7z",
+            "tmp*.tar",
+            "tmp*.gz",
+            "tmp*.bz2",
+            "tmp*.xz",
+            "tmp*.html",
+            "tmp*.htm",
+            "tmp*.xml",
+            "tmp*.json",
+            "tmp*.yaml",
+            "tmp*.yml"
+        ]
+        
+        files_removed = 0
+        
+        # Поиск и удаление временных файлов
+        for pattern in patterns:
+            full_pattern = os.path.join(temp_dir, pattern)
+            for temp_file in glob.glob(full_pattern):
+                try:
+                    # Проверяем, что файл старше 1 часа (3600 секунд)
+                    file_age = os.path.getmtime(temp_file)
+                    current_time = time.time()
+                    
+                    if current_time - file_age > 3600:
+                        os.unlink(temp_file)
+                        files_removed += 1
+                        logger.debug(f"Удален временный файл: {temp_file}")
+                except (OSError, IOError) as e:
+                    logger.warning(f"Не удалось удалить временный файл {temp_file}: {str(e)}")
+        
+        # Поиск и удаление временных папок
+        temp_dirs_patterns = [
+            "tmp*",
+            "extract_*",
+            "temp_*"
+        ]
+        
+        dirs_removed = 0
+        
+        for pattern in temp_dirs_patterns:
+            full_pattern = os.path.join(temp_dir, pattern)
+            for temp_dir_path in glob.glob(full_pattern):
+                if os.path.isdir(temp_dir_path):
+                    try:
+                        # Проверяем, что папка старше 1 часа
+                        dir_age = os.path.getmtime(temp_dir_path)
+                        current_time = time.time()
+                        
+                        if current_time - dir_age > 3600:
+                            shutil.rmtree(temp_dir_path, ignore_errors=True)
+                            dirs_removed += 1
+                            logger.debug(f"Удалена временная папка: {temp_dir_path}")
+                    except (OSError, IOError) as e:
+                        logger.warning(f"Не удалось удалить временную папку {temp_dir_path}: {str(e)}")
+        
+        if files_removed > 0 or dirs_removed > 0:
+            logger.info(f"Очистка временных файлов завершена. Удалено файлов: {files_removed}, папок: {dirs_removed}")
+        else:
+            logger.info("Очистка временных файлов завершена. Старые временные файлы не найдены.")
+            
+    except Exception as e:
+        logger.error(f"Ошибка при очистке временных файлов: {str(e)}", exc_info=True)

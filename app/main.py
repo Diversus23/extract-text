@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 
 from app.config import settings
 from app.extractors import TextExtractor
-from app.utils import setup_logging, sanitize_filename, validate_file_type
+from app.utils import setup_logging, sanitize_filename, validate_file_type, cleanup_temp_files
 
 # Настройка логирования
 setup_logging()
@@ -28,6 +28,10 @@ text_extractor = TextExtractor()
 async def lifespan(app: FastAPI):
     """Lifecycle manager для FastAPI приложения"""
     logger.info(f"Запуск Text Extraction API v{settings.VERSION}")
+    
+    # Очистка временных файлов при старте
+    cleanup_temp_files()
+    
     yield
     logger.info("Завершение работы Text Extraction API")
 

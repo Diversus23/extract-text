@@ -214,6 +214,7 @@ class TextExtractor:
             raise ImportError("pdfplumber не установлен")
         
         text_parts = []
+        temp_file_path = None
         
         try:
             with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
@@ -238,13 +239,18 @@ class TextExtractor:
                             except Exception as e:
                                 logger.warning(f"Ошибка OCR изображения {img_idx + 1}: {str(e)}")
             
-            os.unlink(temp_file_path)
-            
             return "\n\n".join(text_parts)
             
         except Exception as e:
             logger.error(f"Ошибка при обработке PDF: {str(e)}")
             raise ValueError(f"Error processing PDF: {str(e)}")
+        finally:
+            # Гарантированное удаление временного файла
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                except OSError as e:
+                    logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {str(e)}")
     
     async def _extract_from_pdf(self, content: bytes) -> str:
         """Извлечение текста из PDF"""
@@ -252,6 +258,7 @@ class TextExtractor:
             raise ImportError("pdfplumber не установлен")
         
         text_parts = []
+        temp_file_path = None
         
         try:
             with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
@@ -278,13 +285,18 @@ class TextExtractor:
                                 logger.warning(f"Ошибка OCR изображения {img_idx + 1}: {str(e)}")
                         text_parts.append("---")
             
-            os.unlink(temp_file_path)
-            
             return "\n\n".join(text_parts)
             
         except Exception as e:
             logger.error(f"Ошибка при обработке PDF: {str(e)}")
             raise ValueError(f"Error processing PDF: {str(e)}")
+        finally:
+            # Гарантированное удаление временного файла
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                except OSError as e:
+                    logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {str(e)}")
     
     def _ocr_from_pdf_image_sync(self, page, img_info) -> str:
         """Синхронный OCR изображения из PDF"""
@@ -954,6 +966,7 @@ class TextExtractor:
         if not load:
             raise ImportError("odfpy не установлен")
         
+        temp_file_path = None
         try:
             with tempfile.NamedTemporaryFile(suffix='.odt', delete=False) as temp_file:
                 temp_file.write(content)
@@ -968,13 +981,18 @@ class TextExtractor:
                 if text.strip():
                     text_parts.append(text)
             
-            os.unlink(temp_file_path)
-            
             return "\n".join(text_parts)
             
         except Exception as e:
             logger.error(f"Ошибка при обработке ODT: {str(e)}")
             raise ValueError(f"Error processing ODT: {str(e)}")
+        finally:
+            # Гарантированное удаление временного файла
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                except OSError as e:
+                    logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {str(e)}")
     
     def _extract_from_epub_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из EPUB"""
