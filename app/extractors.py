@@ -15,6 +15,9 @@ import xml.etree.ElementTree as ET
 import subprocess
 import time
 from pathlib import Path
+from fastapi import BackgroundTasks
+import concurrent.futures
+import threading
 
 # Импорты для архивов
 try:
@@ -101,6 +104,8 @@ class TextExtractor:
     def __init__(self):
         self.ocr_languages = settings.OCR_LANGUAGES
         self.timeout = settings.PROCESSING_TIMEOUT_SECONDS
+        # Создаем пул потоков для CPU-bound операций
+        self._thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
         
     async def extract_text(self, file_content: bytes, filename: str) -> List[Dict[str, Any]]:
         """Основной метод извлечения текста"""
@@ -113,15 +118,23 @@ class TextExtractor:
         if not is_supported_format(filename, settings.SUPPORTED_FORMATS):
             raise ValueError(f"Unsupported file format: {filename}")
         
-        # Проверка MIME-типа для безопасности
-        if not self._check_mime_type(file_content, filename):
+        # Проверка MIME-типа для безопасности (синхронная операция)
+        loop = asyncio.get_event_loop()
+        is_valid_mime = await loop.run_in_executor(
+            self._thread_pool,
+            self._check_mime_type,
+            file_content,
+            filename
+        )
+        
+        if not is_valid_mime:
             logger.warning(f"MIME-тип файла {filename} не соответствует расширению")
             # Не блокируем, но предупреждаем
         
         extension = get_file_extension(filename)
         
         try:
-            # Выполнение извлечения с таймаутом
+            # Выполнение извлечения с таймаутом в отдельном потоке
             text = await asyncio.wait_for(
                 self._extract_text_by_format(file_content, extension, filename),
                 timeout=self.timeout
@@ -149,49 +162,91 @@ class TextExtractor:
         # Проверяем, является ли файл исходным кодом
         source_code_extensions = settings.SUPPORTED_FORMATS.get("source_code", [])
         
+        loop = asyncio.get_event_loop()
+        
         if extension == "pdf":
-            return await self._extract_from_pdf(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_pdf_sync, content)
         elif extension in ["docx"]:
-            return await self._extract_from_docx(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_docx_sync, content)
         elif extension in ["doc"]:
-            return await self._extract_from_doc(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_doc_sync, content)
         elif extension in ["xls", "xlsx"]:
-            return await self._extract_from_excel(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_excel_sync, content)
         elif extension in ["csv"]:
-            return await self._extract_from_csv(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_csv_sync, content)
         elif extension in ["pptx"]:
-            return await self._extract_from_pptx(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_pptx_sync, content)
         elif extension in ["ppt"]:
-            return await self._extract_from_ppt(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_ppt_sync, content)
         elif extension in ["jpg", "jpeg", "png", "tiff", "tif", "bmp", "gif"]:
-            return await self._extract_from_image(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_image_sync, content)
         elif extension in source_code_extensions:
-            return await self._extract_from_source_code(content, extension, filename)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_source_code_sync, content, extension, filename)
         elif extension in ["txt"]:
-            return await self._extract_from_txt(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_txt_sync, content)
         elif extension in ["html", "htm"]:
-            return await self._extract_from_html(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_html_sync, content)
         elif extension in ["md", "markdown"]:
-            return await self._extract_from_markdown(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_markdown_sync, content)
         elif extension in ["json"]:
-            return await self._extract_from_json(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_json_sync, content)
         elif extension in ["rtf"]:
-            return await self._extract_from_rtf(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_rtf_sync, content)
         elif extension in ["odt"]:
-            return await self._extract_from_odt(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_odt_sync, content)
         elif extension in ["xml"]:
-            return await self._extract_from_xml(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_xml_sync, content)
         elif extension in ["yaml", "yml"]:
-            return await self._extract_from_yaml(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_yaml_sync, content)
         elif extension in ["epub"]:
-            return await self._extract_from_epub(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_epub_sync, content)
         elif extension in ["eml"]:
-            return await self._extract_from_eml(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_eml_sync, content)
         elif extension in ["msg"]:
-            return await self._extract_from_msg(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_msg_sync, content)
         else:
             # Попытка извлечения как обычный текст
-            return await self._extract_from_txt(content)
+            return await loop.run_in_executor(self._thread_pool, self._extract_from_txt_sync, content)
+    
+    def _extract_from_pdf_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из PDF"""
+        if not pdfplumber:
+            raise ImportError("pdfplumber не установлен")
+        
+        text_parts = []
+        
+        try:
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+                temp_file.write(content)
+                temp_file_path = temp_file.name
+            
+            with pdfplumber.open(temp_file_path) as pdf:
+                for page_num, page in enumerate(pdf.pages, 1):
+                    # Извлечение текста со страницы
+                    page_text = page.extract_text()
+                    if page_text:
+                        text_parts.append(f"[Страница {page_num}]\n{page_text}")
+                    
+                    # Извлечение изображений и OCR
+                    if page.images:
+                        text_parts.append("--- OCR ---")
+                        for img_idx, img in enumerate(page.images):
+                            try:
+                                # Попытка извлечения изображения и OCR
+                                image_text = self._ocr_from_pdf_image_sync(page, img)
+                                if image_text.strip():
+                                    text_parts.append(f"[Изображение {img_idx + 1}]\n{image_text}")
+                            except Exception as e:
+                                logger.warning(f"Ошибка OCR изображения {img_idx + 1}: {str(e)}")
+                        text_parts.append("---")
+            
+            os.unlink(temp_file_path)
+            
+            return "\n\n".join(text_parts)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке PDF: {str(e)}")
+            raise ValueError(f"Error processing PDF: {str(e)}")
     
     async def _extract_from_pdf(self, content: bytes) -> str:
         """Извлечение текста из PDF"""
@@ -232,6 +287,56 @@ class TextExtractor:
         except Exception as e:
             logger.error(f"Ошибка при обработке PDF: {str(e)}")
             raise ValueError(f"Error processing PDF: {str(e)}")
+    
+    def _ocr_from_pdf_image_sync(self, page, img_info) -> str:
+        """Синхронный OCR изображения из PDF"""
+        if not pytesseract or not Image:
+            return ""
+        
+        try:
+            # Получаем координаты изображения
+            x0, y0, x1, y1 = img_info['x0'], img_info['y0'], img_info['x1'], img_info['y1']
+            
+            # Обрезаем область изображения из всей страницы
+            cropped_bbox = (x0, y0, x1, y1)
+            cropped_page = page.crop(cropped_bbox)
+            
+            # Конвертируем обрезанную область в изображение с высоким разрешением
+            img_pil = cropped_page.to_image(resolution=300)
+            
+            # Применяем OCR к извлеченному изображению
+            text = pytesseract.image_to_string(img_pil, lang=self.ocr_languages)
+            
+            return text.strip() if text else ""
+            
+        except Exception as e:
+            logger.warning(f"Ошибка OCR изображения: {str(e)}")
+            # Альтернативный подход - рендерим всю страницу и обрезаем
+            try:
+                # Конвертируем всю страницу в изображение PIL
+                page_image = page.to_image(resolution=300)
+                pil_image = page_image.original  # Получаем PIL изображение
+                
+                # Вычисляем координаты в пикселях (учитывая resolution=300)
+                scale = 300 / 72  # PDF обычно 72 DPI, мы рендерим в 300 DPI
+                pixel_bbox = (
+                    int(x0 * scale),
+                    int(y0 * scale), 
+                    int(x1 * scale),
+                    int(y1 * scale)
+                )
+                
+                # Обрезаем область изображения
+                cropped_img = pil_image.crop(pixel_bbox)
+                
+                # Применяем OCR
+                text = pytesseract.image_to_string(cropped_img, lang=self.ocr_languages)
+                
+                return text.strip() if text else ""
+                
+            except Exception as e2:
+                logger.warning(f"Альтернативная попытка OCR также не удалась: {str(e2)}")
+                return ""
     
     async def _ocr_from_pdf_image(self, page, img_info) -> str:
         """OCR изображения из PDF"""
@@ -283,8 +388,8 @@ class TextExtractor:
                 logger.warning(f"Альтернативная попытка OCR также не удалась: {str(e2)}")
                 return ""
     
-    async def _extract_from_docx(self, content: bytes) -> str:
-        """Извлечение текста из DOCX"""
+    def _extract_from_docx_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из DOCX"""
         if not Document:
             raise ImportError("python-docx не установлен")
         
@@ -315,8 +420,8 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке DOCX: {str(e)}")
             raise ValueError(f"Error processing DOCX: {str(e)}")
     
-    async def _extract_from_doc(self, content: bytes) -> str:
-        """Извлечение текста из DOC через конвертацию в DOCX с помощью LibreOffice"""
+    def _extract_from_doc_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из DOC через конвертацию в DOCX с помощью LibreOffice"""
         if not Document:
             raise ImportError("python-docx не установлен")
         
@@ -351,8 +456,8 @@ class TextExtractor:
                 with open(docx_path, 'rb') as docx_file:
                     docx_content = docx_file.read()
                 
-                # Используем существующий метод для извлечения текста из DOCX
-                text = await self._extract_from_docx(docx_content)
+                # Используем синхронный метод для извлечения текста из DOCX
+                text = self._extract_from_docx_sync(docx_content)
                 
                 return text
                 
@@ -369,8 +474,8 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке DOC: {str(e)}")
             raise ValueError(f"Error processing DOC: {str(e)}")
     
-    async def _extract_from_excel(self, content: bytes) -> str:
-        """Извлечение данных из Excel файлов"""
+    def _extract_from_excel_sync(self, content: bytes) -> str:
+        """Синхронное извлечение данных из Excel файлов"""
         if not pd:
             raise ImportError("pandas не установлен")
         
@@ -380,9 +485,7 @@ class TextExtractor:
             
             for sheet_name, df in excel_data.items():
                 text_parts.append(f"[Лист: {sheet_name}]")
-                # Конвертация в CSV формат
-                csv_text = df.to_csv(index=False)
-                text_parts.append(csv_text)
+                text_parts.append(df.to_csv(index=False))
             
             return "\n\n".join(text_parts)
             
@@ -390,8 +493,8 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке Excel: {str(e)}")
             raise ValueError(f"Error processing Excel: {str(e)}")
     
-    async def _extract_from_csv(self, content: bytes) -> str:
-        """Извлечение данных из CSV"""
+    def _extract_from_csv_sync(self, content: bytes) -> str:
+        """Синхронное извлечение данных из CSV файлов"""
         if not pd:
             raise ImportError("pandas не установлен")
         
@@ -403,8 +506,8 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке CSV: {str(e)}")
             raise ValueError(f"Error processing CSV: {str(e)}")
     
-    async def _extract_from_pptx(self, content: bytes) -> str:
-        """Извлечение текста из PPTX"""
+    def _extract_from_pptx_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из PPTX"""
         if not Presentation:
             raise ImportError("python-pptx не установлен")
         
@@ -416,16 +519,9 @@ class TextExtractor:
                 slide_text = []
                 slide_text.append(f"[Слайд {slide_num}]")
                 
-                # Текст из фигур
                 for shape in slide.shapes:
                     if hasattr(shape, "text") and shape.text.strip():
                         slide_text.append(shape.text)
-                    
-                    # Заметки спикера
-                    if hasattr(shape, "notes_slide") and shape.notes_slide:
-                        notes_text = shape.notes_slide.notes_text_frame.text
-                        if notes_text.strip():
-                            slide_text.append(f"[Заметки спикера]\n{notes_text}")
                 
                 if len(slide_text) > 1:  # Больше чем просто заголовок слайда
                     text_parts.append("\n".join(slide_text))
@@ -436,8 +532,8 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке PPTX: {str(e)}")
             raise ValueError(f"Error processing PPTX: {str(e)}")
     
-    async def _extract_from_ppt(self, content: bytes) -> str:
-        """Извлечение текста из PPT через конвертацию в PPTX с помощью LibreOffice"""
+    def _extract_from_ppt_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из PPT через конвертацию в PPTX с помощью LibreOffice"""
         if not Presentation:
             raise ImportError("python-pptx не установлен")
         
@@ -472,14 +568,15 @@ class TextExtractor:
                 with open(pptx_path, 'rb') as pptx_file:
                     pptx_content = pptx_file.read()
                 
-                # Используем существующий метод для извлечения текста из PPTX
-                text = await self._extract_from_pptx(pptx_content)
+                # Используем синхронный метод для извлечения текста из PPTX
+                text = self._extract_from_pptx_sync(pptx_content)
                 
                 return text
                 
             finally:
                 # Очищаем временные файлы
                 os.unlink(temp_ppt_path)
+                import shutil
                 shutil.rmtree(temp_dir, ignore_errors=True)
                 
         except subprocess.TimeoutExpired:
@@ -489,23 +586,8 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке PPT: {str(e)}")
             raise ValueError(f"Error processing PPT: {str(e)}")
     
-    async def _extract_from_image(self, content: bytes) -> str:
-        """OCR изображения"""
-        if not pytesseract or not Image:
-            raise ImportError("pytesseract или PIL не установлены")
-        
-        try:
-            image = Image.open(io.BytesIO(content))
-            # OCR на русском и английском языках
-            text = pytesseract.image_to_string(image, lang=self.ocr_languages)
-            return text.strip()
-            
-        except Exception as e:
-            logger.error(f"Ошибка при OCR изображения: {str(e)}")
-            raise ValueError(f"Error processing image: {str(e)}")
-    
-    async def _extract_from_txt(self, content: bytes) -> str:
-        """Извлечение текста из TXT файлов"""
+    def _extract_from_txt_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из TXT файлов"""
         try:
             # Попытка декодирования в разных кодировках
             for encoding in ['utf-8', 'cp1251', 'latin-1']:
@@ -521,8 +603,8 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке TXT: {str(e)}")
             raise ValueError(f"Error processing TXT: {str(e)}")
     
-    async def _extract_from_source_code(self, content: bytes, extension: str, filename: str) -> str:
-        """Извлечение текста из файлов исходного кода"""
+    def _extract_from_source_code_sync(self, content: bytes, extension: str, filename: str) -> str:
+        """Синхронное извлечение текста из файлов исходного кода"""
         try:
             # Попытка декодирования в разных кодировках
             text = None
@@ -620,8 +702,8 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке исходного кода {filename}: {str(e)}")
             raise ValueError(f"Error processing source code: {str(e)}")
     
-    async def _extract_from_html(self, content: bytes) -> str:
-        """Извлечение текста из HTML"""
+    def _extract_from_html_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из HTML"""
         if not BeautifulSoup:
             raise ImportError("beautifulsoup4 не установлен")
         
@@ -645,8 +727,8 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке HTML: {str(e)}")
             raise ValueError(f"Error processing HTML: {str(e)}")
     
-    async def _extract_from_markdown(self, content: bytes) -> str:
-        """Извлечение текста из Markdown"""
+    def _extract_from_markdown_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из Markdown"""
         try:
             text = content.decode('utf-8', errors='replace')
             
@@ -664,8 +746,8 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке Markdown: {str(e)}")
             raise ValueError(f"Error processing Markdown: {str(e)}")
     
-    async def _extract_from_json(self, content: bytes) -> str:
-        """Извлечение текста из JSON"""
+    def _extract_from_json_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из JSON"""
         import json
         
         try:
@@ -688,117 +770,96 @@ class TextExtractor:
                         strings.append(f"{path}: {obj}")
                 return strings
             
-            string_values = extract_strings(data)
-            return "\n".join(string_values)
+            strings = extract_strings(data)
+            return "\n".join(strings)
             
         except Exception as e:
             logger.error(f"Ошибка при обработке JSON: {str(e)}")
             raise ValueError(f"Error processing JSON: {str(e)}")
     
-    async def _extract_from_rtf(self, content: bytes) -> str:
-        """Извлечение текста из RTF"""
+    def _extract_from_rtf_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из RTF"""
         if not rtf_to_text:
             raise ImportError("striprtf не установлен")
         
         try:
-            # Декодирование RTF содержимого
-            rtf_text = content.decode('utf-8', errors='replace')
-            
-            # Извлечение текста из RTF с помощью striprtf
-            text = rtf_to_text(rtf_text)
-            
-            return text.strip()
+            text = content.decode('utf-8', errors='replace')
+            plain_text = rtf_to_text(text)
+            return plain_text
             
         except Exception as e:
             logger.error(f"Ошибка при обработке RTF: {str(e)}")
             raise ValueError(f"Error processing RTF: {str(e)}")
     
-    async def _extract_from_xml(self, content: bytes) -> str:
-        """Извлечение текста из XML"""
+    def _extract_from_xml_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из XML"""
         try:
-            # Декодирование XML содержимого
-            xml_text = content.decode('utf-8', errors='replace')
+            text = content.decode('utf-8', errors='replace')
+            root = ET.fromstring(text)
             
-            # Попытка использовать BeautifulSoup для лучшего парсинга
-            if BeautifulSoup:
-                soup = BeautifulSoup(xml_text, 'xml')
-                
-                # Извлечение всех текстовых элементов
-                text_parts = []
-                for element in soup.find_all():
-                    if element.string and element.string.strip():
-                        text_parts.append(f"{element.name}: {element.string.strip()}")
-                
-                # Если не найдено структурированных элементов, используем весь текст
-                if not text_parts:
-                    text_parts = [soup.get_text()]
-                
-                return "\n".join(text_parts)
-            
-            # Если BeautifulSoup не доступен, используем встроенный ElementTree
-            root = ET.fromstring(xml_text)
-            text_parts = []
-            
+            # Рекурсивное извлечение всех элементов и атрибутов
             def extract_from_element(elem, path=""):
-                """Рекурсивное извлечение текста из элементов XML"""
-                element_path = f"{path}.{elem.tag}" if path else elem.tag
+                strings = []
                 
+                current_path = f"{path}.{elem.tag}" if path else elem.tag
+                
+                # Добавляем текст элемента
                 if elem.text and elem.text.strip():
-                    text_parts.append(f"{element_path}: {elem.text.strip()}")
+                    strings.append(f"{current_path}: {elem.text.strip()}")
                 
-                # Извлечение атрибутов
+                # Добавляем атрибуты
                 for attr_name, attr_value in elem.attrib.items():
                     if attr_value.strip():
-                        text_parts.append(f"{element_path}@{attr_name}: {attr_value}")
+                        strings.append(f"{current_path}@{attr_name}: {attr_value}")
                 
-                # Рекурсивная обработка дочерних элементов
+                # Рекурсивно обрабатываем дочерние элементы
                 for child in elem:
-                    extract_from_element(child, element_path)
+                    strings.extend(extract_from_element(child, current_path))
+                
+                return strings
             
-            extract_from_element(root)
-            return "\n".join(text_parts)
+            strings = extract_from_element(root)
+            return "\n".join(strings)
             
         except Exception as e:
             logger.error(f"Ошибка при обработке XML: {str(e)}")
             raise ValueError(f"Error processing XML: {str(e)}")
     
-    async def _extract_from_yaml(self, content: bytes) -> str:
-        """Извлечение текста из YAML"""
+    def _extract_from_yaml_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из YAML"""
         if not yaml:
             raise ImportError("PyYAML не установлен")
         
         try:
-            # Декодирование YAML содержимого
-            yaml_text = content.decode('utf-8', errors='replace')
-            
-            # Парсинг YAML
-            data = yaml.safe_load(yaml_text)
+            text = content.decode('utf-8', errors='replace')
+            data = yaml.safe_load(text)
             
             # Рекурсивное извлечение всех строковых значений
             def extract_strings(obj, path=""):
                 strings = []
                 if isinstance(obj, dict):
                     for key, value in obj.items():
-                        new_path = f"{path}.{key}" if path else str(key)
+                        new_path = f"{path}.{key}" if path else key
                         strings.extend(extract_strings(value, new_path))
                 elif isinstance(obj, list):
                     for i, value in enumerate(obj):
                         new_path = f"{path}[{i}]" if path else f"[{i}]"
                         strings.extend(extract_strings(value, new_path))
-                elif isinstance(obj, (str, int, float, bool)) and str(obj).strip():
-                    strings.append(f"{path}: {obj}")
+                elif isinstance(obj, str):
+                    if obj.strip():
+                        strings.append(f"{path}: {obj}")
                 return strings
             
-            string_values = extract_strings(data)
-            return "\n".join(string_values)
+            strings = extract_strings(data)
+            return "\n".join(strings)
             
         except Exception as e:
             logger.error(f"Ошибка при обработке YAML: {str(e)}")
             raise ValueError(f"Error processing YAML: {str(e)}")
     
-    async def _extract_from_odt(self, content: bytes) -> str:
-        """Извлечение текста из ODT"""
-        if not load or not extractText:
+    def _extract_from_odt_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из ODT"""
+        if not load:
             raise ImportError("odfpy не установлен")
         
         try:
@@ -809,67 +870,57 @@ class TextExtractor:
             doc = load(temp_file_path)
             text_parts = []
             
-            for paragraph in doc.getElementsByType(P):
-                text = extractText(paragraph)
+            # Извлечение всех текстовых элементов
+            for p in doc.getElementsByType(P):
+                text = extractText(p)
                 if text.strip():
                     text_parts.append(text)
             
             os.unlink(temp_file_path)
             
-            return "\n\n".join(text_parts)
+            return "\n".join(text_parts)
             
         except Exception as e:
             logger.error(f"Ошибка при обработке ODT: {str(e)}")
             raise ValueError(f"Error processing ODT: {str(e)}")
     
-    async def _extract_from_epub(self, content: bytes) -> str:
-        """Извлечение текста из EPUB файлов"""
+    def _extract_from_epub_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из EPUB"""
         if not BeautifulSoup:
             raise ImportError("beautifulsoup4 не установлен")
         
         try:
-            # Ограничиваем размер распакованного содержимого (защита от zip-бомб)
-            max_extract_size = 100 * 1024 * 1024  # 100 MB
-            extracted_size = 0
             text_parts = []
+            extracted_size = 0
             
-            with zipfile.ZipFile(io.BytesIO(content), 'r') as zip_file:
-                # Проверка на zip-бомбы
-                for file_info in zip_file.infolist():
-                    extracted_size += file_info.file_size
-                    if extracted_size > max_extract_size:
-                        raise ValueError("Archive too large - potential zip bomb")
-                
-                # Поиск HTML/XHTML файлов с контентом
-                for file_info in zip_file.infolist():
+            with zipfile.ZipFile(io.BytesIO(content), 'r') as zip_ref:
+                for file_info in zip_ref.infolist():
+                    # Ограничиваем размер распакованного содержимого
+                    if extracted_size + file_info.file_size > settings.MAX_EXTRACTED_SIZE:
+                        logger.warning(f"Достигнут лимит размера распакованного содержимого EPUB")
+                        break
+                    
                     if file_info.filename.endswith(('.html', '.xhtml', '.htm')):
-                        # Исключаем служебные файлы и обрабатываем основной контент
-                        if not file_info.filename.startswith('_static/') and not file_info.filename.startswith('META-INF/'):
-                            try:
-                                file_content = zip_file.read(file_info.filename)
-                                html_text = file_content.decode('utf-8', errors='replace')
-                                
-                                # Извлекаем текст из HTML
-                                soup = BeautifulSoup(html_text, 'html.parser')
-                                
-                                # Удаляем служебные теги
-                                for script in soup(["script", "style", "head", "title", "meta", "link"]):
-                                    script.decompose()
-                                
-                                # Извлекаем чистый текст
-                                clean_text = soup.get_text()
-                                
-                                # Очищаем от лишних пробелов
-                                lines = (line.strip() for line in clean_text.splitlines())
-                                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-                                chapter_text = '\n'.join(chunk for chunk in chunks if chunk)
-                                
-                                if chapter_text.strip():
-                                    text_parts.append(chapter_text)
-                                    
-                            except Exception as e:
-                                logger.warning(f"Ошибка при обработке файла {file_info.filename}: {str(e)}")
-                                continue
+                        try:
+                            html_content = zip_ref.read(file_info.filename)
+                            html_text = html_content.decode('utf-8', errors='replace')
+                            
+                            # Парсинг HTML
+                            soup = BeautifulSoup(html_text, 'html.parser')
+                            
+                            # Удаление script и style тегов
+                            for script in soup(["script", "style"]):
+                                script.decompose()
+                            
+                            # Извлечение текста
+                            text = soup.get_text()
+                            if text.strip():
+                                text_parts.append(text.strip())
+                            
+                            extracted_size += file_info.file_size
+                            
+                        except Exception as e:
+                            logger.warning(f"Ошибка при обработке файла {file_info.filename}: {e}")
             
             return "\n\n".join(text_parts)
             
@@ -877,218 +928,178 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке EPUB: {str(e)}")
             raise ValueError(f"Error processing EPUB: {str(e)}")
     
-    async def _extract_from_eml(self, content: bytes) -> str:
-        """Извлечение текста из EML файлов (email)"""
+    def _extract_from_eml_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из EML"""
         import email
-        from email.policy import default
+        from email.header import decode_header
         
         try:
-            # Парсинг EML содержимого
-            msg = email.message_from_bytes(content, policy=default)
+            # Попытка декодирования в разных кодировках
+            msg_text = None
+            for encoding in ['utf-8', 'cp1251', 'latin-1']:
+                try:
+                    msg_text = content.decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
             
+            if msg_text is None:
+                msg_text = content.decode('utf-8', errors='replace')
+            
+            msg = email.message_from_string(msg_text)
             text_parts = []
             
-            # Заголовки
-            text_parts.append("=== EMAIL HEADERS ===")
-            for header in ['From', 'To', 'Subject', 'Date']:
-                if msg.get(header):
-                    text_parts.append(f"{header}: {msg.get(header)}")
+            # Извлечение заголовков
+            headers = ['From', 'To', 'Subject', 'Date']
+            for header in headers:
+                value = msg.get(header)
+                if value:
+                    # Декодирование заголовка
+                    decoded_parts = decode_header(value)
+                    decoded_value = ''
+                    for part, encoding in decoded_parts:
+                        if isinstance(part, bytes):
+                            if encoding:
+                                decoded_value += part.decode(encoding)
+                            else:
+                                decoded_value += part.decode('utf-8', errors='replace')
+                        else:
+                            decoded_value += part
+                    
+                    text_parts.append(f"{header}: {decoded_value}")
             
-            text_parts.append("\n=== EMAIL BODY ===")
+            text_parts.append("---")
             
-            # Извлечение текста из тела письма
+            # Извлечение тела письма
             if msg.is_multipart():
                 for part in msg.walk():
-                    if part.get_content_type() == "text/plain":
+                    content_type = part.get_content_type()
+                    if content_type in ['text/plain', 'text/html']:
                         try:
-                            text_parts.append(part.get_content())
+                            payload = part.get_payload(decode=True)
+                            if payload:
+                                # Определение кодировки
+                                charset = part.get_content_charset() or 'utf-8'
+                                try:
+                                    body_text = payload.decode(charset)
+                                except UnicodeDecodeError:
+                                    body_text = payload.decode('utf-8', errors='replace')
+                                
+                                # Обработка HTML
+                                if content_type == 'text/html' and BeautifulSoup:
+                                    soup = BeautifulSoup(body_text, 'html.parser')
+                                    body_text = soup.get_text()
+                                
+                                if body_text.strip():
+                                    text_parts.append(body_text)
                         except Exception as e:
-                            logger.warning(f"Ошибка при извлечении текста из части письма: {str(e)}")
-                    elif part.get_content_type() == "text/html":
-                        try:
-                            html_content = part.get_content()
-                            if BeautifulSoup:
-                                soup = BeautifulSoup(html_content, 'html.parser')
-                                text_parts.append(soup.get_text())
-                            else:
-                                text_parts.append(html_content)
-                        except Exception as e:
-                            logger.warning(f"Ошибка при извлечении HTML из части письма: {str(e)}")
+                            logger.warning(f"Ошибка при обработке части письма: {e}")
             else:
-                # Обычное письмо
+                # Простое письмо
                 try:
-                    text_parts.append(msg.get_content())
+                    payload = msg.get_payload(decode=True)
+                    if payload:
+                        charset = msg.get_content_charset() or 'utf-8'
+                        try:
+                            body_text = payload.decode(charset)
+                        except UnicodeDecodeError:
+                            body_text = payload.decode('utf-8', errors='replace')
+                        
+                        if body_text.strip():
+                            text_parts.append(body_text)
                 except Exception as e:
-                    logger.warning(f"Ошибка при извлечении содержимого письма: {str(e)}")
+                    logger.warning(f"Ошибка при обработке тела письма: {e}")
             
-            return "\n".join(text_parts)
-            
+            if text_parts:
+                return "\n".join(text_parts)
+            else:
+                return "Не удалось извлечь читаемый текст из EML файла"
+                 
         except Exception as e:
             logger.error(f"Ошибка при обработке EML: {str(e)}")
             raise ValueError(f"Error processing EML: {str(e)}")
     
-    async def _extract_from_msg(self, content: bytes) -> str:
-        """Извлечение текста из MSG файлов (Outlook)"""
-        import email
-        import base64
-        import re
-        from email.policy import default
-        
+    def _extract_from_msg_sync(self, content: bytes) -> str:
+        """Синхронное извлечение текста из MSG"""
         try:
-            # MSG файлы часто содержат embedded EML данные
-            # Попробуем найти и извлечь EML части
+            # Простая эвристика для MSG файлов
+            # MSG файлы содержат текст в Unicode и могут содержать различные блоки данных
+            
+            # Попытка найти текстовые данные в файле
             text_parts = []
             
-            # Декодируем содержимое как текст для поиска структур
+            # Конвертация в строку и поиск читаемых фрагментов
             try:
-                text_content = content.decode('utf-8', errors='replace')
-            except:
-                text_content = content.decode('latin-1', errors='replace')
-            
-            # Ищем заголовки письма в стиле EML
-            headers = {}
-            email_body_parts = []
-            
-            # Поиск заголовков
-            header_patterns = {
-                'Subject': r'Subject:\s*(.+?)(?:\r?\n(?!\s)|$)',
-                'From': r'From:\s*(.+?)(?:\r?\n(?!\s)|$)', 
-                'To': r'To:\s*(.+?)(?:\r?\n(?!\s)|$)',
-                'Date': r'Date:\s*(.+?)(?:\r?\n(?!\s)|$)'
-            }
-            
-            for header_name, pattern in header_patterns.items():
-                matches = re.findall(pattern, text_content, re.MULTILINE | re.IGNORECASE)
-                if matches:
-                    header_value = matches[0].strip()
-                    
-                    # Декодируем encoded-word заголовки (=?utf-8?b?...?=)
-                    try:
-                        if '=?' in header_value and '?=' in header_value:
-                            # Используем email.header для декодирования
-                            import email.header
-                            decoded_parts = email.header.decode_header(header_value)
-                            decoded_value = ''
-                            for part, encoding in decoded_parts:
-                                if isinstance(part, bytes):
-                                    if encoding:
-                                        decoded_value += part.decode(encoding)
-                                    else:
-                                        decoded_value += part.decode('utf-8', errors='replace')
-                                else:
-                                    decoded_value += part
-                            headers[header_name] = decoded_value
-                        else:
-                            headers[header_name] = header_value
-                    except:
-                        headers[header_name] = header_value
-            
-            # Ищем base64 закодированный контент
-            base64_pattern = r'Content-Transfer-Encoding:\s*base64\s*\r?\n(?:[^\r\n]*\r?\n)*?\r?\n([A-Za-z0-9+/\r\n=]+)'
-            base64_matches = re.findall(base64_pattern, text_content, re.MULTILINE | re.IGNORECASE | re.DOTALL)
-            
-            # Также ищем отдельно стоящие base64 блоки (часто в MSG файлах)
-            standalone_base64_pattern = r'\b([A-Za-z0-9+/]{20,}={0,2})\b'
-            standalone_matches = re.findall(standalone_base64_pattern, text_content)
-            
-            # Объединяем все найденные base64 строки
-            all_base64_candidates = base64_matches + standalone_matches
-            
-            for base64_data in all_base64_candidates:
-                try:
-                    # Очищаем base64 данные от переносов строк и пробелов
-                    clean_base64 = re.sub(r'[\r\n\s]', '', base64_data)
-                    
-                    # Проверяем, что это действительно base64
-                    if len(clean_base64) < 20 or len(clean_base64) % 4 > 2:
-                        continue
-                    
-                    # Добавляем нужное количество padding
-                    padding_needed = 4 - (len(clean_base64) % 4)
-                    if padding_needed != 4:
-                        clean_base64 += '=' * padding_needed
-                    
-                    decoded_bytes = base64.b64decode(clean_base64)
-                    decoded_text = decoded_bytes.decode('utf-8', errors='replace')
-                    
-                    # Проверяем, что декодированный текст содержит читаемые символы
-                    if decoded_text.strip() and len(decoded_text.strip()) > 5:
-                        # Проверяем, что это не мусор (больше читаемых символов чем нечитаемых)
-                        readable_chars = sum(1 for c in decoded_text if c.isprintable() or c.isspace())
-                        if readable_chars > len(decoded_text) * 0.7:  # 70% читаемых символов
-                            email_body_parts.append(decoded_text.strip())
-                except Exception as e:
-                    logger.warning(f"Ошибка при декодировании base64: {str(e)}")
-                    continue
-            
-            # Ищем quoted-printable контент
-            qp_pattern = r'Content-Transfer-Encoding:\s*quoted-printable\s*\r?\n\r?\n([^-]+?)(?=\r?\n--|\r?\nContent-|$)'
-            qp_matches = re.findall(qp_pattern, text_content, re.MULTILINE | re.IGNORECASE | re.DOTALL)
-            
-            for qp_data in qp_matches:
-                try:
-                    import quopri
-                    decoded_bytes = quopri.decodestring(qp_data.encode())
-                    decoded_text = decoded_bytes.decode('utf-8', errors='replace')
-                    if decoded_text.strip():
-                        email_body_parts.append(decoded_text.strip())
-                except Exception as e:
-                    logger.warning(f"Ошибка при декодировании quoted-printable: {str(e)}")
-                    continue
-            
-            # Ищем обычный текстовый контент
-            text_pattern = r'Content-Type:\s*text/plain[^\r\n]*\r?\n(?:[^\r\n]*\r?\n)*?\r?\n([^-]+?)(?=\r?\n--|\r?\nContent-|$)'
-            text_matches = re.findall(text_pattern, text_content, re.MULTILINE | re.IGNORECASE | re.DOTALL)
-            
-            for text_data in text_matches:
-                clean_text = text_data.strip()
-                if clean_text and len(clean_text) > 10:
-                    email_body_parts.append(clean_text)
-            
-            # Формируем результат
-            result_parts = []
-            
-            if headers:
-                result_parts.append("=== EMAIL HEADERS ===")
-                for header_name, header_value in headers.items():
-                    result_parts.append(f"{header_name}: {header_value}")
-                result_parts.append("")
-            
-            if email_body_parts:
-                result_parts.append("=== EMAIL BODY ===")
-                result_parts.extend(email_body_parts)
-            
-            # Если ничего не найдено, используем fallback метод
-            if not result_parts:
-                # Простая эвристика для извлечения читаемого текста
-                lines = text_content.split('\n')
-                readable_lines = []
+                # Попытка декодирования как UTF-16 (часто используется в MSG)
+                text = content.decode('utf-16le', errors='ignore')
+                
+                # Фильтрация и очистка
+                lines = text.split('\n')
+                clean_lines = []
                 
                 for line in lines:
-                    # Пропускаем бинарные данные и служебную информацию
-                    if len(line) > 10 and line.count('\x00') / len(line) < 0.3:
-                        cleaned_line = ''.join(c for c in line if c.isprintable() or c.isspace())
-                        if cleaned_line.strip() and not cleaned_line.startswith(('Content-', 'MIME-', '--')):
-                            readable_lines.append(cleaned_line.strip())
+                    # Убираем нулевые байты и управляющие символы
+                    clean_line = ''.join(char for char in line if ord(char) >= 32 or char in '\t\n\r')
+                    clean_line = clean_line.strip()
+                    
+                    # Пропускаем слишком короткие или бессмысленные строки
+                    if len(clean_line) > 3 and not clean_line.startswith(('_', '\x00')):
+                        # Проверяем, что строка содержит буквы
+                        if any(c.isalpha() for c in clean_line):
+                            clean_lines.append(clean_line)
                 
-                # Удаляем дубликаты и короткие строки
+                # Удаление дубликатов и объединение
                 unique_lines = []
                 seen = set()
-                for line in readable_lines:
-                    if len(line) > 5 and line not in seen:
-                        seen.add(line)
+                for line in clean_lines:
+                    if line not in seen and len(line) > 5:  # Минимальная длина
                         unique_lines.append(line)
+                        seen.add(line)
                 
                 if unique_lines:
-                    result_parts = unique_lines[:50]  # Ограничиваем количество строк
-                else:
-                    result_parts = ["Не удалось извлечь текстовое содержимое из MSG файла"]
-            
-            return "\n".join(result_parts)
+                    text_parts.extend(unique_lines)
                 
+            except Exception as e:
+                logger.warning(f"Ошибка при декодировании UTF-16: {e}")
+            
+            # Альтернативный подход - поиск ASCII текста
+            try:
+                # Извлечение ASCII текста
+                ascii_text = content.decode('ascii', errors='ignore')
+                lines = ascii_text.split('\n')
+                
+                for line in lines:
+                    clean_line = line.strip()
+                    if len(clean_line) > 10 and any(c.isalpha() for c in clean_line):
+                        if clean_line not in text_parts:
+                            text_parts.append(clean_line)
+                
+            except Exception as e:
+                logger.warning(f"Ошибка при извлечении ASCII: {e}")
+            
+            if text_parts:
+                return "\n".join(text_parts)
+            else:
+                return "Не удалось извлечь читаемый текст из MSG файла"
+                 
         except Exception as e:
             logger.error(f"Ошибка при обработке MSG: {str(e)}")
             raise ValueError(f"Error processing MSG: {str(e)}")
+    
+    def _extract_from_image_sync(self, content: bytes) -> str:
+        """Синхронный OCR изображения"""
+        if not pytesseract or not Image:
+            raise ImportError("pytesseract или PIL не установлены")
+        
+        try:
+            image = Image.open(io.BytesIO(content))
+            # OCR на русском и английском языках
+            text = pytesseract.image_to_string(image, lang=self.ocr_languages)
+            return text.strip()
+            
+        except Exception as e:
+            logger.error(f"Ошибка при OCR изображения: {str(e)}")
+            raise ValueError(f"Error processing image: {str(e)}")
     
     def _check_mime_type(self, content: bytes, filename: str) -> bool:
         """Проверка MIME-типа файла для предотвращения подделки расширений"""
