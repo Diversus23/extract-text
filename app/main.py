@@ -198,6 +198,7 @@ async def extract_text(file: UploadFile = File(...)):
         return {
             "status": "success",
             "filename": original_filename,
+            "count": len(extracted_files),
             "files": extracted_files
         }
         

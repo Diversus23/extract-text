@@ -189,7 +189,10 @@ class TestAllRealFiles:
                     data = response.json()
                     assert data["status"] == "success", f"Файл {file_path.name}: status != success"
                     assert data["filename"] == file_path.name, f"Файл {file_path.name}: неверное имя файла"
+                    assert "count" in data, f"Файл {file_path.name}: отсутствует поле count"
+                    assert data["count"] >= 1, f"Файл {file_path.name}: count должен быть >= 1"
                     assert len(data["files"]) >= 1, f"Файл {file_path.name}: нет файлов в результате"
+                    assert len(data["files"]) == data["count"], f"Файл {file_path.name}: count не соответствует количеству файлов"
                     successful_files += 1
                     print(f"✓ {file_path.name} - успешно обработан")
                 elif response.status_code == 415:
@@ -278,6 +281,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "text.txt"
+                assert data["count"] == 1
                 assert len(data["files"]) == 1
                 assert len(data["files"][0]["text"]) > 0
     
@@ -296,6 +300,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.json"
+                assert data["count"] == 1
                 assert len(data["files"]) == 1
                 assert len(data["files"][0]["text"]) > 0
     
@@ -314,6 +319,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.csv"
+                assert data["count"] == 1
                 assert len(data["files"]) == 1
                 assert len(data["files"][0]["text"]) > 0
     
@@ -332,6 +338,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.py"
+                assert data["count"] == 1
                 assert len(data["files"]) == 1
                 # Убираем ожидание конкретного формата - просто проверяем, что текст извлечен
                 assert len(data["files"][0]["text"]) > 0
@@ -352,6 +359,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.html"
+                assert data["count"] == 1
                 assert len(data["files"]) == 1
                 assert len(data["files"][0]["text"]) > 0
     
@@ -370,6 +378,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.xml"
+                assert data["count"] == 1
                 assert len(data["files"]) == 1
                 assert len(data["files"][0]["text"]) > 0
     
@@ -388,6 +397,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.yaml"
+                assert data["count"] == 1
                 assert len(data["files"]) == 1
                 assert len(data["files"][0]["text"]) > 0
     
@@ -413,6 +423,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.jpg"
+                assert data["count"] == 1
                 assert len(data["files"]) == 1
                 # Текст может быть пустым если OCR не распознал ничего
                 assert "text" in data["files"][0]
@@ -440,6 +451,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.pdf"
+                assert data["count"] == 1
                 assert len(data["files"]) == 1
                 assert len(data["files"][0]["text"]) > 0
     
@@ -468,6 +480,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.docx"
+                assert data["count"] >= 1
                 assert len(data["files"]) >= 1
                 # Проверяем, что текст был извлечен
                 assert len(data["files"][0]["text"]) > 0
@@ -495,6 +508,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.xlsx"
+                assert data["count"] >= 1
                 assert len(data["files"]) >= 1
                 # Проверяем, что данные были извлечены
                 assert len(data["files"][0]["text"]) > 0
@@ -516,6 +530,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.bsl"
+                assert data["count"] >= 1
                 assert len(data["files"]) >= 1
                 # Проверяем, что код был извлечен как текст
                 assert data["files"][0]["type"] == "bsl"
@@ -537,6 +552,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.os"
+                assert data["count"] >= 1
                 assert len(data["files"]) >= 1
                 # Проверяем, что код был извлечен как текст
                 assert data["files"][0]["type"] == "os"
@@ -566,6 +582,7 @@ class TestRealFiles:
                     data = response.json()
                     assert data["status"] == "success"
                     assert data["filename"] == filename
+                    assert data["count"] == 1
                     assert len(data["files"]) == 1
     
     def test_extract_real_docx_file_content(self, test_client, real_test_files_dir):
@@ -583,6 +600,7 @@ class TestRealFiles:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.docx"
+                assert data["count"] >= 1
                 assert len(data["files"]) >= 1
                 
                 # Проверяем, что текст был извлечен
@@ -669,6 +687,7 @@ class TestPerformance:
         data = response.json()
         assert data["status"] == "success"
         assert data["filename"] == "large.txt"
+        assert data["count"] == 1
         assert len(data["files"]) == 1
         assert len(data["files"][0]["text"]) > 0
     

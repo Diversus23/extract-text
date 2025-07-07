@@ -89,6 +89,7 @@ class TestExtractEndpoint:
             data = response.json()
             assert data["status"] == "success"
             assert data["filename"] == "test.txt"
+            assert data["count"] == 1
             assert len(data["files"]) == 1
             assert data["files"][0]["text"] == test_content
     
@@ -114,6 +115,7 @@ class TestExtractEndpoint:
             data = response.json()
             assert data["status"] == "success"
             assert data["filename"] == "test.json"
+            assert data["count"] == 1
     
     def test_extract_empty_file_error(self, test_client):
         """Тест ошибки при обработке пустого файла"""
@@ -320,6 +322,7 @@ class TestExtractEndpoint:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "documents.zip"
+                assert data["count"] == 2
                 assert len(data["files"]) == 2
                 
                 # Проверяем содержимое первого файла
@@ -353,6 +356,7 @@ class TestExtractEndpoint:
             data = response.json()
             assert data["status"] == "success"
             assert data["filename"] == unsafe_filename  # Оригинальное имя в ответе
+            assert data["count"] == 1
             assert data["files"][0]["filename"] == "etc_passwd"  # Санитизованное имя
     
     def test_extract_zero_size_file(self, test_client):
@@ -389,6 +393,7 @@ class TestExtractEndpoint:
             data = response.json()
             assert data["status"] == "success"
             assert data["filename"] == special_filename
+            assert data["count"] == 1
 
 
 @pytest.mark.integration
@@ -458,6 +463,7 @@ class TestAsyncEndpoints:
                 data = response.json()
                 assert data["status"] == "success"
                 assert data["filename"] == "test.txt"
+                assert data["count"] == 1
                 # Проверяем что асинхронный метод был вызван
                 mock_extract.assert_called_once()
     
