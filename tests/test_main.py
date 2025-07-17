@@ -397,6 +397,218 @@ class TestExtractEndpoint:
 
 
 @pytest.mark.integration
+class TestBase64ExtractEndpoint:
+    """Тесты для эндпоинта извлечения текста из base64-файлов"""
+    
+    def test_extract_base64_text_success(self, test_client):
+        """Тест успешного извлечения текста из base64-файла"""
+        base64_content = "0J/RgNC40LLQtdGCINGN0YLQviDRgtC10LrRgdGCIQ=="
+        expected_text = "Привет это текст!"
+        
+        with patch('app.extractors.TextExtractor.extract_text') as mock_extract:
+            mock_extract.return_value = [{
+                "filename": "text.txt",
+                "path": "text.txt",
+                "size": 31,
+                "type": "txt",
+                "text": expected_text
+            }]
+            
+            response = test_client.post(
+                "/v1/extract-base64/",
+                json={
+                    "encoded_base64_file": base64_content,
+                    "filename": "text.txt"
+                }
+            )
+            
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "success"
+            assert data["filename"] == "text.txt"
+            assert data["count"] == 1
+            assert len(data["files"]) == 1
+            assert data["files"][0]["filename"] == "text.txt"
+            assert data["files"][0]["size"] == 31
+            assert data["files"][0]["type"] == "txt"
+            assert data["files"][0]["text"] == expected_text
+    
+    def test_extract_base64_invalid_base64(self, test_client):
+        """Тест ошибки при некорректном base64"""
+        response = test_client.post(
+            "/v1/extract-base64/",
+            json={
+                "encoded_base64_file": "invalid_base64_string!",
+                "filename": "test.txt"
+            }
+        )
+        
+        assert response.status_code == 400
+        data = response.json()
+        assert data["status"] == "error"
+        assert "base64" in data["message"].lower()
+    
+    def test_extract_base64_missing_filename(self, test_client):
+        """Тест ошибки при отсутствии filename"""
+        response = test_client.post(
+            "/v1/extract-base64/",
+            json={
+                "encoded_base64_file": "SGVsbG8gV29ybGQ="
+            }
+        )
+        
+        assert response.status_code == 422  # Validation error
+    
+    def test_extract_base64_missing_file_content(self, test_client):
+        """Тест ошибки при отсутствии encoded_base64_file"""
+        response = test_client.post(
+            "/v1/extract-base64/",
+            json={
+                "filename": "test.txt"
+            }
+        )
+        
+        assert response.status_code == 422  # Validation error
+    
+    def test_extract_base64_empty_filename(self, test_client):
+        """Тест ошибки при пустом filename"""
+        response = test_client.post(
+            "/v1/extract-base64/",
+            json={
+                "encoded_base64_file": "SGVsbG8gV29ybGQ=",
+                "filename": ""
+            }
+        )
+        
+        assert response.status_code == 415  # Unsupported Media Type из-за валидации файла
+        data = response.json()
+        assert data["status"] == "error"
+        assert "не соответствует" in data["message"]
+    
+    def test_extract_base64_large_file_error(self, test_client):
+        """Тест ошибки при превышении максимального размера файла"""
+        # Создаем base64 файл больше лимита
+        large_content = "A" * (settings.MAX_FILE_SIZE + 1)
+        import base64
+        large_base64 = base64.b64encode(large_content.encode()).decode()
+        
+        response = test_client.post(
+            "/v1/extract-base64/",
+            json={
+                "encoded_base64_file": large_base64,
+                "filename": "large.txt"
+            }
+        )
+        
+        assert response.status_code == 413
+        data = response.json()
+        # FastAPI автоматически создает структуру с полем "detail"
+        assert "detail" in data
+        assert "exceeds maximum" in data["detail"]
+    
+    def test_extract_base64_unsupported_format(self, test_client):
+        """Тест ошибки при неподдерживаемом формате файла"""
+        test_base64 = "SGVsbG8gV29ybGQ="  # "Hello World"
+        
+        with patch('app.extractors.TextExtractor.extract_text') as mock_extract:
+            mock_extract.side_effect = ValueError("Unsupported file format")
+            
+            response = test_client.post(
+                "/v1/extract-base64/",
+                json={
+                    "encoded_base64_file": test_base64,
+                    "filename": "test.unknown"
+                }
+            )
+            
+            assert response.status_code == 415
+            data = response.json()
+            assert data["status"] == "error"
+            assert "неподдерживаемый формат" in data["message"].lower()
+    
+    def test_extract_base64_corrupted_file(self, test_client):
+        """Тест ошибки при поврежденном файле"""
+        test_base64 = "SGVsbG8gV29ybGQ="
+        
+        # Мокаем валидацию файла - пропускаем проверку типа
+        with patch('app.main.validate_file_type', return_value=(True, None)):
+            with patch('app.extractors.TextExtractor.extract_text') as mock_extract:
+                mock_extract.side_effect = ValueError("File is corrupted")
+                
+                response = test_client.post(
+                    "/v1/extract-base64/",
+                    json={
+                        "encoded_base64_file": test_base64,
+                        "filename": "corrupted.pdf"
+                    }
+                )
+                
+                assert response.status_code == 422
+                data = response.json()
+                assert data["status"] == "error"
+                assert "поврежден" in data["message"]
+    
+    def test_extract_base64_with_sanitized_filename(self, test_client):
+        """Тест обработки base64 файла с небезопасным именем"""
+        test_base64 = "0J/RgNC40LLQtdGCINGN0YLQviDRgtC10LrRgdGCIQ=="
+        unsafe_filename = "../../../etc/passwd"
+        
+        with patch('app.extractors.TextExtractor.extract_text') as mock_extract:
+            mock_extract.return_value = [{
+                "filename": "etc_passwd",  # Санитизованное имя
+                "path": "etc_passwd",
+                "size": 31,
+                "type": "txt",
+                "text": "Привет это текст!"
+            }]
+            
+            response = test_client.post(
+                "/v1/extract-base64/",
+                json={
+                    "encoded_base64_file": test_base64,
+                    "filename": unsafe_filename
+                }
+            )
+            
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "success"
+            assert data["filename"] == unsafe_filename  # Оригинальное имя в ответе
+            assert data["count"] == 1
+            assert data["files"][0]["filename"] == "etc_passwd"  # Санитизованное имя
+    
+    def test_extract_base64_json_file(self, test_client):
+        """Тест извлечения из JSON файла в base64"""
+        json_content = '{"message": "Привет", "number": 42}'
+        import base64
+        json_base64 = base64.b64encode(json_content.encode()).decode()
+        
+        with patch('app.extractors.TextExtractor.extract_text') as mock_extract:
+            mock_extract.return_value = [{
+                "filename": "test.json",
+                "path": "test.json",
+                "size": len(json_content.encode()),
+                "type": "json",
+                "text": "message: Привет\nnumber: 42"
+            }]
+            
+            response = test_client.post(
+                "/v1/extract-base64/",
+                json={
+                    "encoded_base64_file": json_base64,
+                    "filename": "test.json"
+                }
+            )
+            
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "success"
+            assert data["filename"] == "test.json"
+            assert data["count"] == 1
+            assert "Привет" in data["files"][0]["text"]
+
+
+@pytest.mark.integration
 class TestMiddleware:
     """Тесты для middleware"""
     

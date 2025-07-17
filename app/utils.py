@@ -337,6 +337,69 @@ def cleanup_temp_files() -> None:
         logger.error(f"Ошибка при очистке временных файлов: {str(e)}", exc_info=True)
 
 
+def cleanup_recent_temp_files() -> None:
+    """
+    Немедленная очистка временных файлов текущего процесса
+    Удаляет временные файлы, созданные в последние 10 минут
+    """
+    try:
+        # Получаем системную папку для временных файлов
+        temp_dir = tempfile.gettempdir()
+        
+        # Паттерны для поиска временных файлов нашего приложения
+        patterns = [
+            "tmp*.pdf", "tmp*.doc", "tmp*.docx", "tmp*.ppt", "tmp*.pptx",
+            "tmp*.odt", "tmp*.xlsx", "tmp*.xls", "tmp*.csv", "tmp*.txt",
+            "tmp*.zip", "tmp*.rar", "tmp*.7z", "tmp*.tar", "tmp*.gz",
+            "tmp*.bz2", "tmp*.xz", "tmp*.html", "tmp*.htm", "tmp*.xml",
+            "tmp*.json", "tmp*.yaml", "tmp*.yml", "tmp*.png", "tmp*.jpg",
+            "tmp*.jpeg", "tmp*.tiff", "tmp*.tif", "tmp*.bmp", "tmp*.gif"
+        ]
+        
+        files_removed = 0
+        current_time = time.time()
+        
+        # Поиск и удаление недавних временных файлов (младше 10 минут)
+        for pattern in patterns:
+            full_pattern = os.path.join(temp_dir, pattern)
+            for temp_file in glob.glob(full_pattern):
+                try:
+                    # Проверяем, что файл младше 10 минут (600 секунд)
+                    file_age = os.path.getmtime(temp_file)
+                    
+                    if current_time - file_age <= 600:  # 10 минут
+                        os.unlink(temp_file)
+                        files_removed += 1
+                        logger.debug(f"Удален недавний временный файл: {temp_file}")
+                except (OSError, IOError) as e:
+                    logger.debug(f"Не удалось удалить временный файл {temp_file}: {str(e)}")
+        
+        # Поиск и удаление недавних временных папок
+        temp_dirs_patterns = ["tmp*", "extract_*", "temp_*"]
+        dirs_removed = 0
+        
+        for pattern in temp_dirs_patterns:
+            full_pattern = os.path.join(temp_dir, pattern)
+            for temp_dir_path in glob.glob(full_pattern):
+                if os.path.isdir(temp_dir_path):
+                    try:
+                        # Проверяем, что папка младше 10 минут
+                        dir_age = os.path.getmtime(temp_dir_path)
+                        
+                        if current_time - dir_age <= 600:  # 10 минут
+                            shutil.rmtree(temp_dir_path, ignore_errors=True)
+                            dirs_removed += 1
+                            logger.debug(f"Удалена недавняя временная папка: {temp_dir_path}")
+                    except (OSError, IOError) as e:
+                        logger.debug(f"Не удалось удалить временную папку {temp_dir_path}: {str(e)}")
+        
+        if files_removed > 0 or dirs_removed > 0:
+            logger.info(f"Очистка недавних временных файлов завершена. Удалено файлов: {files_removed}, папок: {dirs_removed}")
+    
+    except Exception as e:
+        logger.warning(f"Ошибка при очистке недавних временных файлов: {str(e)}")
+
+
 def run_subprocess_with_limits(
     command: list,
     timeout: int = 30,

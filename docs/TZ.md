@@ -1,7 +1,7 @@
 # Техническое задание: API для извлечения текста для RAG
 
-**Версия:** 1.8.7
-**Дата:** 07.07.2025
+**Версия:** 1.8.8
+**Дата:** 17.07.2025
 **Заказчик:** ООО "СОФТОНИТ"
 
 ---
@@ -99,7 +99,7 @@
 ```json
 {
   "api_name": "Text Extraction API for RAG",
-  "version": "1.8.6",
+  "version": "1.8.8",
   "contact": "ООО 'СОФТОНИТ'"
 }
 ```
@@ -127,7 +127,91 @@
 }
 ```
 
-**4.4. Эндпоинт `POST /v1/extract/` — Извлечение текста**
+**4.4. Эндпоинт `POST /v1/extract-base64/` — Извлечение текста из base64-файла**
+* **Метод:** `POST`.
+* **Тело запроса:** `application/json` с полями `encoded_base64_file` и `filename`.
+* **Формат запроса:**
+```json
+{
+  "encoded_base64_file": "SGVsbG8gV29ybGQ=",
+  "filename": "document.pdf"
+}
+```
+* **Успешный ответ (`HTTP 200 OK`):**
+```json
+{
+  "status": "success",
+  "filename": "document.pdf",
+  "count": 1,
+  "files": [
+    {
+      "filename": "document.pdf",
+      "path": "document.pdf",
+      "size": 1024000,
+      "type": "pdf",
+      "text": "Полностью извлеченный и скомбинированный текст..."
+    }
+  ]
+}
+```
+
+* **Успешный ответ для архива (`HTTP 200 OK`):**
+```json
+{
+  "status": "success",
+  "filename": "documents.zip",
+  "count": 2,
+  "files": [
+    {
+      "filename": "document1.pdf",
+      "path": "documents/document1.pdf",
+      "size": 524288,
+      "type": "pdf",
+      "text": "Текст из первого документа..."
+    },
+    {
+      "filename": "image1.jpg",
+      "path": "documents/images/image1.jpg",
+      "size": 102400,
+      "type": "jpg",
+      "text": "Распознанный текст с изображения..."
+    }
+  ]
+}
+```
+* **Ответы с ошибкой:**
+    * **`400 Bad Request`**: Неверный формат base64 или некорректный запрос.
+    * **`413 Payload Too Large`**: Файл превышает максимальный размер.
+    * **`415 Unsupported Media Type`**: Формат файла не поддерживается или расширение файла не соответствует его содержимому.
+    * **`422 Unprocessable Entity`**: Файл поврежден, пуст или защищен паролем.
+    * **`504 Gateway Timeout`**: Обработка файла превысила установленный лимит времени.
+    
+    Примеры ответов с ошибкой:
+```json
+{
+  "status": "error",
+  "filename": "document.pdf",
+  "message": "Неверный формат base64. Убедитесь, что файл корректно закодирован в base64."
+}
+```
+
+```json
+{
+  "status": "error",
+  "filename": "malicious.txt",
+  "message": "Расширение файла не соответствует его содержимому. Возможная подделка типа файла."
+}
+```
+
+```json
+{
+  "status": "error",
+  "filename": "broken.docx",
+  "message": "Файл поврежден или формат не поддерживается."
+}
+```
+
+**4.5. Эндпоинт `POST /v1/extract/` — Извлечение текста**
 * **Метод:** `POST`.
 * **Тело запроса:** `multipart/form-data` с полем `file`.
 * **Успешный ответ (`HTTP 200 OK`):**
@@ -206,7 +290,7 @@
 
 
 
-**4.5. Документация API (Swagger UI):**
+**4.6. Документация API (Swagger UI):**
 * Сервис должен предоставлять интерактивную документацию API, автоматически генерируемую фреймворком FastAPI.
 * Интерактивная документация должна быть доступна по адресу `http://localhost:7555/docs`.
 
