@@ -3,6 +3,7 @@ Integration тесты для FastAPI приложения
 """
 import pytest
 import json
+import base64
 from io import BytesIO
 from unittest.mock import patch, AsyncMock, Mock
 
@@ -606,6 +607,32 @@ class TestBase64ExtractEndpoint:
             assert data["filename"] == "test.json"
             assert data["count"] == 1
             assert "Привет" in data["files"][0]["text"]
+    
+    def test_extract_base64_cyrillic_filename(self, test_client):
+        """Тест извлечения base64-файла с кириллицей в названии"""
+        # Кодируем простой текст в base64
+        test_content = "Тест файла с кириллическим названием"
+        content_base64 = base64.b64encode(test_content.encode()).decode()
+        
+        response = test_client.post(
+            "/v1/extract-base64/",
+            json={
+                "encoded_base64_file": content_base64,
+                "filename": "кириллический_файл.txt"
+            }
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["filename"] == "кириллический_файл.txt"
+        assert data["count"] == 1
+        assert len(data["files"]) == 1
+        
+        # Проверяем, что текст был корректно извлечен
+        extracted_text = data["files"][0]["text"]
+        assert "Тест файла с кириллическим названием" in extracted_text
+        assert data["files"][0]["type"] == "txt"
 
 
 @pytest.mark.integration

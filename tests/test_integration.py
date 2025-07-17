@@ -637,6 +637,33 @@ class TestRealFiles:
                 
         else:
             pytest.skip("test.docx file not found")
+    
+    def test_extract_cyrillic_filename(self, test_client, real_test_files_dir):
+        """Тест извлечения файла с кириллицей в названии"""
+        cyrillic_file = real_test_files_dir / "тест.md"
+        
+        if cyrillic_file.exists():
+            with open(cyrillic_file, "rb") as f:
+                response = test_client.post(
+                    "/v1/extract/",
+                    files={"file": ("тест.md", f, "text/markdown")}
+                )
+                
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "success"
+                assert data["filename"] == "тест.md"
+                assert data["count"] == 1
+                assert len(data["files"]) == 1
+                
+                # Проверяем, что текст был извлечен
+                extracted_text = data["files"][0]["text"]
+                assert len(extracted_text) > 0
+                assert "Это тест" in extracted_text
+                assert data["files"][0]["type"] == "md"
+                
+        else:
+            pytest.skip("тест.md file not found")
 
 
 @pytest.mark.integration

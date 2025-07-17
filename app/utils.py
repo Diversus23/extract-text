@@ -103,18 +103,40 @@ def safe_filename(filename: str) -> str:
 
 
 def sanitize_filename(filename: str) -> str:
-    """Санитизация имени файла для безопасности"""
+    """
+    Санитизация имени файла для безопасности с поддержкой кириллицы
+    
+    Удаляет опасные символы для path traversal атак, но сохраняет кириллические символы
+    """
     if not filename:
         return "unknown_file"
     
-    # Используем werkzeug для базовой санитизации
-    secure_name = secure_filename(filename)
+    # Удаляем опасные символы для path traversal
+    filename = filename.replace('..', '').replace('/', '').replace('\\', '')
     
-    # Если werkzeug удалил слишком много, возвращаем безопасное имя
-    if not secure_name:
+    # Удаляем другие потенциально опасные символы
+    dangerous_chars = ['<', '>', ':', '"', '|', '?', '*', '\0']
+    for char in dangerous_chars:
+        filename = filename.replace(char, '')
+    
+    # Удаляем управляющие символы
+    filename = ''.join(char for char in filename if ord(char) >= 32)
+    
+    # Удаляем начальные и конечные пробелы и точки
+    filename = filename.strip(' .')
+    
+    # Если после очистки файл пустой, возвращаем безопасное имя
+    if not filename:
         return "sanitized_file"
     
-    return secure_name
+    # Ограничиваем длину имени файла (максимум 255 символов для большинства ФС)
+    if len(filename) > 255:
+        name, ext = os.path.splitext(filename)
+        # Сохраняем расширение и обрезаем имя
+        max_name_length = 255 - len(ext)
+        filename = name[:max_name_length] + ext
+    
+    return filename
 
 
 def validate_file_type(content: bytes, filename: str) -> tuple[bool, Optional[str]]:

@@ -10,7 +10,7 @@ class Settings:
     """Настройки приложения"""
     
     # Основные настройки
-    VERSION: str = "1.8.8"
+    VERSION: str = "1.8.9"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # Настройки API

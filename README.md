@@ -691,5 +691,5 @@ curl -X POST -F "file=@tests/test.txt" http://localhost:7555/v1/extract/
 
 ---
 
-**Версия**: 1.8.8
+**Версия**: 1.8.9
 **Разработчик**: ООО "СОФТОНИТ"

@@ -77,18 +77,22 @@ class TestSanitizeFilename:
     
     def test_path_traversal_attack(self):
         """Тест защиты от path traversal атак"""
-        # werkzeug.secure_filename убирает пути и специальные символы
-        assert sanitize_filename("../../../etc/passwd") == "etc_passwd"
+        # Наша новая функция удаляет все опасные символы для path traversal
+        assert sanitize_filename("../../../etc/passwd") == "etcpasswd"
         assert sanitize_filename("..\\..\\windows\\system32\\config") == "windowssystem32config"
         assert sanitize_filename("./malicious.exe") == "malicious.exe"
     
     def test_unicode_characters(self):
         """Тест обработки Unicode символов"""
-        # Проверяем реальное поведение с Unicode
+        # Проверяем корректную обработку кириллицы
         result = sanitize_filename("файл_с_русскими_символами.txt")
-        # werkzeug.secure_filename может обрабатывать Unicode по-разному
-        assert result is not None
-        assert len(result) > 0
+        assert result == "файл_с_русскими_символами.txt"
+        
+        # Проверяем другие unicode символы
+        assert sanitize_filename("测试文件.pdf") == "测试文件.pdf"  # Китайский
+        assert sanitize_filename("тест.md") == "тест.md"  # Кириллица
+        assert sanitize_filename("файл#с@символами.docx") == "файл#с@символами.docx"  # Кириллица + безопасные символы
+        assert sanitize_filename("файл<с>символами.docx") == "файлссимволами.docx"  # Кириллица + опасные символы
     
     def test_empty_filename(self):
         """Тест обработки пустого имени файла"""
@@ -97,8 +101,8 @@ class TestSanitizeFilename:
     
     def test_filename_with_slashes(self):
         """Тест обработки имен файлов со слешами"""
-        # werkzeug.secure_filename по-разному обрабатывает прямые и обратные слеши
-        assert sanitize_filename("path/to/file.txt") == "path_to_file.txt"
+        # Наша функция удаляет все слеши для безопасности
+        assert sanitize_filename("path/to/file.txt") == "pathtofile.txt"
         assert sanitize_filename("path\\to\\file.txt") == "pathtofile.txt"
     
     def test_filename_with_special_chars(self):
