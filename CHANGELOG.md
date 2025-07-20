@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.9.0] - 2025-07-20
+
+### Изменение адресов API endpoints
+- **Изменение**: Обновлены адреса API endpoints для улучшения структуры URL
+- **Старые endpoints**:
+  - `POST /v1/extract/` → `POST /v1/extract/file`
+  - `POST /v1/extract-base64/` → `POST /v1/extract/base64`
+- **Новые endpoints**:
+  - `POST /v1/extract/file` - для загрузки файлов через multipart/form-data
+  - `POST /v1/extract/base64` - для обработки base64-файлов через JSON
+- **Обратная совместимость**: Старые endpoints УДАЛЕНЫ, требуется обновление клиентского кода
+- **Обновлено**: 
+  - Код приложения в `app/main.py`
+  - Документация в `docs/TZ.md` и `README.md`
+  - Все тесты в `tests/test_main.py` и `tests/test_integration.py`
+  - Утилитарные скрипты `run_tests.sh` и `quick_test.py`
+- **Преимущества**: Более логичная и понятная структура API с группировкой по типу загрузки
+
 ## [1.8.9] - 2025-07-17
 
 ### Исправление обработки файлов с кириллицей в названии

@@ -1,8 +1,7 @@
 # Техническое задание: API для извлечения текста для RAG
 
-**Версия:** 1.8.9
-**Дата:** 17.07.2025
-**Заказчик:** ООО "СОФТОНИТ"
+**Версия:** 1.9.0
+**Дата:** 20.07.2025
 
 ---
 
@@ -99,8 +98,8 @@
 ```json
 {
   "api_name": "Text Extraction API for RAG",
-  "version": "1.8.8",
-  "contact": "ООО 'СОФТОНИТ'"
+  "version": "1.9.0",
+  "contact": "Барилко Виталий"
 }
 ```
 
@@ -112,7 +111,7 @@
 }
 ```
 
-**4.3. Эндпоинт `GET /v1/supported-formats/` — Поддерживаемые форматы**
+**4.3. Эндпоинт `GET /v1/supported-formats` — Поддерживаемые форматы**
 * **Ответ (`HTTP 200 OK`):**
 ```json
 {
@@ -127,7 +126,7 @@
 }
 ```
 
-**4.4. Эндпоинт `POST /v1/extract-base64/` — Извлечение текста из base64-файла**
+**4.4. Эндпоинт `POST /v1/extract/base64` — Извлечение текста из base64-файла**
 * **Метод:** `POST`.
 * **Тело запроса:** `application/json` с полями `encoded_base64_file` и `filename`.
 * **Формат запроса:**
@@ -211,7 +210,7 @@
 }
 ```
 
-**4.5. Эндпоинт `POST /v1/extract/` — Извлечение текста**
+**4.5. Эндпоинт `POST /v1/extract/file` — Извлечение текста**
 * **Метод:** `POST`.
 * **Тело запроса:** `multipart/form-data` с полем `file`.
 * **Успешный ответ (`HTTP 200 OK`):**
@@ -530,7 +529,7 @@
   # В app/main.py - основной контроллер
   from fastapi.concurrency import run_in_threadpool
   
-  @app.post("/v1/extract/")
+  @app.post("/v1/extract/file")
   async def extract_text(file: UploadFile = File(...)):
       # Весь процесс извлечения выполняется в пуле потоков
       extracted_files = await run_in_threadpool(

@@ -26,7 +26,7 @@ class TestHealthEndpoints:
         data = response.json()
         assert data["api_name"] == "Text Extraction API for RAG"
         assert data["version"] == settings.VERSION
-        assert data["contact"] == "ООО 'СОФТОНИТ'"
+        assert data["contact"] == "Барилко Виталий"
     
     def test_health_endpoint(self, test_client):
         """Тест эндпоинта проверки здоровья"""
@@ -38,7 +38,7 @@ class TestHealthEndpoints:
     
     def test_supported_formats_endpoint(self, test_client):
         """Тест эндпоинта поддерживаемых форматов"""
-        response = test_client.get("/v1/supported-formats/")
+        response = test_client.get("/v1/supported-formats")
         
         assert response.status_code == 200
         data = response.json()
@@ -82,7 +82,7 @@ class TestExtractEndpoint:
             }]
             
             response = test_client.post(
-                "/v1/extract/",
+                "/v1/extract/file",
                 files={"file": ("test.txt", BytesIO(test_content.encode('utf-8')), "text/plain")}
             )
             
@@ -108,7 +108,7 @@ class TestExtractEndpoint:
             }]
             
             response = test_client.post(
-                "/v1/extract/",
+                "/v1/extract/file",
                 files={"file": ("test.json", BytesIO(test_content.encode('utf-8')), "application/json")}
             )
             
@@ -121,7 +121,7 @@ class TestExtractEndpoint:
     def test_extract_empty_file_error(self, test_client):
         """Тест ошибки при обработке пустого файла"""
         response = test_client.post(
-            "/v1/extract/",
+            "/v1/extract/file",
             files={"file": ("empty.txt", BytesIO(b""), "text/plain")}
         )
         
@@ -133,7 +133,7 @@ class TestExtractEndpoint:
         large_content = b"x" * (settings.MAX_FILE_SIZE + 1)
         
         response = test_client.post(
-            "/v1/extract/",
+            "/v1/extract/file",
             files={"file": ("large.txt", BytesIO(large_content), "text/plain")}
         )
         
@@ -148,7 +148,7 @@ class TestExtractEndpoint:
             mock_extract.side_effect = ValueError("Unsupported file format")
             
             response = test_client.post(
-                "/v1/extract/",
+                "/v1/extract/file",
                 files={"file": ("test.unknown", BytesIO(test_content), "application/octet-stream")}
             )
             
@@ -167,7 +167,7 @@ class TestExtractEndpoint:
                 mock_extract.side_effect = ValueError("File is corrupted")
                 
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("corrupted.pdf", BytesIO(test_content), "application/pdf")}
                 )
                 
@@ -179,7 +179,7 @@ class TestExtractEndpoint:
     def test_extract_no_content_length_error(self, test_client):
         """Тест ошибки при отсутствии Content-Length"""
         # Создаем запрос без Content-Length заголовка
-        response = test_client.post("/v1/extract/")
+        response = test_client.post("/v1/extract/file")
         
         assert response.status_code == 422
         # FastAPI автоматически возвращает ошибку при отсутствии файла
@@ -193,7 +193,7 @@ class TestExtractEndpoint:
             mock_is_archive.return_value = True
             
             response = test_client.post(
-                "/v1/extract/",
+                "/v1/extract/file",
                 files={"file": ("test.zip", BytesIO(zip_content), "application/zip")}
             )
             
@@ -226,7 +226,7 @@ class TestExtractEndpoint:
                 ]
                 
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("archive.zip", BytesIO(test_content), "application/zip")}
                 )
                 
@@ -246,7 +246,7 @@ class TestExtractEndpoint:
             mock_validate.return_value = (False, "Расширение файла не соответствует содержимому")
             
             response = test_client.post(
-                "/v1/extract/",
+                "/v1/extract/file",
                 files={"file": ("fake.pdf", BytesIO(fake_pdf_content), "application/pdf")}
             )
             
@@ -265,7 +265,7 @@ class TestExtractEndpoint:
                 mock_extract.side_effect = ValueError("Processing timeout exceeded")
                 
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("large.pdf", BytesIO(test_content), "application/pdf")}
                 )
                 
@@ -281,7 +281,7 @@ class TestExtractEndpoint:
         # Мокаем валидацию файла - неудачная валидация
         with patch('app.main.validate_file_type', return_value=(False, "Не удалось определить расширение файла")):
             response = test_client.post(
-                "/v1/extract/",
+                "/v1/extract/file",
                 files={"file": ("README", BytesIO(test_content), "text/plain")}
             )
             
@@ -315,7 +315,7 @@ class TestExtractEndpoint:
                 ]
                 
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("documents.zip", BytesIO(test_content), "application/zip")}
                 )
                 
@@ -349,7 +349,7 @@ class TestExtractEndpoint:
             }]
             
             response = test_client.post(
-                "/v1/extract/",
+                "/v1/extract/file",
                 files={"file": (unsafe_filename, BytesIO(test_content), "text/plain")}
             )
             
@@ -363,7 +363,7 @@ class TestExtractEndpoint:
     def test_extract_zero_size_file(self, test_client):
         """Тест обработки файла нулевого размера"""
         response = test_client.post(
-            "/v1/extract/",
+            "/v1/extract/file",
             files={"file": ("empty.txt", BytesIO(b""), "text/plain")}
         )
         
@@ -386,7 +386,7 @@ class TestExtractEndpoint:
             }]
             
             response = test_client.post(
-                "/v1/extract/",
+                "/v1/extract/file",
                 files={"file": (special_filename, BytesIO(test_content), "text/plain")}
             )
             
@@ -416,7 +416,7 @@ class TestBase64ExtractEndpoint:
             }]
             
             response = test_client.post(
-                "/v1/extract-base64/",
+                "/v1/extract/base64",
                 json={
                     "encoded_base64_file": base64_content,
                     "filename": "text.txt"
@@ -437,7 +437,7 @@ class TestBase64ExtractEndpoint:
     def test_extract_base64_invalid_base64(self, test_client):
         """Тест ошибки при некорректном base64"""
         response = test_client.post(
-            "/v1/extract-base64/",
+            "/v1/extract/base64",
             json={
                 "encoded_base64_file": "invalid_base64_string!",
                 "filename": "test.txt"
@@ -452,7 +452,7 @@ class TestBase64ExtractEndpoint:
     def test_extract_base64_missing_filename(self, test_client):
         """Тест ошибки при отсутствии filename"""
         response = test_client.post(
-            "/v1/extract-base64/",
+            "/v1/extract/base64",
             json={
                 "encoded_base64_file": "SGVsbG8gV29ybGQ="
             }
@@ -463,7 +463,7 @@ class TestBase64ExtractEndpoint:
     def test_extract_base64_missing_file_content(self, test_client):
         """Тест ошибки при отсутствии encoded_base64_file"""
         response = test_client.post(
-            "/v1/extract-base64/",
+            "/v1/extract/base64",
             json={
                 "filename": "test.txt"
             }
@@ -474,7 +474,7 @@ class TestBase64ExtractEndpoint:
     def test_extract_base64_empty_filename(self, test_client):
         """Тест ошибки при пустом filename"""
         response = test_client.post(
-            "/v1/extract-base64/",
+            "/v1/extract/base64",
             json={
                 "encoded_base64_file": "SGVsbG8gV29ybGQ=",
                 "filename": ""
@@ -494,7 +494,7 @@ class TestBase64ExtractEndpoint:
         large_base64 = base64.b64encode(large_content.encode()).decode()
         
         response = test_client.post(
-            "/v1/extract-base64/",
+            "/v1/extract/base64",
             json={
                 "encoded_base64_file": large_base64,
                 "filename": "large.txt"
@@ -515,7 +515,7 @@ class TestBase64ExtractEndpoint:
             mock_extract.side_effect = ValueError("Unsupported file format")
             
             response = test_client.post(
-                "/v1/extract-base64/",
+                "/v1/extract/base64",
                 json={
                     "encoded_base64_file": test_base64,
                     "filename": "test.unknown"
@@ -537,7 +537,7 @@ class TestBase64ExtractEndpoint:
                 mock_extract.side_effect = ValueError("File is corrupted")
                 
                 response = test_client.post(
-                    "/v1/extract-base64/",
+                    "/v1/extract/base64",
                     json={
                         "encoded_base64_file": test_base64,
                         "filename": "corrupted.pdf"
@@ -564,7 +564,7 @@ class TestBase64ExtractEndpoint:
             }]
             
             response = test_client.post(
-                "/v1/extract-base64/",
+                "/v1/extract/base64",
                 json={
                     "encoded_base64_file": test_base64,
                     "filename": unsafe_filename
@@ -594,7 +594,7 @@ class TestBase64ExtractEndpoint:
             }]
             
             response = test_client.post(
-                "/v1/extract-base64/",
+                "/v1/extract/base64",
                 json={
                     "encoded_base64_file": json_base64,
                     "filename": "test.json"
@@ -615,7 +615,7 @@ class TestBase64ExtractEndpoint:
         content_base64 = base64.b64encode(test_content.encode()).decode()
         
         response = test_client.post(
-            "/v1/extract-base64/",
+            "/v1/extract/base64",
             json={
                 "encoded_base64_file": content_base64,
                 "filename": "кириллический_файл.txt"
@@ -694,7 +694,7 @@ class TestAsyncEndpoints:
                 }]
                 
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.txt", BytesIO(test_content), "text/plain")}
                 )
                 
@@ -716,7 +716,7 @@ class TestAsyncEndpoints:
     
     def test_async_supported_formats_endpoint(self, test_client):
         """Тест асинхронного endpoint поддерживаемых форматов"""
-        response = test_client.get("/v1/supported-formats/")
+        response = test_client.get("/v1/supported-formats")
         
         assert response.status_code == 200
         data = response.json()

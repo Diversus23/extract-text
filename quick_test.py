@@ -44,7 +44,7 @@ def test_api():
     # Тест 3: Поддерживаемые форматы
     print("\n3. Поддерживаемые форматы...")
     try:
-        response = requests.get(f"{API_URL}/v1/supported-formats/")
+        response = requests.get(f"{API_URL}/v1/supported-formats")
         if response.status_code == 200:
             data = response.json()
             print("✅ Поддерживаемые форматы:")
@@ -63,7 +63,7 @@ def test_api():
         try:
             with open(test_file, 'rb') as f:
                 files = {'file': f}
-                response = requests.post(f"{API_URL}/v1/extract/", files=files)
+                response = requests.post(f"{API_URL}/v1/extract/file", files=files)
                 
                 if response.status_code == 200:
                     data = response.json()

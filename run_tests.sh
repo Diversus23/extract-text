@@ -20,7 +20,7 @@ echo "✅ API доступен"
 
 # Получение поддерживаемых форматов
 echo "Получение поддерживаемых форматов..."
-if curl -s "$API_URL/v1/supported-formats/" | jq . > "$TESTS_DIR/supported_formats.json" 2>/dev/null; then
+if curl -s "$API_URL/v1/supported-formats" | jq . > "$TESTS_DIR/supported_formats.json" 2>/dev/null; then
     echo "✅ Поддерживаемые форматы сохранены в supported_formats.json"
 else
     echo "⚠️ jq не установлен, пропускаем сохранение форматов"
@@ -54,7 +54,7 @@ for file in "$TESTS_DIR"/*; do
         temp_response=$(mktemp)
         http_code=$(curl -s -w "%{http_code}" -X POST \
             -F "file=@$file" \
-            "$API_URL/v1/extract/" \
+            "$API_URL/v1/extract/file" \
             --output "$temp_response")
         
         # Чтение содержимого ответа

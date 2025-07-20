@@ -57,7 +57,7 @@ app = FastAPI(
         "url": "https://opensource.org/licenses/MIT"
     },
     contact={
-        "name": "Софтонит",
+        "name": "Барилко Виталий",
         "email": "support@softonit.ru",
         "url": "https://softonit.ru"
     }
@@ -104,7 +104,7 @@ async def root() -> Dict[str, str]:
     return {
         "api_name": "Text Extraction API for RAG",
         "version": settings.VERSION,
-        "contact": "ООО 'СОФТОНИТ'"
+        "contact": "Барилко Виталий"
     }
 
 
@@ -114,13 +114,13 @@ async def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/v1/supported-formats/")
+@app.get("/v1/supported-formats")
 async def supported_formats() -> Dict[str, list]:
     """Поддерживаемые форматы файлов"""
     return settings.SUPPORTED_FORMATS
 
 
-@app.post("/v1/extract/")
+@app.post("/v1/extract/file")
 async def extract_text(file: UploadFile = File(...)):
     """Извлечение текста из файла"""
     try:
@@ -255,7 +255,7 @@ async def extract_text(file: UploadFile = File(...)):
         )
 
 
-@app.post("/v1/extract-base64/")
+@app.post("/v1/extract/base64")
 async def extract_text_base64(request: Base64FileRequest):
     """Извлечение текста из base64-файла"""
     try:

@@ -180,7 +180,7 @@ class TestAllRealFiles:
                 
                 # Отправляем запрос
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": (file_path.name, content, content_type)}
                 )
                 
@@ -251,7 +251,7 @@ class TestAllRealFiles:
         for archive_path in found_archives:
             with open(archive_path, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": (archive_path.name, f, "application/octet-stream")}
                 )
             
@@ -273,7 +273,7 @@ class TestRealFiles:
         if text_file.exists():
             with open(text_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("text.txt", f, "text/plain")}
                 )
                 
@@ -292,7 +292,7 @@ class TestRealFiles:
         if json_file.exists():
             with open(json_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.json", f, "application/json")}
                 )
                 
@@ -311,7 +311,7 @@ class TestRealFiles:
         if csv_file.exists():
             with open(csv_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.csv", f, "text/csv")}
                 )
                 
@@ -330,7 +330,7 @@ class TestRealFiles:
         if py_file.exists():
             with open(py_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.py", f, "text/x-python")}
                 )
                 
@@ -351,7 +351,7 @@ class TestRealFiles:
         if html_file.exists():
             with open(html_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.html", f, "text/html")}
                 )
                 
@@ -370,7 +370,7 @@ class TestRealFiles:
         if xml_file.exists():
             with open(xml_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.xml", f, "application/xml")}
                 )
                 
@@ -389,7 +389,7 @@ class TestRealFiles:
         if yaml_file.exists():
             with open(yaml_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.yaml", f, "application/x-yaml")}
                 )
                 
@@ -415,7 +415,7 @@ class TestRealFiles:
         if jpg_file.exists():
             with open(jpg_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.jpg", f, "image/jpeg")}
                 )
                 
@@ -443,7 +443,7 @@ class TestRealFiles:
         if pdf_file.exists():
             with open(pdf_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.pdf", f, "application/pdf")}
                 )
                 
@@ -472,7 +472,7 @@ class TestRealFiles:
         if docx_file.exists():
             with open(docx_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
                 )
                 
@@ -500,7 +500,7 @@ class TestRealFiles:
         if xlsx_file.exists():
             with open(xlsx_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
                 )
                 
@@ -522,7 +522,7 @@ class TestRealFiles:
         if bsl_file.exists():
             with open(bsl_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.bsl", f, "text/plain")}
                 )
                 
@@ -544,7 +544,7 @@ class TestRealFiles:
         if os_file.exists():
             with open(os_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.os", f, "text/plain")}
                 )
                 
@@ -574,7 +574,7 @@ class TestRealFiles:
             if file_path.exists():
                 with open(file_path, "rb") as f:
                     response = test_client.post(
-                        "/v1/extract/",
+                        "/v1/extract/file",
                         files={"file": (filename, f, content_type)}
                     )
                     
@@ -592,7 +592,7 @@ class TestRealFiles:
         if docx_file.exists():
             with open(docx_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
                 )
                 
@@ -645,7 +645,7 @@ class TestRealFiles:
         if cyrillic_file.exists():
             with open(cyrillic_file, "rb") as f:
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("тест.md", f, "text/markdown")}
                 )
                 
@@ -680,7 +680,7 @@ class TestPerformance:
         def make_request():
             test_content = "Тестовый контент для проверки производительности"
             response = test_client.post(
-                "/v1/extract/",
+                "/v1/extract/file",
                 files={"file": ("test.txt", test_content.encode(), "text/plain")}
             )
             results.append(response.status_code)
@@ -706,7 +706,7 @@ class TestPerformance:
         large_content = "Большой текстовый файл для тестирования производительности.\n" * 10000
         
         response = test_client.post(
-            "/v1/extract/",
+            "/v1/extract/file",
             files={"file": ("large.txt", large_content.encode(), "text/plain")}
         )
         
@@ -726,7 +726,7 @@ class TestPerformance:
         
         start_time = time.time()
         response = test_client.post(
-            "/v1/extract/",
+            "/v1/extract/file",
             files={"file": ("test.txt", test_content.encode(), "text/plain")}
         )
         end_time = time.time()
@@ -743,14 +743,14 @@ class TestErrorHandling:
     
     def test_malformed_request(self, test_client):
         """Тест неправильно сформированного запроса"""
-        response = test_client.post("/v1/extract/")
+        response = test_client.post("/v1/extract/file")
         
         assert response.status_code == 422  # Unprocessable Entity
     
     def test_missing_file(self, test_client):
         """Тест отсутствующего файла в запросе"""
         response = test_client.post(
-            "/v1/extract/",
+            "/v1/extract/file",
             data={"not_file": "some_data"}
         )
         
@@ -764,7 +764,7 @@ class TestErrorHandling:
     
     def test_invalid_method(self, test_client):
         """Тест неподдерживаемого HTTP метода"""
-        response = test_client.put("/v1/extract/")
+        response = test_client.put("/v1/extract/file")
         
         assert response.status_code == 405  # Method Not Allowed
     
@@ -779,7 +779,7 @@ class TestErrorHandling:
                 mock_extract.side_effect = RuntimeError("Server internal error")
                 
                 response = test_client.post(
-                    "/v1/extract/",
+                    "/v1/extract/file",
                     files={"file": ("test.txt", BytesIO(test_content), "text/plain")}
                 )
                 
@@ -802,7 +802,7 @@ class TestDocumentation:
         schema = response.json()
         assert "openapi" in schema
         assert "paths" in schema
-        assert "/v1/extract/" in schema["paths"]
+        assert "/v1/extract/file" in schema["paths"]
     
     def test_swagger_ui(self, test_client):
         """Тест Swagger UI"""

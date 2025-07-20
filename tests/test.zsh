@@ -213,7 +213,7 @@ get_api_info() {
 get_supported_formats() {
     log_message "INFO" "Получение поддерживаемых форматов"
     
-    local response=$(send_http_request "GET" "/v1/supported-formats/")
+    local response=$(send_http_request "GET" "/v1/supported-formats")
     local http_code=$(echo "$response" | jq -r '.http_code')
     
     if [[ "$http_code" == "200" ]]; then

@@ -119,7 +119,7 @@ make prod
 curl http://localhost:7555/health
 
 # Получение поддерживаемых форматов
-curl http://localhost:7555/v1/supported-formats/
+curl http://localhost:7555/v1/supported-formats
 ```
 
 ## Использование API
@@ -136,19 +136,19 @@ curl http://localhost:7555/
 curl http://localhost:7555/health
 ```
 
-#### `GET /v1/supported-formats/` - Поддерживаемые форматы
+#### `GET /v1/supported-formats` - Поддерживаемые форматы
 ```bash
-curl http://localhost:7555/v1/supported-formats/
+curl http://localhost:7555/v1/supported-formats
 ```
 
-#### `POST /v1/extract/` - Извлечение текста
+#### `POST /v1/extract/file` - Извлечение текста
 ```bash
 curl -X POST \
   -F "file=@document.pdf" \
-  http://localhost:7555/v1/extract/
+  http://localhost:7555/v1/extract/file
 ```
 
-#### `POST /v1/extract-base64/` - Извлечение текста из base64-файла
+#### `POST /v1/extract/base64` - Извлечение текста из base64-файла
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \
@@ -156,7 +156,7 @@ curl -X POST \
     "encoded_base64_file": "0J/RgNC40LLQtdGCINGN0YLQviDRgtC10LrRgdGCIQ==",
     "filename": "document.txt"
   }' \
-  http://localhost:7555/v1/extract-base64/
+  http://localhost:7555/v1/extract/base64
 ```
 
 ### Примеры ответов
@@ -221,12 +221,12 @@ curl -X POST \
 
 ### Выбор эндпоинта
 
-**Используйте `/v1/extract/`** когда:
+**Используйте `/v1/extract/file`** когда:
 - Загружаете файлы напрямую через форму или drag&drop
 - Работаете с локальными файлами
 - Интегрируетесь с файловыми системами
 
-**Используйте `/v1/extract-base64/`** когда:
+**Используйте `/v1/extract/base64`** когда:
 - Файл уже закодирован в base64 в вашей системе
 - Интегрируетесь с API, которые передают файлы в base64
 - Работаете с микросервисной архитектурой через JSON
@@ -664,10 +664,10 @@ make status
 curl http://localhost:7555/health
 
 # Проверка поддерживаемых форматов
-curl http://localhost:7555/v1/supported-formats/
+curl http://localhost:7555/v1/supported-formats
 
 # Тестирование с простым файлом
-curl -X POST -F "file=@tests/test.txt" http://localhost:7555/v1/extract/
+curl -X POST -F "file=@tests/test.txt" http://localhost:7555/v1/extract/file
 ```
 
 ## Контрибуция
@@ -691,5 +691,5 @@ curl -X POST -F "file=@tests/test.txt" http://localhost:7555/v1/extract/
 
 ---
 
-**Версия**: 1.8.9
-**Разработчик**: ООО "СОФТОНИТ"
+**Версия**: 1.9.0
+**Разработчик**: Барилко Виталий

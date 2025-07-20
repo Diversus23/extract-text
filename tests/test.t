@@ -152,8 +152,8 @@ subtest 'Информация о API' => sub {
 
 # Тест 3: Проверка поддерживаемых форматов
 subtest 'Поддерживаемые форматы' => sub {
-    my $response = $ua->get(API_BASE_URL . '/v1/supported-formats/');
-    ok($response->is_success, 'Эндпоинт /v1/supported-formats/ доступен');
+    my $response = $ua->get(API_BASE_URL . '/v1/supported-formats');
+    ok($response->is_success, 'Эндпоинт /v1/supported-formats доступен');
     
     if ($response->is_success) {
         my $data = eval { $json->decode($response->content) };
@@ -277,7 +277,7 @@ test.t - Тесты для API извлечения текста
 
 =head1 AUTHOR
 
-ООО "СОФТОНИТ"
+Барилко Виталий
 
 =head1 VERSION
 
