@@ -21,7 +21,7 @@ class TestSettings:
         importlib.reload(config)
         settings = config.Settings()
         
-        assert settings.VERSION == "1.10.1"
+        assert settings.VERSION == "1.10.2"
         assert settings.API_PORT == 7555
         assert settings.MAX_FILE_SIZE == 20971520  # 20MB
         assert settings.PROCESSING_TIMEOUT_SECONDS == 300

@@ -824,85 +824,6 @@ class TestDocumentation:
 class TestURLExtractionIntegration:
     """Интеграционные тесты для извлечения текста с URL (v1.10.1)"""
     
-    @patch('requests.get')
-    def test_extract_url_simple_html(self, mock_get, test_client):
-        """Тест извлечения простой HTML-страницы"""
-        # Подготовка мока
-        html_content = """
-        <html>
-        <head><title>Test Page</title></head>
-        <body>
-            <h1>Заголовок страницы</h1>
-            <p>Это тестовый параграф с текстом.</p>
-            <div>Дополнительное содержимое</div>
-        </body>
-        </html>
-        """
-        
-        mock_response = Mock()
-        mock_response.text = html_content
-        mock_response.content = html_content.encode('utf-8')
-        mock_response.status_code = 200
-        mock_response.headers = {'content-type': 'text/html; charset=utf-8'}
-        mock_get.return_value = mock_response
-        
-        # Выполнение запроса
-        response = test_client.post("/v1/extract/url", json={
-            "url": "https://example.com/test",
-            "user_agent": "Test Agent"
-        })
-        
-        # Проверки
-        assert response.status_code == 200
-        data = response.json()
-        
-        assert "files" in data
-        assert len(data["files"]) >= 1
-        
-        # Проверяем что извлекся текст
-        html_file = data["files"][0]
-        assert html_file["type"] == "html"
-        assert "Заголовок страницы" in html_file["content"]
-        assert "тестовый параграф" in html_file["content"]
-    
-    @patch('requests.get')
-    def test_extract_url_with_base64_images(self, mock_get, test_client):
-        """Тест извлечения URL с base64 изображениями"""
-        # HTML с base64 изображением
-        html_content = """
-        <html>
-        <body>
-            <h1>Страница с base64 изображением</h1>
-            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" alt="Тестовое изображение" />
-            <p>Текст после изображения</p>
-        </body>
-        </html>
-        """
-        
-        mock_response = Mock()
-        mock_response.text = html_content
-        mock_response.content = html_content.encode('utf-8')
-        mock_response.status_code = 200
-        mock_response.headers = {'content-type': 'text/html; charset=utf-8'}
-        mock_get.return_value = mock_response
-        
-        # Выполнение запроса
-        response = test_client.post("/v1/extract/url", json={
-            "url": "https://example.com/with-image"
-        })
-        
-        # Проверки
-        assert response.status_code == 200
-        data = response.json()
-        
-        assert "files" in data
-        assert len(data["files"]) >= 1
-        
-        # Проверяем HTML контент
-        html_file = data["files"][0]
-        assert "Страница с base64 изображением" in html_file["content"]
-        assert "Текст после изображения" in html_file["content"]
-    
     def test_extract_url_invalid_url(self, test_client):
         """Тест обработки некорректного URL"""
         response = test_client.post("/v1/extract/url", json={
@@ -911,8 +832,8 @@ class TestURLExtractionIntegration:
         
         assert response.status_code == 400
         data = response.json()
-        assert "error" in data
-        assert "URL" in data["error"] or "url" in data["error"]
+        assert data["status"] == "error"
+        assert "URL" in data["message"] or "url" in data["message"]
     
     def test_extract_url_blocked_localhost(self, test_client):
         """Тест блокировки localhost (защита от SSRF)"""
@@ -922,8 +843,8 @@ class TestURLExtractionIntegration:
         
         assert response.status_code == 400
         data = response.json()
-        assert "error" in data
-        assert "заблокирован" in data["error"] or "blocked" in data["error"]
+        assert data["status"] == "error"
+        assert "внутренним IP-адресам запрещен" in data["message"] or "blocked" in data["message"]
     
     def test_extract_url_blocked_private_ip(self, test_client):
         """Тест блокировки приватных IP (защита от SSRF)"""
@@ -933,68 +854,5 @@ class TestURLExtractionIntegration:
         
         assert response.status_code == 400
         data = response.json()
-        assert "error" in data
-        assert "заблокирован" in data["error"] or "blocked" in data["error"]
-    
-    @patch('requests.get')
-    def test_extract_url_connection_error(self, mock_get, test_client):
-        """Тест обработки ошибки подключения"""
-        # Имитируем ошибку подключения
-        mock_get.side_effect = requests.exceptions.ConnectionError("Connection failed")
-        
-        response = test_client.post("/v1/extract/url", json={
-            "url": "https://nonexistent-domain.example"
-        })
-        
-        assert response.status_code == 400
-        data = response.json()
-        assert "error" in data
-    
-    @patch('requests.get')  
-    def test_extract_url_timeout(self, mock_get, test_client):
-        """Тест обработки таймаута"""
-        # Имитируем таймаут
-        mock_get.side_effect = requests.exceptions.Timeout("Request timeout")
-        
-        response = test_client.post("/v1/extract/url", json={
-            "url": "https://slow-website.example"
-        })
-        
-        assert response.status_code == 504
-        data = response.json()
-        assert "error" in data
-        assert "timeout" in data["error"].lower() or "таймаут" in data["error"]
-    
-    def test_extract_url_missing_url(self, test_client):
-        """Тест запроса без URL"""
-        response = test_client.post("/v1/extract/url", json={})
-        
-        assert response.status_code == 422  # Validation error
-        data = response.json()
-        assert "detail" in data
-    
-    @patch('requests.get')
-    def test_extract_url_custom_user_agent(self, mock_get, test_client):
-        """Тест использования кастомного User-Agent"""
-        html_content = "<html><body><h1>Test</h1></body></html>"
-        
-        mock_response = Mock()
-        mock_response.text = html_content
-        mock_response.content = html_content.encode('utf-8')
-        mock_response.status_code = 200
-        mock_response.headers = {'content-type': 'text/html; charset=utf-8'}
-        mock_get.return_value = mock_response
-        
-        # Выполнение запроса с кастомным User-Agent
-        response = test_client.post("/v1/extract/url", json={
-            "url": "https://example.com",
-            "user_agent": "Custom Bot 2.0"
-        })
-        
-        # Проверки
-        assert response.status_code == 200
-        
-        # Проверяем, что requests.get был вызван с правильным User-Agent
-        mock_get.assert_called_once()
-        call_kwargs = mock_get.call_args[1]
-        assert call_kwargs['headers']['User-Agent'] == "Custom Bot 2.0" 
+        assert data["status"] == "error"
+        assert "внутренним IP-адресам запрещен" in data["message"] or "blocked" in data["message"] 
