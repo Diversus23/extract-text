@@ -360,7 +360,6 @@
     "max_images_per_page": 10,
     "web_page_timeout": 20,
     "image_download_timeout": 10,
-    "user_agent": "Custom Bot 2.0",
     "follow_redirects": true,
     "max_redirects": 3
   }
@@ -391,14 +390,14 @@
 * `image_download_timeout` (integer): Таймаут загрузки каждого изображения в секундах. По умолчанию: `15`
 
 **Сетевые настройки:**
-* `user_agent` (string): Пользовательский User-Agent (имеет приоритет над корневым `user_agent`)
 * `follow_redirects` (boolean): Следовать ли HTTP-редиректам. По умолчанию: `true`
 * `max_redirects` (integer): Максимальное количество редиректов (только для requests, не Playwright)
 
 **Приоритет настроек:**
 1. Параметры в `extraction_options` (высший приоритет)
-2. `user_agent` на корневом уровне
-3. Переменные окружения (по умолчанию)
+2. Переменные окружения (по умолчанию)
+
+**User-Agent:** Используется параметр `user_agent` на корневом уровне запроса.
 
 * **Успешный ответ (`HTTP 200 OK`):**
 ```json

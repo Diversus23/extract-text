@@ -199,8 +199,7 @@ curl -X POST \
       "max_scroll_attempts": 0,
       "process_images": true,
       "max_images_per_page": 5,
-      "web_page_timeout": 20,
-      "user_agent": "Custom Bot 1.0"
+      "web_page_timeout": 20
     }
   }' \
   http://localhost:7555/v1/extract/url
@@ -324,9 +323,10 @@ API теперь поддерживает гибкие настройки изв
 - `image_download_timeout`: Таймаут загрузки изображений в секундах (по умолчанию: `15`)
 
 **Сетевые настройки:**
-- `user_agent`: User-Agent (приоритет над корневым параметром)
 - `follow_redirects`: Следовать редиректам (по умолчанию: `true`)
 - `max_redirects`: Максимум редиректов (только для requests)
+
+**User-Agent:** Используется параметр `user_agent` на корневом уровне запроса.
 
 #### Примеры использования
 

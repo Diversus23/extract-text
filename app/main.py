@@ -31,41 +31,40 @@ text_extractor = TextExtractor()
 # Pydantic модели
 class Base64FileRequest(BaseModel):
     """Модель для запроса обработки base64-файла"""
-    encoded_base64_file: str = Field(..., description="Файл в кодировке base64")
-    filename: str = Field(..., description="Имя файла с расширением")
+    encoded_base64_file: str = Field("0J/RgNC40LLQtdGCINC80LjRgCEg0K3RgtC+INGC0LXRgdGCIGJhc2U2NArQntGH0LXQvdGMINC00LvQuNC90L3Ri9C5LCDRgSDQv9C10YDQtdC90L7RgdC+0Lwg0YHRgtGA0L7Qui4=", description="Файл в кодировке base64")
+    filename: str = Field("test.txt", description="Имя файла с расширением")
 
 
 class ExtractionOptions(BaseModel):
     """Настройки извлечения текста для веб-страниц (новое в v1.10.2)"""
     # JavaScript и рендеринг
-    enable_javascript: Optional[bool] = Field(None, description="Включить/выключить JavaScript рендеринг")
-    js_render_timeout: Optional[int] = Field(None, description="Таймаут JS-рендеринга в секундах")
-    web_page_delay: Optional[int] = Field(None, description="Задержка после загрузки JS в секундах")
+    enable_javascript: Optional[bool] = Field(True, description="Включить/выключить JavaScript рендеринг")
+    js_render_timeout: Optional[int] = Field(10, description="Таймаут JS-рендеринга в секундах")
+    web_page_delay: Optional[int] = Field(3, description="Задержка после загрузки JS в секундах")
     
     # Lazy Loading
-    enable_lazy_loading_wait: Optional[bool] = Field(None, description="Включить ожидание lazy loading")
-    max_scroll_attempts: Optional[int] = Field(None, description="Максимальное количество попыток скролла")
+    enable_lazy_loading_wait: Optional[bool] = Field(True, description="Включить ожидание lazy loading")
+    max_scroll_attempts: Optional[int] = Field(3, description="Максимальное количество попыток скролла")
     
     # Обработка изображений
-    process_images: Optional[bool] = Field(None, description="Обрабатывать ли изображения через OCR")
-    enable_base64_images: Optional[bool] = Field(None, description="Обрабатывать ли base64 изображения")
-    min_image_size_for_ocr: Optional[int] = Field(None, description="Минимальный размер изображения для OCR (пиксели)")
-    max_images_per_page: Optional[int] = Field(None, description="Максимальное количество изображений на странице")
+    process_images: Optional[bool] = Field(True, description="Обрабатывать ли изображения через OCR")
+    enable_base64_images: Optional[bool] = Field(True, description="Обрабатывать ли base64 изображения")
+    min_image_size_for_ocr: Optional[int] = Field(22500, description="Минимальный размер изображения для OCR (пиксели)")
+    max_images_per_page: Optional[int] = Field(20, description="Максимальное количество изображений на странице")
     
     # Таймауты
-    web_page_timeout: Optional[int] = Field(None, description="Таймаут загрузки страницы в секундах")
-    image_download_timeout: Optional[int] = Field(None, description="Таймаут загрузки изображений в секундах")
+    web_page_timeout: Optional[int] = Field(30, description="Таймаут загрузки страницы в секундах")
+    image_download_timeout: Optional[int] = Field(15, description="Таймаут загрузки изображений в секундах")
     
     # Сетевые настройки
-    user_agent: Optional[str] = Field(None, description="Пользовательский User-Agent")
-    follow_redirects: Optional[bool] = Field(None, description="Следовать ли редиректам")
-    max_redirects: Optional[int] = Field(None, description="Максимальное количество редиректов")
+    follow_redirects: Optional[bool] = Field(True, description="Следовать ли редиректам")
+    max_redirects: Optional[int] = Field(5, description="Максимальное количество редиректов")
 
 
 class URLRequest(BaseModel):
     """Модель для запроса обработки веб-страницы (обновлено в v1.10.2)"""
-    url: str = Field(..., description="URL веб-страницы для извлечения текста")
-    user_agent: Optional[str] = Field(None, description="Пользовательский User-Agent (опционально, для обратной совместимости)")
+    url: str = Field("https://habr.com/ru/companies/softonit/articles/911520/", description="URL веб-страницы для извлечения текста")
+    user_agent: Optional[str] = Field("Text Extraction Bot 1.0", description="Пользовательский User-Agent (опционально, для обратной совместимости)")
     extraction_options: Optional[ExtractionOptions] = Field(None, description="Настройки извлечения текста (опционально)")
 
 
@@ -444,12 +443,8 @@ async def extract_text_from_url(request: URLRequest):
     
     logger.info(f"Начало извлечения текста с URL: {url}")
     
-    # Определяем user_agent с учетом приоритета
-    user_agent = None
-    if request.extraction_options and request.extraction_options.user_agent:
-        user_agent = request.extraction_options.user_agent
-    elif request.user_agent:
-        user_agent = request.user_agent
+    # Используем user_agent из корневого уровня
+    user_agent = request.user_agent
     
     try:
         # Извлечение текста в пуле потоков с таймаутом
