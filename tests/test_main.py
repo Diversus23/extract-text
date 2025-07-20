@@ -838,10 +838,10 @@ class TestURLExtractionEndpoint:
             json={"url": "https://nonexistent-domain-12345.com"}
         )
         
-        assert response.status_code == 404
+        assert response.status_code == 504
         data = response.json()
         assert data["status"] == "error"
-        assert "Не удалось загрузить страницу" in data["message"]
+        assert "таймаут" in data["message"].lower() or "timeout" in data["message"].lower()
     
     @patch('app.extractors.TextExtractor.extract_from_url')
     def test_extract_url_timeout_error(self, mock_extract, test_client):

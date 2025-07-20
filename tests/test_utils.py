@@ -264,4 +264,97 @@ class TestFormatSupportFunctions:
         # Проверяем реальное поведение с кириллицей
         result = safe_filename("файл.txt")
         assert result is not None
+        assert len(result) > 0
+
+
+@pytest.mark.unit
+class TestWebUtilityFunctions:
+    """Тесты для новых утилитарных функций веб-экстракции (v1.10.1)"""
+    
+    def test_get_extension_from_mime_jpg(self):
+        """Тест получения расширения из MIME-типа для JPEG"""
+        from app.utils import get_extension_from_mime
+        from app.config import settings
+        
+        # Тестируем JPEG
+        assert get_extension_from_mime("image/jpeg", settings.SUPPORTED_FORMATS) == "jpg"
+        assert get_extension_from_mime("image/jpg", settings.SUPPORTED_FORMATS) == "jpg"
+        
+    def test_get_extension_from_mime_png(self):
+        """Тест получения расширения из MIME-типа для PNG"""
+        from app.utils import get_extension_from_mime
+        from app.config import settings
+        
+        assert get_extension_from_mime("image/png", settings.SUPPORTED_FORMATS) == "png"
+        
+    def test_get_extension_from_mime_webp(self):
+        """Тест получения расширения из MIME-типа для WebP"""
+        from app.utils import get_extension_from_mime
+        from app.config import settings
+        
+        assert get_extension_from_mime("image/webp", settings.SUPPORTED_FORMATS) == "webp"
+        
+    def test_get_extension_from_mime_unsupported(self):
+        """Тест для неподдерживаемого MIME-типа"""
+        from app.utils import get_extension_from_mime
+        from app.config import settings
+        
+        assert get_extension_from_mime("image/svg+xml", settings.SUPPORTED_FORMATS) is None
+        assert get_extension_from_mime("application/octet-stream", settings.SUPPORTED_FORMATS) is None
+        assert get_extension_from_mime("", settings.SUPPORTED_FORMATS) is None
+        
+    def test_extract_mime_from_base64_data_uri_jpg(self):
+        """Тест извлечения MIME-типа из base64 data URI для JPEG"""
+        from app.utils import extract_mime_from_base64_data_uri
+        
+        data_uri = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD..."
+        assert extract_mime_from_base64_data_uri(data_uri) == "image/jpeg"
+        
+    def test_extract_mime_from_base64_data_uri_png(self):
+        """Тест извлечения MIME-типа из base64 data URI для PNG"""
+        from app.utils import extract_mime_from_base64_data_uri
+        
+        data_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        assert extract_mime_from_base64_data_uri(data_uri) == "image/png"
+        
+    def test_extract_mime_from_base64_data_uri_invalid(self):
+        """Тест для некорректного data URI"""
+        from app.utils import extract_mime_from_base64_data_uri
+        
+        assert extract_mime_from_base64_data_uri("invalid-data-uri") is None
+        assert extract_mime_from_base64_data_uri("data:text/plain;base64,SGVsbG8=") is None  # не изображение
+        assert extract_mime_from_base64_data_uri("") is None
+        
+    def test_decode_base64_image_valid(self):
+        """Тест декодирования валидного base64 изображения"""
+        from app.utils import decode_base64_image
+        
+        # Полный data URI с 1x1 PNG
+        data_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        
+        result = decode_base64_image(data_uri)
+        assert result is not None
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+        
+    def test_decode_base64_image_invalid(self):
+        """Тест декодирования некорректного base64"""
+        from app.utils import decode_base64_image
+        
+        assert decode_base64_image("invalid-base64!@#$") is None
+        assert decode_base64_image("") is None
+        assert decode_base64_image("notbase64") is None
+        # Обычная base64 строка без data URI префикса должна вернуть None
+        assert decode_base64_image("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==") is None
+        
+    def test_decode_base64_image_from_data_uri(self):
+        """Тест декодирования base64 из полного data URI"""
+        from app.utils import decode_base64_image
+        
+        # Полный data URI с 1x1 PNG
+        data_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        
+        result = decode_base64_image(data_uri)
+        assert result is not None
+        assert isinstance(result, bytes)
         assert len(result) > 0 

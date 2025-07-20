@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     libreoffice \
     antiword \
     libmagic1 \
+    curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Устанавливаем рабочую директорию
@@ -21,6 +23,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Устанавливаем системные зависимости для Playwright от root
+RUN playwright install-deps chromium
+
 # Копируем код приложения
 COPY ./app /code/app
 
@@ -29,7 +34,10 @@ RUN groupadd -r appuser && useradd -r -g appuser -m appuser && \
     chown -R appuser:appuser /code && \
     mkdir -p /home/appuser/.cache && \
     chown -R appuser:appuser /home/appuser
+
+# Переключаемся на пользователя и устанавливаем Playwright браузер
 USER appuser
+RUN playwright install chromium
 
 # Переменные окружения
 ENV PYTHONPATH=/code

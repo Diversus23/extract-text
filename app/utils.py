@@ -581,3 +581,115 @@ def get_memory_usage() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Ошибка при получении информации о памяти: {e}")
         return {}
+
+
+def get_extension_from_mime(content_type: str, supported_formats: dict) -> Optional[str]:
+    """
+    Определение расширения файла по MIME-типу с учетом поддерживаемых форматов
+    
+    Args:
+        content_type: MIME-тип из заголовка Content-Type
+        supported_formats: Словарь поддерживаемых форматов из settings.SUPPORTED_FORMATS
+        
+    Returns:
+        Optional[str]: Расширение файла или None, если тип не поддерживается
+    """
+    if not content_type:
+        return None
+    
+    content_type = content_type.lower().strip()
+    
+    # Получаем список поддерживаемых расширений изображений
+    supported_image_formats = supported_formats.get("images_ocr", [])
+    
+    # Маппинг MIME-типов к расширениям
+    mime_mapping = {
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp',
+        'image/gif': 'gif',
+        'image/bmp': 'bmp',
+        'image/tiff': 'tiff',
+        'image/tif': 'tif'
+    }
+    
+    # Ищем соответствие MIME-типа среди поддерживаемых форматов
+    for mime, ext in mime_mapping.items():
+        if mime in content_type and ext in supported_image_formats:
+            return ext
+    
+    # Если точного соответствия нет, проверяем частичные совпадения
+    if 'jpeg' in content_type or 'jpg' in content_type:
+        return 'jpg' if 'jpg' in supported_image_formats else None
+    elif 'png' in content_type:
+        return 'png' if 'png' in supported_image_formats else None
+    elif 'webp' in content_type:
+        return 'webp' if 'webp' in supported_image_formats else None
+    elif 'gif' in content_type:
+        return 'gif' if 'gif' in supported_image_formats else None
+    elif 'bmp' in content_type:
+        return 'bmp' if 'bmp' in supported_image_formats else None
+    elif 'tiff' in content_type or 'tif' in content_type:
+        return 'tiff' if 'tiff' in supported_image_formats else 'tif' if 'tif' in supported_image_formats else None
+    
+    # Если MIME-тип не поддерживается, возвращаем None
+    return None
+
+
+def decode_base64_image(base64_data: str) -> Optional[bytes]:
+    """
+    Декодирование base64 изображения из data URI
+    
+    Args:
+        base64_data: Строка в формате data:image/jpeg;base64,/9j/4AAQ...
+        
+    Returns:
+        Optional[bytes]: Декодированные байты изображения или None при ошибке
+    """
+    try:
+        # Проверяем формат data URI
+        if not base64_data.startswith('data:image/'):
+            return None
+        
+        # Извлекаем base64 часть после запятой
+        if ',' not in base64_data:
+            return None
+            
+        base64_part = base64_data.split(',', 1)[1]
+        
+        # Декодируем base64
+        import base64
+        return base64.b64decode(base64_part)
+        
+    except Exception as e:
+        logger.warning(f"Ошибка декодирования base64 изображения: {str(e)}")
+        return None
+
+
+def extract_mime_from_base64_data_uri(data_uri: str) -> Optional[str]:
+    """
+    Извлечение MIME-типа из data URI
+    
+    Args:
+        data_uri: Строка в формате data:image/jpeg;base64,/9j/4AAQ...
+        
+    Returns:
+        Optional[str]: MIME-тип (например, 'image/jpeg') или None при ошибке
+    """
+    try:
+        if not data_uri.startswith('data:'):
+            return None
+            
+        # Извлекаем часть до точки с запятой
+        if ';' not in data_uri:
+            return None
+            
+        mime_part = data_uri.split(';')[0]
+        mime_type = mime_part.replace('data:', '')
+        
+        return mime_type if mime_type.startswith('image/') else None
+        
+    except Exception as e:
+        logger.warning(f"Ошибка извлечения MIME-типа из data URI: {str(e)}")
+        return None

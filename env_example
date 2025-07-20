@@ -110,4 +110,52 @@ BLOCKED_IP_RANGES="127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0
 
 # Заблокированные хосты (hostname-based блокировка)
 # Блокируются: localhost, Docker хосты, IPv6 loopback имена
-BLOCKED_HOSTNAMES="localhost,host.docker.internal,ip6-localhost,ip6-loopback" 
+BLOCKED_HOSTNAMES="localhost,host.docker.internal,ip6-localhost,ip6-loopback"
+
+# ===========================================
+# НАСТРОЙКИ ВЕБ-ЭКСТРАКТОРА v1.10.1 (PLAYWRIGHT)
+# ===========================================
+
+# Включить поддержку base64 изображений в веб-страницах
+# true - обрабатывать изображения в формате data:image/...;base64,... (по умолчанию)
+# false - игнорировать base64 изображения
+ENABLE_BASE64_IMAGES=true
+
+# Задержка после загрузки JavaScript в секундах
+# Время ожидания завершения JS-рендеринга после основной загрузки страницы
+WEB_PAGE_DELAY=3
+
+# Включить ожидание lazy loading изображений
+# true - автоматический скролл страницы для активации ленивой загрузки (по умолчанию)
+# false - не скроллить страницу
+ENABLE_LAZY_LOADING_WAIT=true
+
+# Отдельный таймаут для JS-рендеринга в секундах
+# Время ожидания стабилизации сетевой активности при выполнении JavaScript
+JS_RENDER_TIMEOUT=10
+
+# Максимальное количество попыток скролла для lazy loading
+# Защита от бесконечных страниц
+MAX_SCROLL_ATTEMPTS=3
+
+# ===========================================
+# РЕКОМЕНДАЦИИ ПО НАСТРОЙКЕ PLAYWRIGHT
+# ===========================================
+
+# Для быстрой обработки без JS (минимальные ресурсы):
+# ENABLE_JAVASCRIPT=false
+# ENABLE_BASE64_IMAGES=true
+# ENABLE_LAZY_LOADING_WAIT=false
+
+# Для полной обработки с JavaScript (требует больше ресурсов):
+ENABLE_JAVASCRIPT=true
+ENABLE_BASE64_IMAGES=true
+ENABLE_LAZY_LOADING_WAIT=true
+WEB_PAGE_DELAY=5
+JS_RENDER_TIMEOUT=15
+MAX_SCROLL_ATTEMPTS=5
+
+# Для обработки сложных SPA приложений:
+# ENABLE_JAVASCRIPT=true
+# WEB_PAGE_DELAY=10
+# JS_RENDER_TIMEOUT=20 

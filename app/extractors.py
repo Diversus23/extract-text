@@ -102,6 +102,12 @@ except ImportError:
     urlparse = None
     ipaddress = None
 
+# Playwright для JS-рендеринга (новое в v1.10.1)
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    sync_playwright = None
+
 from app.config import settings
 from app.utils import get_file_extension, is_supported_format, is_archive_format
 
@@ -1721,14 +1727,207 @@ class TextExtractor:
     
     # Веб-экстракция (новое в v1.10.0)
     
+    def _extract_page_with_playwright(self, url: str, user_agent: Optional[str] = None) -> tuple[str, str]:
+        """
+        Извлечение HTML контента страницы с помощью Playwright (с поддержкой JS)
+        
+        Args:
+            url: URL страницы
+            user_agent: Пользовательский User-Agent
+            
+        Returns:
+            tuple[str, str]: (html_content, final_url)
+        """
+        if not sync_playwright:
+            raise ValueError("Playwright не установлен")
+        
+        html_content = ""
+        final_url = url
+        
+        with sync_playwright() as p:
+            # Запускаем Chromium (установлен в Dockerfile)
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--disable-extensions',
+                    '--disable-web-security'  # для обхода CORS при локальной разработке
+                ]
+            )
+            
+            try:
+                context = browser.new_context(
+                    user_agent=user_agent or settings.DEFAULT_USER_AGENT,
+                    viewport={'width': 1280, 'height': 720}
+                )
+                
+                page = context.new_page()
+                
+                # Устанавливаем таймауты
+                page.set_default_timeout(settings.WEB_PAGE_TIMEOUT * 1000)  # в миллисекундах
+                
+                # Переходим на страницу
+                logger.info(f"Загрузка страницы с Playwright: {url}")
+                response = page.goto(url, wait_until='domcontentloaded')
+                
+                if not response.ok:
+                    raise ValueError(f"HTTP {response.status}: {response.status_text}")
+                
+                final_url = page.url
+                
+                # Ждем дополнительной загрузки JS (если включено)
+                if settings.ENABLE_JAVASCRIPT:
+                    logger.info(f"Ожидание JS-рендеринга ({settings.JS_RENDER_TIMEOUT}s)...")
+                    
+                    # Ждем загрузки сети
+                    try:
+                        page.wait_for_load_state('networkidle', timeout=settings.JS_RENDER_TIMEOUT * 1000)
+                    except Exception as e:
+                        logger.warning(f"Таймаут ожидания сети: {str(e)}")
+                    
+                    # Обработка lazy loading с защитой от бесконечности
+                    if settings.ENABLE_LAZY_LOADING_WAIT:
+                        self._safe_scroll_for_lazy_loading(page)
+                    
+                    # Дополнительная задержка для завершения JS
+                    import time
+                    time.sleep(settings.WEB_PAGE_DELAY)
+                
+                # Получаем финальный HTML
+                html_content = page.content()
+                logger.info(f"HTML получен, размер: {len(html_content)} символов")
+                
+            finally:
+                browser.close()
+        
+        return html_content, final_url
+    
+    def _safe_scroll_for_lazy_loading(self, page) -> None:
+        """
+        Безопасный скролл страницы для активации lazy loading с защитой от бесконечности
+        
+        Args:
+            page: Playwright page объект
+        """
+        try:
+            logger.info("Начинаем безопасный скролл для активации lazy loading...")
+            
+            # Получаем начальную высоту страницы
+            initial_height = page.evaluate("document.body.scrollHeight")
+            logger.info(f"Начальная высота страницы: {initial_height}px")
+            
+            scroll_attempts = 0
+            last_height = initial_height
+            stable_count = 0  # Счетчик стабильных измерений
+            
+            while scroll_attempts < settings.MAX_SCROLL_ATTEMPTS:
+                scroll_attempts += 1
+                logger.info(f"Попытка скролла {scroll_attempts}/{settings.MAX_SCROLL_ATTEMPTS}")
+                
+                # Плавный скролл до конца страницы
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                
+                # Ждем небольшую задержку для загрузки контента
+                import time
+                time.sleep(1)
+                
+                # Проверяем новую высоту
+                new_height = page.evaluate("document.body.scrollHeight")
+                logger.info(f"Новая высота страницы: {new_height}px")
+                
+                # Если высота не изменилась, увеличиваем счетчик стабильности
+                if new_height == last_height:
+                    stable_count += 1
+                    logger.info(f"Высота стабильна, счетчик: {stable_count}")
+                    
+                    # Если высота стабильна уже 2 раза подряд - прекращаем
+                    if stable_count >= 2:
+                        logger.info("Высота страницы стабилизировалась, завершаем скролл")
+                        break
+                else:
+                    # Высота изменилась, сбрасываем счетчик
+                    stable_count = 0
+                    last_height = new_height
+                
+                # Дополнительная проверка: если страница выросла слишком сильно, прекращаем
+                if new_height > initial_height * 10:  # Если страница выросла в 10 раз
+                    logger.warning("Страница выросла подозрительно сильно, возможно бесконечный скролл")
+                    break
+            
+            # Возвращаемся в начало страницы
+            page.evaluate("window.scrollTo(0, 0)")
+            logger.info("Скролл завершен, возвращены в начало страницы")
+            
+        except Exception as e:
+            logger.warning(f"Ошибка при скролле для lazy loading: {str(e)}")
+    
     def extract_from_url(self, url: str, user_agent: Optional[str] = None) -> List[Dict[str, Any]]:
         """Извлечение текста с веб-страницы (синхронный метод)"""
-        if not requests:
-            raise ValueError("requests library not available for web extraction")
         
         # Проверка безопасности URL
         if not self._is_safe_url(url):
             raise ValueError("Access to internal IP addresses is prohibited for security reasons")
+        
+        html_content = ""
+        final_url = url
+        
+        # Выбираем метод загрузки в зависимости от настроек JavaScript
+        if settings.ENABLE_JAVASCRIPT and sync_playwright:
+            logger.info("Использую Playwright для загрузки страницы с JS")
+            try:
+                html_content, final_url = self._extract_page_with_playwright(url, user_agent)
+            except Exception as e:
+                logger.warning(f"Ошибка Playwright: {str(e)}, переключаюсь на requests")
+                # Fallback на requests при ошибке Playwright
+                html_content, final_url = self._extract_page_with_requests(url, user_agent)
+        else:
+            if settings.ENABLE_JAVASCRIPT and not sync_playwright:
+                logger.warning("JavaScript включен, но Playwright не установлен, использую requests")
+            logger.info("Использую requests для загрузки страницы")
+            html_content, final_url = self._extract_page_with_requests(url, user_agent)
+        
+        try:
+            # Извлечение текста из HTML
+            page_text = self._extract_text_from_html(html_content)
+            
+            # Поиск и обработка изображений
+            image_texts = self._extract_images_from_html(html_content, final_url)
+            
+            # Формирование результата
+            results = []
+            
+            # Добавляем основной контент страницы
+            results.append({
+                "filename": "page_content",
+                "path": final_url,
+                "size": len(html_content.encode('utf-8')),
+                "type": "html",
+                "text": page_text
+            })
+            
+            # Добавляем тексты с изображений
+            results.extend(image_texts)
+            
+            return results
+            
+        except Exception as e:
+            raise ValueError(f"Error processing web page: {str(e)}")
+    
+    def _extract_page_with_requests(self, url: str, user_agent: Optional[str] = None) -> tuple[str, str]:
+        """
+        Извлечение HTML контента страницы с помощью requests (без JS)
+        
+        Args:
+            url: URL страницы
+            user_agent: Пользовательский User-Agent
+            
+        Returns:
+            tuple[str, str]: (html_content, final_url)
+        """
+        if not requests:
+            raise ValueError("requests library not available for web extraction")
         
         # Установка User-Agent
         headers = {
@@ -1753,29 +1952,10 @@ class TextExtractor:
             # Автоопределение кодировки
             response.encoding = response.apparent_encoding or 'utf-8'
             html_content = response.text
+            final_url = response.url
             
-            # Извлечение текста из HTML
-            page_text = self._extract_text_from_html(html_content)
-            
-            # Поиск и обработка изображений
-            image_texts = self._extract_images_from_html(html_content, url)
-            
-            # Формирование результата
-            results = []
-            
-            # Добавляем основной контент страницы
-            results.append({
-                "filename": "page_content",
-                "path": url,
-                "size": len(html_content.encode('utf-8')),
-                "type": "html",
-                "text": page_text
-            })
-            
-            # Добавляем тексты с изображений
-            results.extend(image_texts)
-            
-            return results
+            logger.info(f"HTML получен через requests, размер: {len(html_content)} символов")
+            return html_content, final_url
             
         except requests.RequestException as e:
             if "timeout" in str(e).lower():
@@ -1784,8 +1964,6 @@ class TextExtractor:
                 raise ValueError(f"Connection error: {str(e)}")
             else:
                 raise ValueError(f"Failed to load page: {str(e)}")
-        except Exception as e:
-            raise ValueError(f"Error processing web page: {str(e)}")
     
     def _is_safe_url(self, url: str) -> bool:
         """Проверка безопасности URL (защита от SSRF)"""
@@ -1915,29 +2093,52 @@ class TextExtractor:
             # Ограничиваем количество изображений
             img_tags = img_tags[:settings.MAX_IMAGES_PER_PAGE]
             
-            # Параллельная обработка изображений (по 2 одновременно)
+            # Разделяем изображения на base64 и URL
+            base64_images = []
+            url_images = []
+            
+            for img_tag in img_tags:
+                img_src = img_tag.get('src', '')
+                if img_src.startswith('data:image/') and settings.ENABLE_BASE64_IMAGES:
+                    base64_images.append(img_tag)
+                else:
+                    url_images.append(img_tag)
+            
+            logger.info(f"Найдено изображений: {len(url_images)} URL, {len(base64_images)} base64")
+            
             results = []
             
-            # Обработаем изображения группами по 2
-            for i in range(0, len(img_tags), 2):
-                batch = img_tags[i:i+2]
-                batch_results = []
-                
-                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-                    futures = []
-                    for img_tag in batch:
-                        future = executor.submit(self._process_single_image, img_tag, base_url)
-                        futures.append(future)
+            # Обработка base64 изображений (синхронно, так как нет сетевых запросов)
+            if base64_images:
+                for img_tag in base64_images:
+                    try:
+                        result = self._process_base64_image(img_tag)
+                        if result:
+                            results.append(result)
+                    except Exception as e:
+                        logger.warning(f"Error processing base64 image: {str(e)}")
+            
+            # Обработка URL изображений (параллельно, группами по 2)
+            if url_images:
+                for i in range(0, len(url_images), 2):
+                    batch = url_images[i:i+2]
+                    batch_results = []
                     
-                    for future in concurrent.futures.as_completed(futures):
-                        try:
-                            result = future.result(timeout=settings.IMAGE_DOWNLOAD_TIMEOUT + 5)
-                            if result:
-                                batch_results.append(result)
-                        except Exception as e:
-                            logger.warning(f"Error processing image: {str(e)}")
-                
-                results.extend(batch_results)
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                        futures = []
+                        for img_tag in batch:
+                            future = executor.submit(self._process_single_image, img_tag, base_url)
+                            futures.append(future)
+                        
+                        for future in concurrent.futures.as_completed(futures):
+                            try:
+                                result = future.result(timeout=settings.IMAGE_DOWNLOAD_TIMEOUT + 5)
+                                if result:
+                                    batch_results.append(result)
+                            except Exception as e:
+                                logger.warning(f"Error processing image: {str(e)}")
+                    
+                    results.extend(batch_results)
             
             return results
             
@@ -2004,20 +2205,20 @@ class TextExtractor:
                     return None
                 
                 # Извлекаем имя файла из URL
+                from .utils import get_extension_from_mime
+                
                 filename = os.path.basename(urlparse(img_url).path) or "image"
                 if '.' not in filename:
-                    # Определяем расширение по MIME-типу
+                    # Определяем расширение по MIME-типу через утилиту
                     content_type = response.headers.get('content-type', '').lower()
-                    if 'jpeg' in content_type or 'jpg' in content_type:
-                        filename += '.jpg'
-                    elif 'png' in content_type:
-                        filename += '.png'
-                    elif 'webp' in content_type:
-                        filename += '.webp'
-                    elif 'gif' in content_type:
-                        filename += '.gif'
+                    extension = get_extension_from_mime(content_type, settings.SUPPORTED_FORMATS)
+                    
+                    if extension:
+                        filename += f'.{extension}'
                     else:
-                        filename += '.jpg'  # по умолчанию
+                        # Если MIME-тип не поддерживается, игнорируем изображение
+                        logger.warning(f"Unsupported image MIME type: {content_type}")
+                        return None
                 
                 return {
                     "filename": filename,
@@ -2029,4 +2230,70 @@ class TextExtractor:
                 
         except Exception as e:
             logger.warning(f"Error processing image {img_tag.get('src', '')}: {str(e)}")
+            return None
+
+    def _process_base64_image(self, img_tag) -> Optional[Dict[str, Any]]:
+        """Обработка base64 изображения из data URI"""
+        try:
+            from .utils import decode_base64_image, extract_mime_from_base64_data_uri, get_extension_from_mime
+            
+            img_src = img_tag.get('src', '')
+            logger.info(f"Processing base64 image: {img_src[:50]}...")
+            
+            if not img_src.startswith('data:image/'):
+                logger.warning(f"Invalid base64 image format")
+                return None
+            
+            # Извлекаем MIME-тип
+            mime_type = extract_mime_from_base64_data_uri(img_src)
+            if not mime_type:
+                logger.warning(f"Could not extract MIME type from base64 image")
+                return None
+            
+            # Определяем расширение файла
+            extension = get_extension_from_mime(mime_type, settings.SUPPORTED_FORMATS)
+            if not extension:
+                logger.warning(f"Unsupported image MIME type: {mime_type}")
+                return None
+            
+            # Декодируем base64 изображение
+            img_content = decode_base64_image(img_src)
+            if not img_content:
+                logger.warning(f"Failed to decode base64 image")
+                return None
+            
+            logger.info(f"Base64 image decoded, size: {len(img_content)} bytes")
+            
+            # Открываем изображение для проверки размеров
+            with Image.open(io.BytesIO(img_content)) as img:
+                width, height = img.size
+                logger.info(f"Base64 image dimensions: {width}x{height} = {width * height} pixels (min required: {settings.MIN_IMAGE_SIZE_FOR_OCR})")
+                
+                # Проверяем минимальный размер
+                if width * height < settings.MIN_IMAGE_SIZE_FOR_OCR:
+                    logger.warning(f"Base64 image too small for OCR: {width * height} < {settings.MIN_IMAGE_SIZE_FOR_OCR}")
+                    return None
+                
+                # OCR изображения
+                logger.info(f"Starting OCR for base64 image")
+                text = self._safe_tesseract_ocr(img)
+                logger.info(f"OCR result length: {len(text) if text else 0} characters")
+                
+                if not text or not text.strip():
+                    logger.warning(f"No text found in base64 image")
+                    return None
+                
+                # Формируем имя файла
+                filename = f"base64_image.{extension}"
+                
+                return {
+                    "filename": filename,
+                    "path": f"data:image/{extension};base64,[base64_data]",
+                    "size": len(img_content),
+                    "type": extension,
+                    "text": text.strip()
+                }
+                
+        except Exception as e:
+            logger.warning(f"Error processing base64 image: {str(e)}")
             return None

@@ -21,7 +21,7 @@ class TestSettings:
         importlib.reload(config)
         settings = config.Settings()
         
-        assert settings.VERSION == "1.8.9"
+        assert settings.VERSION == "1.10.1"
         assert settings.API_PORT == 7555
         assert settings.MAX_FILE_SIZE == 20971520  # 20MB
         assert settings.PROCESSING_TIMEOUT_SECONDS == 300
@@ -157,4 +157,56 @@ class TestSettings:
             all_formats.extend(formats)
         
         # Проверяем, что нет дубликатов
-        assert len(all_formats) == len(set(all_formats)), "Найдены дублирующиеся форматы" 
+        assert len(all_formats) == len(set(all_formats)), "Найдены дублирующиеся форматы"
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_web_extractor_default_settings(self):
+        """Тест настроек веб-экстрактора по умолчанию"""
+        import importlib
+        from app import config
+        importlib.reload(config)
+        settings = config.Settings()
+        
+        # Настройки v1.10.0
+        assert settings.MIN_IMAGE_SIZE_FOR_OCR == 22500
+        assert settings.MAX_IMAGES_PER_PAGE == 20
+        assert settings.WEB_PAGE_TIMEOUT == 30
+        assert settings.IMAGE_DOWNLOAD_TIMEOUT == 15
+        assert settings.DEFAULT_USER_AGENT == "Text Extraction Bot 1.0"
+        assert settings.ENABLE_JAVASCRIPT == False
+        
+        # Настройки v1.10.1 (Playwright)
+        assert settings.ENABLE_BASE64_IMAGES == True
+        assert settings.WEB_PAGE_DELAY == 3
+        assert settings.ENABLE_LAZY_LOADING_WAIT == True
+        assert settings.JS_RENDER_TIMEOUT == 10
+        assert settings.MAX_SCROLL_ATTEMPTS == 3
+
+    @patch.dict(os.environ, {
+        "ENABLE_JAVASCRIPT": "true",
+        "ENABLE_BASE64_IMAGES": "false",
+        "WEB_PAGE_DELAY": "5",
+        "JS_RENDER_TIMEOUT": "15",
+        "MAX_SCROLL_ATTEMPTS": "5"
+    })
+    def test_web_extractor_settings_override(self):
+        """Тест переопределения настроек веб-экстрактора"""
+        import importlib
+        from app import config
+        importlib.reload(config)
+        settings = config.Settings()
+        
+        assert settings.ENABLE_JAVASCRIPT == True
+        assert settings.ENABLE_BASE64_IMAGES == False
+        assert settings.WEB_PAGE_DELAY == 5
+        assert settings.JS_RENDER_TIMEOUT == 15
+        assert settings.MAX_SCROLL_ATTEMPTS == 5
+
+    @patch.dict(os.environ, {"MIN_IMAGE_SIZE_FOR_OCR": "10000"})
+    def test_min_image_size_override(self):
+        """Тест переопределения минимального размера изображения для OCR"""
+        import importlib
+        from app import config
+        importlib.reload(config)
+        settings = config.Settings()
+        assert settings.MIN_IMAGE_SIZE_FOR_OCR == 10000 

@@ -10,7 +10,7 @@ class Settings:
     """Настройки приложения"""
     
     # Основные настройки
-    VERSION: str = "1.10.0"
+    VERSION: str = "1.10.1"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # Настройки API
@@ -54,6 +54,13 @@ class Settings:
     IMAGE_DOWNLOAD_TIMEOUT: int = int(os.getenv("IMAGE_DOWNLOAD_TIMEOUT", "15"))  # секунды
     DEFAULT_USER_AGENT: str = os.getenv("DEFAULT_USER_AGENT", "Text Extraction Bot 1.0")
     ENABLE_JAVASCRIPT: bool = os.getenv("ENABLE_JAVASCRIPT", "false").lower() == "true"
+    
+    # Новые настройки веб-экстрактора (v1.10.1)
+    ENABLE_BASE64_IMAGES: bool = os.getenv("ENABLE_BASE64_IMAGES", "true").lower() == "true"
+    WEB_PAGE_DELAY: int = int(os.getenv("WEB_PAGE_DELAY", "3"))  # секунды задержки после загрузки JS
+    ENABLE_LAZY_LOADING_WAIT: bool = os.getenv("ENABLE_LAZY_LOADING_WAIT", "true").lower() == "true"
+    JS_RENDER_TIMEOUT: int = int(os.getenv("JS_RENDER_TIMEOUT", "10"))  # отдельный таймаут для JS-рендеринга
+    MAX_SCROLL_ATTEMPTS: int = int(os.getenv("MAX_SCROLL_ATTEMPTS", "3"))  # защита от бесконечного скролла
     
     # Заблокированные IP-диапазоны для защиты от SSRF
     BLOCKED_IP_RANGES: str = os.getenv(

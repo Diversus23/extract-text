@@ -371,4 +371,172 @@ if __name__ == "__main__":
         # Тестируем PDF файл
         pdf_content = b"%PDF-1.4"
         result = text_extractor._check_mime_type(pdf_content, "test.pdf")
-        assert result == True 
+        assert result == True
+
+
+@pytest.mark.unit
+class TestBase64ImageProcessing:
+    """Тесты для обработки base64 изображений (v1.10.1)"""
+    
+    @pytest.fixture
+    def text_extractor(self):
+        """Фикстура для создания экстрактора"""
+        from app.extractors import TextExtractor
+        return TextExtractor()
+    
+    def test_process_base64_image_valid_png(self, text_extractor):
+        """Тест обработки валидного base64 PNG изображения"""
+        # Простое 1x1 PNG изображение в base64
+        base64_data = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        
+        result = text_extractor._process_base64_image(base64_data)
+        
+        # Результат должен быть None из-за слишком маленького размера (1x1)
+        assert result is None
+    
+    def test_process_base64_image_invalid_data(self, text_extractor):
+        """Тест обработки некорректного base64 изображения"""
+        invalid_data = "data:image/png;base64,invalid-base64-data"
+        
+        result = text_extractor._process_base64_image(invalid_data)
+        assert result is None
+    
+    def test_process_base64_image_unsupported_format(self, text_extractor):
+        """Тест обработки неподдерживаемого формата base64"""
+        svg_data = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCI+PC9zdmc+"
+        
+        result = text_extractor._process_base64_image(svg_data)
+        assert result is None
+    
+    def test_process_base64_image_no_data_uri(self, text_extractor):
+        """Тест обработки base64 без data URI префикса"""
+        plain_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        
+        result = text_extractor._process_base64_image(plain_base64)
+        assert result is None
+
+
+@pytest.mark.integration
+class TestPlaywrightIntegration:
+    """Тесты для Playwright интеграции (v1.10.1)"""
+    
+    @pytest.fixture
+    def text_extractor(self):
+        """Фикстура для создания экстрактора"""
+        from app.extractors import TextExtractor
+        return TextExtractor()
+    
+    @patch('app.extractors.sync_playwright')
+    def test_extract_page_with_playwright_success(self, mock_playwright, text_extractor):
+        """Тест успешного извлечения страницы с Playwright"""
+        # Настройка мока
+        mock_context = Mock()
+        mock_page = Mock()
+        mock_browser = Mock()
+        
+        mock_page.content.return_value = "<html><body><h1>Test Page</h1><img src='test.jpg' /></body></html>"
+        mock_page.evaluate.return_value = 1000  # высота страницы
+        mock_context.new_page.return_value = mock_page
+        mock_browser.new_context.return_value = mock_context
+        mock_playwright.return_value.__enter__.return_value.chromium.launch.return_value = mock_browser
+        
+        # Выполнение теста
+        result = text_extractor._extract_page_with_playwright("https://example.com")
+        
+        # Проверки
+        assert result is not None
+        assert "Test Page" in result
+        mock_page.goto.assert_called_once()
+        mock_page.wait_for_load_state.assert_called()
+    
+    @patch('app.extractors.sync_playwright')
+    def test_extract_page_with_playwright_failure(self, mock_playwright, text_extractor):
+        """Тест обработки ошибки Playwright"""
+        # Настройка мока для генерации исключения
+        mock_playwright.return_value.__enter__.side_effect = Exception("Playwright error")
+        
+        # Выполнение теста
+        result = text_extractor._extract_page_with_playwright("https://example.com")
+        
+        # Проверка, что возвращается None при ошибке
+        assert result is None
+    
+    def test_safe_scroll_for_lazy_loading_stable_height(self, text_extractor):
+        """Тест безопасного скролла с неизменной высотой"""
+        mock_page = Mock()
+        mock_page.evaluate.return_value = 1000  # постоянная высота
+        
+        text_extractor._safe_scroll_for_lazy_loading(mock_page)
+        
+        # Проверяем, что скролл был выполнен
+        assert mock_page.evaluate.call_count >= 2  # минимум 2 вызова для проверки высоты
+    
+    def test_safe_scroll_for_lazy_loading_changing_height(self, text_extractor):
+        """Тест безопасного скролла с изменяющейся высотой"""
+        mock_page = Mock()
+        # Имитируем увеличение высоты страницы
+        mock_page.evaluate.side_effect = [1000, 1200, 1200]  # высота увеличивается, затем стабилизируется
+        
+        text_extractor._safe_scroll_for_lazy_loading(mock_page)
+        
+        # Проверяем, что было несколько попыток скролла
+        assert mock_page.evaluate.call_count >= 3
+
+
+@pytest.mark.integration  
+class TestWebExtractionWithMockRequests:
+    """Тесты веб-экстракции с мокированием HTTP-запросов"""
+    
+    @pytest.fixture
+    def text_extractor(self):
+        """Фикстура для создания экстрактора"""
+        from app.extractors import TextExtractor
+        return TextExtractor()
+    
+    @patch('requests.get')
+    def test_extract_from_url_with_base64_images(self, mock_get, text_extractor):
+        """Тест извлечения URL с base64 изображениями"""
+        # HTML с base64 изображением
+        html_content = """
+        <html>
+        <body>
+            <h1>Test Page with Base64 Image</h1>
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" />
+            <p>Some text content</p>
+        </body>
+        </html>
+        """
+        
+        # Настройка мока
+        mock_response = Mock()
+        mock_response.text = html_content
+        mock_response.content = html_content.encode('utf-8')
+        mock_response.status_code = 200
+        mock_response.headers = {'content-type': 'text/html; charset=utf-8'}
+        mock_get.return_value = mock_response
+        
+        # Выполнение теста
+        result = text_extractor.extract_from_url("https://example.com")
+        
+        # Проверки
+        assert len(result) >= 1  # минимум HTML контент
+        assert any("Test Page with Base64 Image" in file_data["content"] for file_data in result)
+    
+    @patch('requests.get')
+    def test_extract_from_url_requests_fallback(self, mock_get, text_extractor):
+        """Тест fallback на requests при выключенном JavaScript"""
+        html_content = "<html><body><h1>Simple Page</h1></body></html>"
+        
+        mock_response = Mock()
+        mock_response.text = html_content
+        mock_response.content = html_content.encode('utf-8')
+        mock_response.status_code = 200
+        mock_response.headers = {'content-type': 'text/html; charset=utf-8'}
+        mock_get.return_value = mock_response
+        
+        # Временно отключаем JavaScript
+        with patch('app.config.settings.ENABLE_JAVASCRIPT', False):
+            result = text_extractor.extract_from_url("https://example.com")
+        
+        assert len(result) >= 1
+        assert any("Simple Page" in file_data["content"] for file_data in result) 

@@ -1,50 +1,53 @@
 # Веб-фреймворк и сервер
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
 
 # Обработка файлов
-python-multipart==0.0.9
+python-multipart==0.0.20
 
 # PDF обработка
 PyPDF2==3.0.1
-pdfplumber==0.10.3
+pdfplumber==0.11.7
 
 # Word и Office документы
-python-docx==1.1.2
-python-pptx==0.6.23
+python-docx==1.2.0
+python-pptx==1.0.2
 
 # RTF документы
-striprtf==0.0.26
+striprtf==0.0.29
 
 # Таблицы
-pandas==2.2.2
-openpyxl==3.1.2
-xlrd==2.0.1
+pandas==2.3.1
+openpyxl==3.1.5
+xlrd==2.0.2
 
 # OCR и изображения
-Pillow==10.3.0
-pytesseract==0.3.10
+Pillow==11.3.0
+pytesseract==0.3.13
 
 # HTML и Markdown
-beautifulsoup4==4.12.2
-lxml==5.2.2
-markdown==3.6
+beautifulsoup4==4.13.4
+lxml==6.0.0
+markdown==3.8.2
 
 # Веб-запросы (новое в v1.10.0)
 requests==2.32.4
 
+# Браузерная автоматизация для JS-рендеринга (новое в v1.10.1)
+playwright==1.53.0
+
 # YAML и XML
-PyYAML==6.0.1
+PyYAML==6.0.2
 
 # ODT файлы
 odfpy==1.4.1
 
 # Архивы
 rarfile==4.2
-py7zr==0.20.8
+py7zr==1.0.0
 
 # Общие утилиты
-python-dotenv==1.0.0
+python-dotenv==1.1.1
 werkzeug==3.1.3
 python-magic==0.4.27
 extract-msg==0.54.1
@@ -54,7 +57,7 @@ structlog==25.4.0
 
 # Тестирование
 pytest==8.4.1
-pytest-asyncio==1.0.0
+pytest-asyncio==1.1.0
 pytest-cov==6.2.1
 httpx==0.28.1
 pytest-mock==3.14.1 
