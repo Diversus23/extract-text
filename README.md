@@ -172,13 +172,36 @@ curl -X POST \
   http://localhost:7555/v1/extract/base64
 ```
 
-#### `POST /v1/extract/url` - Извлечение текста с веб-страницы (новое в v1.10.0)
+#### `POST /v1/extract/url` - Извлечение текста с веб-страницы (новое в v1.10.0, расширено в v1.10.2)
+
+**Базовый запрос (для обратной совместимости):**
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://example.com/page",
     "user_agent": "Text Extraction Bot 1.0"
+  }' \
+  http://localhost:7555/v1/extract/url
+```
+
+**Расширенный запрос с настройками извлечения (новое в v1.10.2):**
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/spa-app",
+    "extraction_options": {
+      "enable_javascript": true,
+      "js_render_timeout": 15,
+      "web_page_delay": 2,
+      "enable_lazy_loading_wait": false,
+      "max_scroll_attempts": 0,
+      "process_images": true,
+      "max_images_per_page": 5,
+      "web_page_timeout": 20,
+      "user_agent": "Custom Bot 1.0"
+    }
   }' \
   http://localhost:7555/v1/extract/url
 ```
@@ -275,6 +298,88 @@ curl -X POST \
 - `422` - Поврежденный файл, пустой или защищенный паролем
 - `504` - Превышен лимит времени обработки
 
+### Настройки извлечения для веб-страниц (новое в v1.10.2)
+
+API теперь поддерживает гибкие настройки извлечения текста с веб-страниц через параметр `extraction_options`. Все параметры **опциональны** и позволяют адаптировать процесс извлечения под конкретные требования.
+
+#### Параметры настройки
+
+**JavaScript и рендеринг:**
+- `enable_javascript`: Включить Playwright для JS-рендеринга (по умолчанию: `false`)
+- `js_render_timeout`: Таймаут JS-рендеринга в секундах (по умолчанию: `10`)
+- `web_page_delay`: Задержка после JS в секундах (по умолчанию: `3`)
+
+**Lazy Loading:**
+- `enable_lazy_loading_wait`: Автоматический скролл для lazy loading (по умолчанию: `true`)
+- `max_scroll_attempts`: Количество попыток скролла, 0 = без скролла (по умолчанию: `3`)
+
+**Обработка изображений:**
+- `process_images`: Обрабатывать изображения через OCR (по умолчанию: `true`)
+- `enable_base64_images`: Обрабатывать base64 изображения (по умолчанию: `true`)
+- `min_image_size_for_ocr`: Минимальный размер для OCR в пикселях (по умолчанию: `22500`)
+- `max_images_per_page`: Максимум изображений на странице (по умолчанию: `20`)
+
+**Таймауты:**
+- `web_page_timeout`: Таймаут загрузки страницы в секундах (по умолчанию: `30`)
+- `image_download_timeout`: Таймаут загрузки изображений в секундах (по умолчанию: `15`)
+
+**Сетевые настройки:**
+- `user_agent`: User-Agent (приоритет над корневым параметром)
+- `follow_redirects`: Следовать редиректам (по умолчанию: `true`)
+- `max_redirects`: Максимум редиректов (только для requests)
+
+#### Примеры использования
+
+**Быстрое извлечение без lazy loading:**
+```json
+{
+  "url": "https://news.example.com/article",
+  "extraction_options": {
+    "enable_lazy_loading_wait": false,
+    "max_scroll_attempts": 0,
+    "web_page_delay": 1,
+    "web_page_timeout": 15
+  }
+}
+```
+
+**Только текст, без изображений:**
+```json
+{
+  "url": "https://blog.example.com/post",
+  "extraction_options": {
+    "process_images": false,
+    "enable_base64_images": false
+  }
+}
+```
+
+**Тщательная обработка SPA:**
+```json
+{
+  "url": "https://spa.example.com",
+  "extraction_options": {
+    "enable_javascript": true,
+    "js_render_timeout": 20,
+    "web_page_delay": 5,
+    "enable_lazy_loading_wait": true,
+    "max_scroll_attempts": 5
+  }
+}
+```
+
+**Максимальная производительность:**
+```json
+{
+  "url": "https://simple.example.com",
+  "extraction_options": {
+    "enable_javascript": false,
+    "process_images": false,
+    "web_page_timeout": 10
+  }
+}
+```
+
 ### Выбор эндпоинта
 
 **Используйте `/v1/extract/file`** когда:
@@ -287,6 +392,11 @@ curl -X POST \
 - Интегрируетесь с API, которые передают файлы в base64
 - Работаете с микросервисной архитектурой через JSON
 - Файл хранится в базе данных в виде base64
+
+**Используйте `/v1/extract/url`** когда:
+- Извлекаете текст напрямую с веб-страниц
+- Работаете с современными веб-приложениями (SPA)
+- Нужен контроль над процессом извлечения (JavaScript, lazy loading, изображения)
 
 ### Примеры ошибок безопасности
 
@@ -792,5 +902,5 @@ curl -X POST -F "file=@tests/test.txt" http://localhost:7555/v1/extract/file
 
 ---
 
-**Версия**: 1.10.0
+**Версия**: 1.10.2
 **Разработчик**: Барилко Виталий

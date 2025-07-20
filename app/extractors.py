@@ -1727,19 +1727,37 @@ class TextExtractor:
     
     # Веб-экстракция (новое в v1.10.0)
     
-    def _extract_page_with_playwright(self, url: str, user_agent: Optional[str] = None) -> tuple[str, str]:
+    def _extract_page_with_playwright(self, url: str, user_agent: Optional[str] = None, extraction_options: Optional[Any] = None) -> tuple[str, str]:
         """
-        Извлечение HTML контента страницы с помощью Playwright (с поддержкой JS)
+        Извлечение HTML контента страницы с помощью Playwright (с поддержкой JS, обновлено в v1.10.2)
         
         Args:
             url: URL страницы
             user_agent: Пользовательский User-Agent
+            extraction_options: Настройки извлечения
             
         Returns:
             tuple[str, str]: (html_content, final_url)
         """
         if not sync_playwright:
             raise ValueError("Playwright не установлен")
+        
+        # Определяем настройки с учетом переданных параметров или значений по умолчанию
+        web_page_timeout = (extraction_options.web_page_timeout 
+                           if extraction_options and extraction_options.web_page_timeout is not None 
+                           else settings.WEB_PAGE_TIMEOUT)
+                           
+        js_render_timeout = (extraction_options.js_render_timeout 
+                            if extraction_options and extraction_options.js_render_timeout is not None 
+                            else settings.JS_RENDER_TIMEOUT)
+                            
+        web_page_delay = (extraction_options.web_page_delay 
+                         if extraction_options and extraction_options.web_page_delay is not None 
+                         else settings.WEB_PAGE_DELAY)
+                         
+        enable_lazy_loading_wait = (extraction_options.enable_lazy_loading_wait 
+                                   if extraction_options and extraction_options.enable_lazy_loading_wait is not None 
+                                   else settings.ENABLE_LAZY_LOADING_WAIT)
         
         html_content = ""
         final_url = url
@@ -1766,7 +1784,7 @@ class TextExtractor:
                 page = context.new_page()
                 
                 # Устанавливаем таймауты
-                page.set_default_timeout(settings.WEB_PAGE_TIMEOUT * 1000)  # в миллисекундах
+                page.set_default_timeout(web_page_timeout * 1000)  # в миллисекундах
                 
                 # Переходим на страницу
                 logger.info(f"Загрузка страницы с Playwright: {url}")
@@ -1778,22 +1796,26 @@ class TextExtractor:
                 final_url = page.url
                 
                 # Ждем дополнительной загрузки JS (если включено)
-                if settings.ENABLE_JAVASCRIPT:
-                    logger.info(f"Ожидание JS-рендеринга ({settings.JS_RENDER_TIMEOUT}s)...")
+                enable_javascript = (extraction_options.enable_javascript 
+                                   if extraction_options and extraction_options.enable_javascript is not None 
+                                   else settings.ENABLE_JAVASCRIPT)
+                                   
+                if enable_javascript:
+                    logger.info(f"Ожидание JS-рендеринга ({js_render_timeout}s)...")
                     
                     # Ждем загрузки сети
                     try:
-                        page.wait_for_load_state('networkidle', timeout=settings.JS_RENDER_TIMEOUT * 1000)
+                        page.wait_for_load_state('networkidle', timeout=js_render_timeout * 1000)
                     except Exception as e:
                         logger.warning(f"Таймаут ожидания сети: {str(e)}")
                     
                     # Обработка lazy loading с защитой от бесконечности
-                    if settings.ENABLE_LAZY_LOADING_WAIT:
-                        self._safe_scroll_for_lazy_loading(page)
+                    if enable_lazy_loading_wait:
+                        self._safe_scroll_for_lazy_loading(page, extraction_options)
                     
                     # Дополнительная задержка для завершения JS
                     import time
-                    time.sleep(settings.WEB_PAGE_DELAY)
+                    time.sleep(web_page_delay)
                 
                 # Получаем финальный HTML
                 html_content = page.content()
@@ -1804,15 +1826,21 @@ class TextExtractor:
         
         return html_content, final_url
     
-    def _safe_scroll_for_lazy_loading(self, page) -> None:
+    def _safe_scroll_for_lazy_loading(self, page, extraction_options: Optional[Any] = None) -> None:
         """
-        Безопасный скролл страницы для активации lazy loading с защитой от бесконечности
+        Безопасный скролл страницы для активации lazy loading с защитой от бесконечности (обновлено в v1.10.2)
         
         Args:
             page: Playwright page объект
+            extraction_options: Настройки извлечения
         """
         try:
             logger.info("Начинаем безопасный скролл для активации lazy loading...")
+            
+            # Определяем максимальное количество попыток скролла
+            max_scroll_attempts = (extraction_options.max_scroll_attempts 
+                                 if extraction_options and extraction_options.max_scroll_attempts is not None 
+                                 else settings.MAX_SCROLL_ATTEMPTS)
             
             # Получаем начальную высоту страницы
             initial_height = page.evaluate("document.body.scrollHeight")
@@ -1822,9 +1850,9 @@ class TextExtractor:
             last_height = initial_height
             stable_count = 0  # Счетчик стабильных измерений
             
-            while scroll_attempts < settings.MAX_SCROLL_ATTEMPTS:
+            while scroll_attempts < max_scroll_attempts:
                 scroll_attempts += 1
-                logger.info(f"Попытка скролла {scroll_attempts}/{settings.MAX_SCROLL_ATTEMPTS}")
+                logger.info(f"Попытка скролла {scroll_attempts}/{max_scroll_attempts}")
                 
                 # Плавный скролл до конца страницы
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -1863,8 +1891,8 @@ class TextExtractor:
         except Exception as e:
             logger.warning(f"Ошибка при скролле для lazy loading: {str(e)}")
     
-    def extract_from_url(self, url: str, user_agent: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Извлечение текста с веб-страницы (синхронный метод)"""
+    def extract_from_url(self, url: str, user_agent: Optional[str] = None, extraction_options: Optional[Any] = None) -> List[Dict[str, Any]]:
+        """Извлечение текста с веб-страницы (синхронный метод, обновлено в v1.10.2)"""
         
         # Проверка безопасности URL
         if not self._is_safe_url(url):
@@ -1873,27 +1901,32 @@ class TextExtractor:
         html_content = ""
         final_url = url
         
+        # Определяем настройки с учетом переданных параметров или значений по умолчанию
+        enable_javascript = (extraction_options.enable_javascript 
+                           if extraction_options and extraction_options.enable_javascript is not None 
+                           else settings.ENABLE_JAVASCRIPT)
+        
         # Выбираем метод загрузки в зависимости от настроек JavaScript
-        if settings.ENABLE_JAVASCRIPT and sync_playwright:
+        if enable_javascript and sync_playwright:
             logger.info("Использую Playwright для загрузки страницы с JS")
             try:
-                html_content, final_url = self._extract_page_with_playwright(url, user_agent)
+                html_content, final_url = self._extract_page_with_playwright(url, user_agent, extraction_options)
             except Exception as e:
                 logger.warning(f"Ошибка Playwright: {str(e)}, переключаюсь на requests")
                 # Fallback на requests при ошибке Playwright
-                html_content, final_url = self._extract_page_with_requests(url, user_agent)
+                html_content, final_url = self._extract_page_with_requests(url, user_agent, extraction_options)
         else:
-            if settings.ENABLE_JAVASCRIPT and not sync_playwright:
+            if enable_javascript and not sync_playwright:
                 logger.warning("JavaScript включен, но Playwright не установлен, использую requests")
             logger.info("Использую requests для загрузки страницы")
-            html_content, final_url = self._extract_page_with_requests(url, user_agent)
+            html_content, final_url = self._extract_page_with_requests(url, user_agent, extraction_options)
         
         try:
             # Извлечение текста из HTML
             page_text = self._extract_text_from_html(html_content)
             
             # Поиск и обработка изображений
-            image_texts = self._extract_images_from_html(html_content, final_url)
+            image_texts = self._extract_images_from_html(html_content, final_url, extraction_options)
             
             # Формирование результата
             results = []
@@ -1915,19 +1948,29 @@ class TextExtractor:
         except Exception as e:
             raise ValueError(f"Error processing web page: {str(e)}")
     
-    def _extract_page_with_requests(self, url: str, user_agent: Optional[str] = None) -> tuple[str, str]:
+    def _extract_page_with_requests(self, url: str, user_agent: Optional[str] = None, extraction_options: Optional[Any] = None) -> tuple[str, str]:
         """
-        Извлечение HTML контента страницы с помощью requests (без JS)
+        Извлечение HTML контента страницы с помощью requests (без JS, обновлено в v1.10.2)
         
         Args:
             url: URL страницы
             user_agent: Пользовательский User-Agent
+            extraction_options: Настройки извлечения
             
         Returns:
             tuple[str, str]: (html_content, final_url)
         """
         if not requests:
             raise ValueError("requests library not available for web extraction")
+        
+        # Определяем настройки с учетом переданных параметров или значений по умолчанию
+        web_page_timeout = (extraction_options.web_page_timeout 
+                           if extraction_options and extraction_options.web_page_timeout is not None 
+                           else settings.WEB_PAGE_TIMEOUT)
+        
+        follow_redirects = (extraction_options.follow_redirects 
+                           if extraction_options and extraction_options.follow_redirects is not None 
+                           else True)
         
         # Установка User-Agent
         headers = {
@@ -1943,8 +1986,8 @@ class TextExtractor:
             response = requests.get(
                 url, 
                 headers=headers, 
-                timeout=settings.WEB_PAGE_TIMEOUT,
-                allow_redirects=True,
+                timeout=web_page_timeout,
+                allow_redirects=follow_redirects,
                 stream=False
             )
             response.raise_for_status()
@@ -2078,10 +2121,27 @@ class TextExtractor:
             logger.error(f"Error extracting text from HTML: {str(e)}")
             raise ValueError(f"HTML parsing error: {str(e)}")
     
-    def _extract_images_from_html(self, html_content: str, base_url: str) -> List[Dict[str, Any]]:
-        """Извлечение и обработка изображений со страницы"""
+    def _extract_images_from_html(self, html_content: str, base_url: str, extraction_options: Optional[Any] = None) -> List[Dict[str, Any]]:
+        """Извлечение и обработка изображений со страницы (обновлено в v1.10.2)"""
         if not BeautifulSoup or not Image:
             return []
+        
+        # Определяем настройки с учетом переданных параметров или значений по умолчанию
+        process_images = (extraction_options.process_images 
+                         if extraction_options and extraction_options.process_images is not None 
+                         else True)  # По умолчанию обрабатываем изображения
+        
+        if not process_images:
+            logger.info("Обработка изображений отключена в настройках извлечения")
+            return []
+        
+        max_images_per_page = (extraction_options.max_images_per_page 
+                              if extraction_options and extraction_options.max_images_per_page is not None 
+                              else settings.MAX_IMAGES_PER_PAGE)
+                              
+        enable_base64_images = (extraction_options.enable_base64_images 
+                               if extraction_options and extraction_options.enable_base64_images is not None 
+                               else settings.ENABLE_BASE64_IMAGES)
         
         try:
             soup = BeautifulSoup(html_content, 'lxml')
@@ -2091,7 +2151,7 @@ class TextExtractor:
                 return []
             
             # Ограничиваем количество изображений
-            img_tags = img_tags[:settings.MAX_IMAGES_PER_PAGE]
+            img_tags = img_tags[:max_images_per_page]
             
             # Разделяем изображения на base64 и URL
             base64_images = []
@@ -2099,7 +2159,7 @@ class TextExtractor:
             
             for img_tag in img_tags:
                 img_src = img_tag.get('src', '')
-                if img_src.startswith('data:image/') and settings.ENABLE_BASE64_IMAGES:
+                if img_src.startswith('data:image/') and enable_base64_images:
                     base64_images.append(img_tag)
                 else:
                     url_images.append(img_tag)
@@ -2112,7 +2172,7 @@ class TextExtractor:
             if base64_images:
                 for img_tag in base64_images:
                     try:
-                        result = self._process_base64_image(img_tag)
+                        result = self._process_base64_image(img_tag, extraction_options)
                         if result:
                             results.append(result)
                     except Exception as e:
@@ -2120,6 +2180,10 @@ class TextExtractor:
             
             # Обработка URL изображений (параллельно, группами по 2)
             if url_images:
+                image_download_timeout = (extraction_options.image_download_timeout 
+                                        if extraction_options and extraction_options.image_download_timeout is not None 
+                                        else settings.IMAGE_DOWNLOAD_TIMEOUT)
+                
                 for i in range(0, len(url_images), 2):
                     batch = url_images[i:i+2]
                     batch_results = []
@@ -2127,12 +2191,12 @@ class TextExtractor:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                         futures = []
                         for img_tag in batch:
-                            future = executor.submit(self._process_single_image, img_tag, base_url)
+                            future = executor.submit(self._process_single_image, img_tag, base_url, extraction_options)
                             futures.append(future)
                         
                         for future in concurrent.futures.as_completed(futures):
                             try:
-                                result = future.result(timeout=settings.IMAGE_DOWNLOAD_TIMEOUT + 5)
+                                result = future.result(timeout=image_download_timeout + 5)
                                 if result:
                                     batch_results.append(result)
                             except Exception as e:
@@ -2146,8 +2210,8 @@ class TextExtractor:
             logger.warning(f"Error extracting images from HTML: {str(e)}")
             return []
     
-    def _process_single_image(self, img_tag, base_url: str) -> Optional[Dict[str, Any]]:
-        """Обработка одного изображения"""
+    def _process_single_image(self, img_tag, base_url: str, extraction_options: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+        """Обработка одного изображения (обновлено в v1.10.2)"""
         try:
             img_src = img_tag.get('src', '')
             logger.info(f"Processing image: {img_src}")
@@ -2164,6 +2228,15 @@ class TextExtractor:
                 logger.warning(f"Blocked image URL: {img_url}")
                 return None
             
+            # Определяем настройки
+            image_download_timeout = (extraction_options.image_download_timeout 
+                                    if extraction_options and extraction_options.image_download_timeout is not None 
+                                    else settings.IMAGE_DOWNLOAD_TIMEOUT)
+                                    
+            min_image_size_for_ocr = (extraction_options.min_image_size_for_ocr 
+                                    if extraction_options and extraction_options.min_image_size_for_ocr is not None 
+                                    else settings.MIN_IMAGE_SIZE_FOR_OCR)
+            
             # Загрузка изображения
             headers = {
                 'User-Agent': settings.DEFAULT_USER_AGENT,
@@ -2173,7 +2246,7 @@ class TextExtractor:
             response = requests.get(
                 img_url, 
                 headers=headers, 
-                timeout=settings.IMAGE_DOWNLOAD_TIMEOUT,
+                timeout=image_download_timeout,
                 stream=True
             )
             response.raise_for_status()
@@ -2191,8 +2264,8 @@ class TextExtractor:
                 logger.info(f"Image dimensions: {width}x{height} = {width * height} pixels (min required: {settings.MIN_IMAGE_SIZE_FOR_OCR})")
                 
                 # Проверяем минимальный размер
-                if width * height < settings.MIN_IMAGE_SIZE_FOR_OCR:
-                    logger.warning(f"Image too small for OCR: {width * height} < {settings.MIN_IMAGE_SIZE_FOR_OCR}")
+                if width * height < min_image_size_for_ocr:
+                    logger.warning(f"Image too small for OCR: {width * height} < {min_image_size_for_ocr}")
                     return None
                 
                 # OCR изображения
@@ -2232,8 +2305,8 @@ class TextExtractor:
             logger.warning(f"Error processing image {img_tag.get('src', '')}: {str(e)}")
             return None
 
-    def _process_base64_image(self, img_tag) -> Optional[Dict[str, Any]]:
-        """Обработка base64 изображения из data URI"""
+    def _process_base64_image(self, img_tag, extraction_options: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+        """Обработка base64 изображения из data URI (обновлено в v1.10.2)"""
         try:
             from .utils import decode_base64_image, extract_mime_from_base64_data_uri, get_extension_from_mime
             
@@ -2243,6 +2316,11 @@ class TextExtractor:
             if not img_src.startswith('data:image/'):
                 logger.warning(f"Invalid base64 image format")
                 return None
+            
+            # Определяем настройки
+            min_image_size_for_ocr = (extraction_options.min_image_size_for_ocr 
+                                    if extraction_options and extraction_options.min_image_size_for_ocr is not None 
+                                    else settings.MIN_IMAGE_SIZE_FOR_OCR)
             
             # Извлекаем MIME-тип
             mime_type = extract_mime_from_base64_data_uri(img_src)
@@ -2267,11 +2345,11 @@ class TextExtractor:
             # Открываем изображение для проверки размеров
             with Image.open(io.BytesIO(img_content)) as img:
                 width, height = img.size
-                logger.info(f"Base64 image dimensions: {width}x{height} = {width * height} pixels (min required: {settings.MIN_IMAGE_SIZE_FOR_OCR})")
+                logger.info(f"Base64 image dimensions: {width}x{height} = {width * height} pixels (min required: {min_image_size_for_ocr})")
                 
                 # Проверяем минимальный размер
-                if width * height < settings.MIN_IMAGE_SIZE_FOR_OCR:
-                    logger.warning(f"Base64 image too small for OCR: {width * height} < {settings.MIN_IMAGE_SIZE_FOR_OCR}")
+                if width * height < min_image_size_for_ocr:
+                    logger.warning(f"Base64 image too small for OCR: {width * height} < {min_image_size_for_ocr}")
                     return None
                 
                 # OCR изображения

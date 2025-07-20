@@ -13,7 +13,7 @@ import os
 import logging
 import asyncio
 import base64
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import time
 from contextlib import asynccontextmanager
 
@@ -35,10 +35,38 @@ class Base64FileRequest(BaseModel):
     filename: str = Field(..., description="Имя файла с расширением")
 
 
+class ExtractionOptions(BaseModel):
+    """Настройки извлечения текста для веб-страниц (новое в v1.10.2)"""
+    # JavaScript и рендеринг
+    enable_javascript: Optional[bool] = Field(None, description="Включить/выключить JavaScript рендеринг")
+    js_render_timeout: Optional[int] = Field(None, description="Таймаут JS-рендеринга в секундах")
+    web_page_delay: Optional[int] = Field(None, description="Задержка после загрузки JS в секундах")
+    
+    # Lazy Loading
+    enable_lazy_loading_wait: Optional[bool] = Field(None, description="Включить ожидание lazy loading")
+    max_scroll_attempts: Optional[int] = Field(None, description="Максимальное количество попыток скролла")
+    
+    # Обработка изображений
+    process_images: Optional[bool] = Field(None, description="Обрабатывать ли изображения через OCR")
+    enable_base64_images: Optional[bool] = Field(None, description="Обрабатывать ли base64 изображения")
+    min_image_size_for_ocr: Optional[int] = Field(None, description="Минимальный размер изображения для OCR (пиксели)")
+    max_images_per_page: Optional[int] = Field(None, description="Максимальное количество изображений на странице")
+    
+    # Таймауты
+    web_page_timeout: Optional[int] = Field(None, description="Таймаут загрузки страницы в секундах")
+    image_download_timeout: Optional[int] = Field(None, description="Таймаут загрузки изображений в секундах")
+    
+    # Сетевые настройки
+    user_agent: Optional[str] = Field(None, description="Пользовательский User-Agent")
+    follow_redirects: Optional[bool] = Field(None, description="Следовать ли редиректам")
+    max_redirects: Optional[int] = Field(None, description="Максимальное количество редиректов")
+
+
 class URLRequest(BaseModel):
-    """Модель для запроса обработки веб-страницы (новое в v1.10.0)"""
+    """Модель для запроса обработки веб-страницы (обновлено в v1.10.2)"""
     url: str = Field(..., description="URL веб-страницы для извлечения текста")
-    user_agent: str = Field(None, description="Пользовательский User-Agent (опционально)")
+    user_agent: Optional[str] = Field(None, description="Пользовательский User-Agent (опционально, для обратной совместимости)")
+    extraction_options: Optional[ExtractionOptions] = Field(None, description="Настройки извлечения текста (опционально)")
 
 
 @asynccontextmanager
@@ -396,7 +424,7 @@ async def extract_text_base64(request: Base64FileRequest):
 
 @app.post("/v1/extract/url")
 async def extract_text_from_url(request: URLRequest):
-    """Извлечение текста с веб-страницы (новое в v1.10.0)"""
+    """Извлечение текста с веб-страницы (обновлено в v1.10.2)"""
     url = request.url.strip()
     
     if not url:
@@ -416,13 +444,20 @@ async def extract_text_from_url(request: URLRequest):
     
     logger.info(f"Начало извлечения текста с URL: {url}")
     
+    # Определяем user_agent с учетом приоритета
+    user_agent = None
+    if request.extraction_options and request.extraction_options.user_agent:
+        user_agent = request.extraction_options.user_agent
+    elif request.user_agent:
+        user_agent = request.user_agent
+    
     try:
         # Извлечение текста в пуле потоков с таймаутом
         start_time = time.time()
         try:
             extracted_files = await asyncio.wait_for(
                 run_in_threadpool(
-                    text_extractor.extract_from_url, url, request.user_agent
+                    text_extractor.extract_from_url, url, user_agent, request.extraction_options
                 ),
                 timeout=settings.PROCESSING_TIMEOUT_SECONDS  # 300 секунд
             )

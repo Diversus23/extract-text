@@ -1,7 +1,7 @@
 # Техническое задание: API для извлечения текста для RAG
 
-**Версия:** 1.10.1
-**Дата:** 20.07.2025
+**Версия:** 1.10.2
+**Дата:** 27.01.2025
 
 ---
 
@@ -333,16 +333,73 @@
 }
 ```
 
-**4.6. Эндпоинт `POST /v1/extract/url` — Извлечение текста с веб-страницы (новая функциональность v1.10.0)**
+**4.6. Эндпоинт `POST /v1/extract/url` — Извлечение текста с веб-страницы (новая функциональность v1.10.0, расширена в v1.10.2)**
 * **Метод:** `POST`.
-* **Тело запроса:** `application/json` с полями `url` и опциональным `user_agent`.
-* **Формат запроса:**
+* **Тело запроса:** `application/json` с полями `url`, опциональным `user_agent` и опциональным объектом `extraction_options` (новое в v1.10.2).
+* **Формат запроса (базовый, для обратной совместимости):**
 ```json
 {
   "url": "https://example.com/page",
   "user_agent": "Text Extraction Bot 1.0"
 }
 ```
+* **Формат запроса (расширенный с настройками извлечения, новое в v1.10.2):**
+```json
+{
+  "url": "https://example.com/page",
+  "user_agent": "Text Extraction Bot 1.0",
+  "extraction_options": {
+    "enable_javascript": true,
+    "js_render_timeout": 15,
+    "web_page_delay": 2,
+    "enable_lazy_loading_wait": false,
+    "max_scroll_attempts": 1,
+    "process_images": true,
+    "enable_base64_images": true,
+    "min_image_size_for_ocr": 30000,
+    "max_images_per_page": 10,
+    "web_page_timeout": 20,
+    "image_download_timeout": 10,
+    "user_agent": "Custom Bot 2.0",
+    "follow_redirects": true,
+    "max_redirects": 3
+  }
+}
+```
+
+**Описание параметров extraction_options (новое в v1.10.2):**
+
+Все параметры в объекте `extraction_options` являются **опциональными**. При отсутствии используются значения по умолчанию из переменных окружения. Параметры предоставляют полный контроль над процессом извлечения текста с веб-страниц на уровне отдельного запроса.
+
+**JavaScript и рендеринг:**
+* `enable_javascript` (boolean): Включить/выключить JavaScript рендеринг с помощью Playwright. По умолчанию: `false`
+* `js_render_timeout` (integer): Таймаут для ожидания завершения JS-рендеринга в секундах. По умолчанию: `10`
+* `web_page_delay` (integer): Дополнительная задержка после завершения JS в секундах. По умолчанию: `3`
+
+**Lazy Loading и скролл:**
+* `enable_lazy_loading_wait` (boolean): Включить автоматический скролл для активации ленивой загрузки изображений. По умолчанию: `true`
+* `max_scroll_attempts` (integer): Максимальное количество попыток скролла (0 = без скролла). По умолчанию: `3`
+
+**Обработка изображений:**
+* `process_images` (boolean): Обрабатывать ли изображения через OCR. По умолчанию: `true`
+* `enable_base64_images` (boolean): Обрабатывать ли встроенные base64 изображения. По умолчанию: `true`
+* `min_image_size_for_ocr` (integer): Минимальный размер изображения в пикселях для OCR. По умолчанию: `22500` (150x150)
+* `max_images_per_page` (integer): Максимальное количество изображений для обработки на странице. По умолчанию: `20`
+
+**Таймауты:**
+* `web_page_timeout` (integer): Таймаут загрузки веб-страницы в секундах. По умолчанию: `30`
+* `image_download_timeout` (integer): Таймаут загрузки каждого изображения в секундах. По умолчанию: `15`
+
+**Сетевые настройки:**
+* `user_agent` (string): Пользовательский User-Agent (имеет приоритет над корневым `user_agent`)
+* `follow_redirects` (boolean): Следовать ли HTTP-редиректам. По умолчанию: `true`
+* `max_redirects` (integer): Максимальное количество редиректов (только для requests, не Playwright)
+
+**Приоритет настроек:**
+1. Параметры в `extraction_options` (высший приоритет)
+2. `user_agent` на корневом уровне
+3. Переменные окружения (по умолчанию)
+
 * **Успешный ответ (`HTTP 200 OK`):**
 ```json
 {
