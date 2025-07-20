@@ -35,6 +35,12 @@ class Base64FileRequest(BaseModel):
     filename: str = Field(..., description="Имя файла с расширением")
 
 
+class URLRequest(BaseModel):
+    """Модель для запроса обработки веб-страницы (новое в v1.10.0)"""
+    url: str = Field(..., description="URL веб-страницы для извлечения текста")
+    user_agent: str = Field(None, description="Пользовательский User-Agent (опционально)")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager для FastAPI приложения"""
@@ -384,6 +390,122 @@ async def extract_text_base64(request: Base64FileRequest):
                 "status": "error",
                 "filename": original_filename,
                 "message": "Файл поврежден или формат не поддерживается."
+            }
+        )
+
+
+@app.post("/v1/extract/url")
+async def extract_text_from_url(request: URLRequest):
+    """Извлечение текста с веб-страницы (новое в v1.10.0)"""
+    url = request.url.strip()
+    
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required")
+    
+    # Проверка валидности URL
+    if not url.startswith(('http://', 'https://')):
+        logger.warning(f"Некорректный URL: {url}")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "url": url,
+                "message": "URL должен начинаться с http:// или https://"
+            }
+        )
+    
+    logger.info(f"Начало извлечения текста с URL: {url}")
+    
+    try:
+        # Извлечение текста в пуле потоков с таймаутом
+        start_time = time.time()
+        try:
+            extracted_files = await asyncio.wait_for(
+                run_in_threadpool(
+                    text_extractor.extract_from_url, url, request.user_agent
+                ),
+                timeout=settings.PROCESSING_TIMEOUT_SECONDS  # 300 секунд
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"Таймаут обработки URL {url}: превышен лимит {settings.PROCESSING_TIMEOUT_SECONDS} секунд")
+            return JSONResponse(
+                status_code=504,
+                content={
+                    "status": "error",
+                    "url": url,
+                    "message": f"Обработка веб-страницы превысила установленный лимит времени ({settings.PROCESSING_TIMEOUT_SECONDS} секунд)."
+                }
+            )
+        
+        process_time = time.time() - start_time
+        
+        # Подсчет общей длины текста
+        total_text_length = sum(len(file_data.get("text", "")) for file_data in extracted_files)
+        
+        logger.info(
+            f"Текст успешно извлечен с URL {url} за {process_time:.3f}s. "
+            f"Обработано файлов: {len(extracted_files)}, общая длина текста: {total_text_length} символов"
+        )
+        
+        return {
+            "status": "success",
+            "url": url,
+            "count": len(extracted_files),
+            "files": extracted_files
+        }
+        
+    except ValueError as e:
+        error_msg = str(e)
+        
+        # Определяем тип ошибки для правильного HTTP-кода
+        if "internal IP" in error_msg.lower() or "prohibited" in error_msg.lower():
+            logger.warning(f"Запрос к заблокированному URL {url}: {error_msg}")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "url": url,
+                    "message": "Доступ к внутренним IP-адресам запрещен из соображений безопасности."
+                }
+            )
+        elif "timeout" in error_msg.lower():
+            logger.warning(f"Таймаут загрузки URL {url}: {error_msg}")
+            return JSONResponse(
+                status_code=504,
+                content={
+                    "status": "error",
+                    "url": url,
+                    "message": f"Не удалось загрузить страницу: превышен лимит времени ожидания."
+                }
+            )
+        elif "connection" in error_msg.lower() or "failed to load" in error_msg.lower():
+            logger.warning(f"Ошибка подключения к URL {url}: {error_msg}")
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status": "error",
+                    "url": url,
+                    "message": f"Не удалось загрузить страницу: {error_msg}"
+                }
+            )
+        else:
+            logger.error(f"Ошибка при обработке URL {url}: {error_msg}")
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "status": "error",
+                    "url": url,
+                    "message": f"Ошибка парсинга HTML: {error_msg}"
+                }
+            )
+    except Exception as e:
+        logger.error(f"Ошибка при обработке URL {url}: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=422,
+            content={
+                "status": "error", 
+                "url": url,
+                "message": f"Ошибка обработки веб-страницы: {str(e)}"
             }
         )
 

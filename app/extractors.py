@@ -91,6 +91,17 @@ try:
 except ImportError:
     yaml = None
 
+# Веб-экстракция (новое в v1.10.0)
+try:
+    import requests
+    from urllib.parse import urljoin, urlparse
+    import ipaddress
+except ImportError:
+    requests = None
+    urljoin = None
+    urlparse = None
+    ipaddress = None
+
 from app.config import settings
 from app.utils import get_file_extension, is_supported_format, is_archive_format
 
@@ -1707,3 +1718,315 @@ class TextExtractor:
             except Exception as e2:
                 logger.warning(f"Альтернативная попытка OCR также не удалась: {str(e2)}")
                 return ""
+    
+    # Веб-экстракция (новое в v1.10.0)
+    
+    def extract_from_url(self, url: str, user_agent: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Извлечение текста с веб-страницы (синхронный метод)"""
+        if not requests:
+            raise ValueError("requests library not available for web extraction")
+        
+        # Проверка безопасности URL
+        if not self._is_safe_url(url):
+            raise ValueError("Access to internal IP addresses is prohibited for security reasons")
+        
+        # Установка User-Agent
+        headers = {
+            'User-Agent': user_agent or settings.DEFAULT_USER_AGENT,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'ru,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+        }
+        
+        try:
+            # Загрузка страницы с таймаутом
+            response = requests.get(
+                url, 
+                headers=headers, 
+                timeout=settings.WEB_PAGE_TIMEOUT,
+                allow_redirects=True,
+                stream=False
+            )
+            response.raise_for_status()
+            
+            # Автоопределение кодировки
+            response.encoding = response.apparent_encoding or 'utf-8'
+            html_content = response.text
+            
+            # Извлечение текста из HTML
+            page_text = self._extract_text_from_html(html_content)
+            
+            # Поиск и обработка изображений
+            image_texts = self._extract_images_from_html(html_content, url)
+            
+            # Формирование результата
+            results = []
+            
+            # Добавляем основной контент страницы
+            results.append({
+                "filename": "page_content",
+                "path": url,
+                "size": len(html_content.encode('utf-8')),
+                "type": "html",
+                "text": page_text
+            })
+            
+            # Добавляем тексты с изображений
+            results.extend(image_texts)
+            
+            return results
+            
+        except requests.RequestException as e:
+            if "timeout" in str(e).lower():
+                raise ValueError(f"Page loading timeout: {str(e)}")
+            elif "connection" in str(e).lower():
+                raise ValueError(f"Connection error: {str(e)}")
+            else:
+                raise ValueError(f"Failed to load page: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Error processing web page: {str(e)}")
+    
+    def _is_safe_url(self, url: str) -> bool:
+        """Проверка безопасности URL (защита от SSRF)"""
+        try:
+            parsed_url = urlparse(url)
+            
+            # Проверяем схему
+            if parsed_url.scheme not in ['http', 'https']:
+                logger.warning(f"Unsupported URL scheme: {parsed_url.scheme}")
+                return False
+            
+            hostname = parsed_url.hostname
+            if not hostname:
+                logger.warning(f"No hostname in URL: {url}")
+                return False
+            
+            # Проверяем заблокированные хосты (hostname проверка)
+            blocked_hostnames = settings.BLOCKED_HOSTNAMES.split(',')
+            hostname_lower = hostname.lower()
+            for blocked_hostname in blocked_hostnames:
+                blocked_hostname = blocked_hostname.strip().lower()
+                if not blocked_hostname:
+                    continue
+                if hostname_lower == blocked_hostname:
+                    logger.warning(f"Blocked hostname {hostname} for URL {url}")
+                    return False
+            
+            # Получаем все IP-адреса хоста (включая IPv4 и IPv6)
+            import socket
+            try:
+                # Получаем все IP адреса для хоста
+                addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+                ips = [info[4][0] for info in addr_info]
+            except socket.gaierror as e:
+                logger.warning(f"DNS resolution failed for {hostname}: {str(e)}")
+                return False
+            
+            # Проверяем все полученные IP-адреса
+            blocked_ranges = settings.BLOCKED_IP_RANGES.split(',')
+            for ip_str in ips:
+                try:
+                    ip_obj = ipaddress.ip_address(ip_str)
+                    
+                    # Дополнительная проверка на специальные адреса
+                    if ip_obj.is_loopback or ip_obj.is_private or ip_obj.is_link_local:
+                        logger.warning(f"Blocked special IP {ip_str} (loopback/private/link-local) for URL {url}")
+                        return False
+                    
+                    # Проверяем заблокированные диапазоны из конфига
+                    for range_str in blocked_ranges:
+                        range_str = range_str.strip()
+                        if not range_str:
+                            continue
+                            
+                        try:
+                            network = ipaddress.ip_network(range_str, strict=False)
+                            if ip_obj in network:
+                                logger.warning(f"Blocked IP {ip_str} in range {range_str} for URL {url}")
+                                return False
+                        except ValueError:
+                            continue
+                            
+                    # Специальная проверка на metadata service (AWS/GCP)
+                    if str(ip_obj) == "169.254.169.254":
+                        logger.warning(f"Blocked metadata service IP {ip_str} for URL {url}")
+                        return False
+                        
+                    # Проверка на Docker bridge gateway (172.17.0.1 и другие 172.x.0.1)
+                    if ip_obj.version == 4:
+                        octets = str(ip_obj).split('.')
+                        if (octets[0] == '172' and 16 <= int(octets[1]) <= 31 and 
+                            octets[2] == '0' and octets[3] == '1'):
+                            logger.warning(f"Blocked Docker bridge gateway {ip_str} for URL {url}")
+                            return False
+                    
+                except ValueError as e:
+                    logger.warning(f"Invalid IP address {ip_str}: {str(e)}")
+                    continue
+            
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Error checking URL safety: {str(e)}")
+            # Fail-closed: в случае ошибки блокируем доступ
+            return False
+    
+    def _extract_text_from_html(self, html_content: str) -> str:
+        """Извлечение текста из HTML контента"""
+        if not BeautifulSoup:
+            raise ValueError("BeautifulSoup not available for HTML parsing")
+        
+        try:
+            soup = BeautifulSoup(html_content, 'lxml')
+            
+            # Удаляем скрипты, стили и другие нетекстовые элементы
+            for script in soup(["script", "style", "nav", "header", "footer", "aside"]):
+                script.decompose()
+            
+            # Извлекаем текст
+            text = soup.get_text()
+            
+            # Очистка текста
+            lines = []
+            for line in text.splitlines():
+                line = line.strip()
+                if line:
+                    lines.append(line)
+            
+            return '\n'.join(lines)
+            
+        except Exception as e:
+            logger.error(f"Error extracting text from HTML: {str(e)}")
+            raise ValueError(f"HTML parsing error: {str(e)}")
+    
+    def _extract_images_from_html(self, html_content: str, base_url: str) -> List[Dict[str, Any]]:
+        """Извлечение и обработка изображений со страницы"""
+        if not BeautifulSoup or not Image:
+            return []
+        
+        try:
+            soup = BeautifulSoup(html_content, 'lxml')
+            img_tags = soup.find_all('img', src=True)
+            
+            if not img_tags:
+                return []
+            
+            # Ограничиваем количество изображений
+            img_tags = img_tags[:settings.MAX_IMAGES_PER_PAGE]
+            
+            # Параллельная обработка изображений (по 2 одновременно)
+            results = []
+            
+            # Обработаем изображения группами по 2
+            for i in range(0, len(img_tags), 2):
+                batch = img_tags[i:i+2]
+                batch_results = []
+                
+                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                    futures = []
+                    for img_tag in batch:
+                        future = executor.submit(self._process_single_image, img_tag, base_url)
+                        futures.append(future)
+                    
+                    for future in concurrent.futures.as_completed(futures):
+                        try:
+                            result = future.result(timeout=settings.IMAGE_DOWNLOAD_TIMEOUT + 5)
+                            if result:
+                                batch_results.append(result)
+                        except Exception as e:
+                            logger.warning(f"Error processing image: {str(e)}")
+                
+                results.extend(batch_results)
+            
+            return results
+            
+        except Exception as e:
+            logger.warning(f"Error extracting images from HTML: {str(e)}")
+            return []
+    
+    def _process_single_image(self, img_tag, base_url: str) -> Optional[Dict[str, Any]]:
+        """Обработка одного изображения"""
+        try:
+            img_src = img_tag.get('src', '')
+            logger.info(f"Processing image: {img_src}")
+            if not img_src:
+                logger.warning(f"Image has no src attribute")
+                return None
+            
+            # Преобразуем относительный URL в абсолютный
+            img_url = urljoin(base_url, img_src)
+            logger.info(f"Full image URL: {img_url}")
+            
+            # Проверяем безопасность URL изображения
+            if not self._is_safe_url(img_url):
+                logger.warning(f"Blocked image URL: {img_url}")
+                return None
+            
+            # Загрузка изображения
+            headers = {
+                'User-Agent': settings.DEFAULT_USER_AGENT,
+                'Referer': base_url
+            }
+            
+            response = requests.get(
+                img_url, 
+                headers=headers, 
+                timeout=settings.IMAGE_DOWNLOAD_TIMEOUT,
+                stream=True
+            )
+            response.raise_for_status()
+            
+            # Проверяем размер изображения
+            img_content = response.content
+            logger.info(f"Image content size: {len(img_content)} bytes")
+            if len(img_content) == 0:
+                logger.warning(f"Image content is empty")
+                return None
+            
+            # Открываем изображение для проверки размеров
+            with Image.open(io.BytesIO(img_content)) as img:
+                width, height = img.size
+                logger.info(f"Image dimensions: {width}x{height} = {width * height} pixels (min required: {settings.MIN_IMAGE_SIZE_FOR_OCR})")
+                
+                # Проверяем минимальный размер
+                if width * height < settings.MIN_IMAGE_SIZE_FOR_OCR:
+                    logger.warning(f"Image too small for OCR: {width * height} < {settings.MIN_IMAGE_SIZE_FOR_OCR}")
+                    return None
+                
+                # OCR изображения
+                logger.info(f"Starting OCR for image: {img_url}")
+                text = self._safe_tesseract_ocr(img)
+                logger.info(f"OCR result length: {len(text) if text else 0} characters")
+                
+                if not text or not text.strip():
+                    logger.warning(f"No text found in image")
+                    return None
+                
+                # Извлекаем имя файла из URL
+                filename = os.path.basename(urlparse(img_url).path) or "image"
+                if '.' not in filename:
+                    # Определяем расширение по MIME-типу
+                    content_type = response.headers.get('content-type', '').lower()
+                    if 'jpeg' in content_type or 'jpg' in content_type:
+                        filename += '.jpg'
+                    elif 'png' in content_type:
+                        filename += '.png'
+                    elif 'webp' in content_type:
+                        filename += '.webp'
+                    elif 'gif' in content_type:
+                        filename += '.gif'
+                    else:
+                        filename += '.jpg'  # по умолчанию
+                
+                return {
+                    "filename": filename,
+                    "path": img_url,
+                    "size": len(img_content),
+                    "type": filename.split('.')[-1].lower(),
+                    "text": text.strip()
+                }
+                
+        except Exception as e:
+            logger.warning(f"Error processing image {img_tag.get('src', '')}: {str(e)}")
+            return None

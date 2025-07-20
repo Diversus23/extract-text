@@ -10,7 +10,7 @@ class Settings:
     """Настройки приложения"""
     
     # Основные настройки
-    VERSION: str = "1.9.0"
+    VERSION: str = "1.10.0"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # Настройки API
@@ -47,9 +47,29 @@ class Settings:
     MAX_EXTRACTED_SIZE: int = int(os.getenv("MAX_EXTRACTED_SIZE", "104857600"))  # 100 MB
     MAX_ARCHIVE_NESTING: int = int(os.getenv("MAX_ARCHIVE_NESTING", "3"))
     
+    # Настройки веб-экстрактора (v1.10.0)
+    MIN_IMAGE_SIZE_FOR_OCR: int = int(os.getenv("MIN_IMAGE_SIZE_FOR_OCR", "22500"))  # 150x150 пикселей
+    MAX_IMAGES_PER_PAGE: int = int(os.getenv("MAX_IMAGES_PER_PAGE", "20"))
+    WEB_PAGE_TIMEOUT: int = int(os.getenv("WEB_PAGE_TIMEOUT", "30"))  # секунды
+    IMAGE_DOWNLOAD_TIMEOUT: int = int(os.getenv("IMAGE_DOWNLOAD_TIMEOUT", "15"))  # секунды
+    DEFAULT_USER_AGENT: str = os.getenv("DEFAULT_USER_AGENT", "Text Extraction Bot 1.0")
+    ENABLE_JAVASCRIPT: bool = os.getenv("ENABLE_JAVASCRIPT", "false").lower() == "true"
+    
+    # Заблокированные IP-диапазоны для защиты от SSRF
+    BLOCKED_IP_RANGES: str = os.getenv(
+        "BLOCKED_IP_RANGES", 
+        "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,::1/128,fe80::/10"
+    )
+    
+    # Заблокированные хосты (включая Docker и loopback)
+    BLOCKED_HOSTNAMES: str = os.getenv(
+        "BLOCKED_HOSTNAMES",
+        "localhost,host.docker.internal,ip6-localhost,ip6-loopback"
+    )
+    
     # Поддерживаемые форматы
     SUPPORTED_FORMATS = {
-        "images_ocr": ["jpg", "jpeg", "png", "tiff", "tif", "bmp", "gif"],
+        "images_ocr": ["jpg", "jpeg", "png", "tiff", "tif", "bmp", "gif", "webp"],
         "documents": ["doc", "docx", "pdf", "rtf", "odt"],
         "spreadsheets": ["csv", "xls", "xlsx", "ods"],
         "presentations": ["pptx", "ppt"],

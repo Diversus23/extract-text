@@ -77,4 +77,37 @@ MAX_TESSERACT_MEMORY=536870912
 # ENABLE_RESOURCE_LIMITS=false
 
 # Логирование
-LOG_LEVEL=INFO 
+LOG_LEVEL=INFO
+
+# ===========================================
+# НАСТРОЙКИ ВЕБ-ЭКСТРАКТОРА (v1.10.0)
+# ===========================================
+
+# Минимальный размер изображений для OCR в пикселях (ширина * высота)
+# 150x150 = 22500 пикселей
+MIN_IMAGE_SIZE_FOR_OCR=22500
+
+# Максимальное количество изображений для обработки на одной веб-странице
+MAX_IMAGES_PER_PAGE=20
+
+# Таймаут загрузки веб-страницы в секундах
+WEB_PAGE_TIMEOUT=30
+
+# Таймаут загрузки изображения в секундах
+IMAGE_DOWNLOAD_TIMEOUT=15
+
+# User-Agent по умолчанию для веб-запросов
+DEFAULT_USER_AGENT="Text Extraction Bot 1.0"
+
+# Включить выполнение JavaScript (требует дополнительных ресурсов)
+# false - только статический HTML (по умолчанию)
+# true - выполнение JavaScript для динамического контента
+ENABLE_JAVASCRIPT=false
+
+# Заблокированные IP-диапазоны для защиты от SSRF-атак
+# Блокируются: localhost, частные сети (10.*, 192.168.*, 172.16-31.*), IPv6 localhost, metadata service
+BLOCKED_IP_RANGES="127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,::1/128,fe80::/10"
+
+# Заблокированные хосты (hostname-based блокировка)
+# Блокируются: localhost, Docker хосты, IPv6 loopback имена
+BLOCKED_HOSTNAMES="localhost,host.docker.internal,ip6-localhost,ip6-loopback" 

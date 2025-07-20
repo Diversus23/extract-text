@@ -726,3 +726,186 @@ class TestAsyncEndpoints:
         assert "documents" in data
         assert "other" in data  # группа "other" содержит текстовые файлы
         assert "pdf" in data["documents"]  # PDF в группе documents
+
+
+@pytest.mark.integration
+class TestURLExtractionEndpoint:
+    """Тесты для веб-экстракции (новое в v1.10.0)"""
+    
+    def test_extract_url_missing_url(self, test_client):
+        """Тест с отсутствующим URL"""
+        response = test_client.post(
+            "/v1/extract/url",
+            json={}
+        )
+        
+        assert response.status_code == 422  # Validation error
+    
+    def test_extract_url_invalid_scheme(self, test_client):
+        """Тест с невалидной схемой URL"""
+        response = test_client.post(
+            "/v1/extract/url",
+            json={"url": "ftp://example.com"}
+        )
+        
+        assert response.status_code == 400
+        data = response.json()
+        assert data["status"] == "error"
+        assert "http://" in data["message"] or "https://" in data["message"]
+    
+    def test_extract_url_empty_url(self, test_client):
+        """Тест с пустым URL"""
+        response = test_client.post(
+            "/v1/extract/url",
+            json={"url": ""}
+        )
+        
+        assert response.status_code == 400
+    
+    @patch('app.extractors.TextExtractor.extract_from_url')
+    def test_extract_url_success(self, mock_extract, test_client):
+        """Тест успешного извлечения текста с URL"""
+        # Мокаем успешный ответ
+        mock_extract.return_value = [
+            {
+                "filename": "page_content",
+                "path": "https://example.com",
+                "size": 1024,
+                "type": "html",
+                "text": "Основной текст страницы"
+            },
+            {
+                "filename": "image1.jpg",
+                "path": "https://example.com/image1.jpg",
+                "size": 2048,
+                "type": "jpg",
+                "text": "Текст с изображения"
+            }
+        ]
+        
+        response = test_client.post(
+            "/v1/extract/url",
+            json={
+                "url": "https://example.com",
+                "user_agent": "Test Agent"
+            }
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["url"] == "https://example.com"
+        assert data["count"] == 2
+        assert len(data["files"]) == 2
+        
+        # Проверяем первый файл (страница)
+        page_file = data["files"][0]
+        assert page_file["filename"] == "page_content"
+        assert page_file["type"] == "html"
+        assert "Основной текст страницы" in page_file["text"]
+        
+        # Проверяем второй файл (изображение)
+        img_file = data["files"][1] 
+        assert img_file["filename"] == "image1.jpg"
+        assert img_file["type"] == "jpg"
+        assert "Текст с изображения" in img_file["text"]
+        
+        # Проверяем что метод был вызван с правильными параметрами
+        mock_extract.assert_called_once_with("https://example.com", "Test Agent")
+    
+    @patch('app.extractors.TextExtractor.extract_from_url')
+    def test_extract_url_blocked_ip(self, mock_extract, test_client):
+        """Тест блокировки внутренних IP-адресов"""
+        mock_extract.side_effect = ValueError("Access to internal IP addresses is prohibited for security reasons")
+        
+        response = test_client.post(
+            "/v1/extract/url",
+            json={"url": "http://192.168.1.1"}
+        )
+        
+        assert response.status_code == 400
+        data = response.json()
+        assert data["status"] == "error"
+        assert "внутренним IP-адресам запрещен" in data["message"]
+    
+    @patch('app.extractors.TextExtractor.extract_from_url')
+    def test_extract_url_connection_error(self, mock_extract, test_client):
+        """Тест ошибки подключения"""
+        mock_extract.side_effect = ValueError("Failed to load page: Connection timeout")
+        
+        response = test_client.post(
+            "/v1/extract/url",
+            json={"url": "https://nonexistent-domain-12345.com"}
+        )
+        
+        assert response.status_code == 404
+        data = response.json()
+        assert data["status"] == "error"
+        assert "Не удалось загрузить страницу" in data["message"]
+    
+    @patch('app.extractors.TextExtractor.extract_from_url')
+    def test_extract_url_timeout_error(self, mock_extract, test_client):
+        """Тест таймаута загрузки"""
+        mock_extract.side_effect = ValueError("Page loading timeout: Read timeout")
+        
+        response = test_client.post(
+            "/v1/extract/url",
+            json={"url": "https://example.com"}
+        )
+        
+        assert response.status_code == 504
+        data = response.json()
+        assert data["status"] == "error"
+        assert "лимит времени ожидания" in data["message"]
+    
+    @patch('app.extractors.TextExtractor.extract_from_url')
+    def test_extract_url_html_parsing_error(self, mock_extract, test_client):
+        """Тест ошибки парсинга HTML"""
+        mock_extract.side_effect = ValueError("HTML parsing error: Invalid document structure")
+        
+        response = test_client.post(
+            "/v1/extract/url",
+            json={"url": "https://example.com"}
+        )
+        
+        assert response.status_code == 422
+        data = response.json()
+        assert data["status"] == "error"
+        assert "Ошибка парсинга HTML" in data["message"]
+    
+    @patch('app.extractors.TextExtractor.extract_from_url')
+    def test_extract_url_general_error(self, mock_extract, test_client):
+        """Тест общей ошибки обработки"""
+        mock_extract.side_effect = Exception("Unexpected error occurred")
+        
+        response = test_client.post(
+            "/v1/extract/url",
+            json={"url": "https://example.com"}
+        )
+        
+        assert response.status_code == 422
+        data = response.json()
+        assert data["status"] == "error"
+        assert "Ошибка обработки веб-страницы" in data["message"]
+    
+    def test_extract_url_with_default_user_agent(self, test_client):
+        """Тест с User-Agent по умолчанию"""
+        with patch('app.extractors.TextExtractor.extract_from_url') as mock_extract:
+            mock_extract.return_value = [
+                {
+                    "filename": "page_content",
+                    "path": "https://example.com",
+                    "size": 512,
+                    "type": "html", 
+                    "text": "Test content"
+                }
+            ]
+            
+            response = test_client.post(
+                "/v1/extract/url",
+                json={"url": "https://example.com"}
+            )
+            
+            assert response.status_code == 200
+            # Проверяем что user_agent передан как None (будет использован DEFAULT_USER_AGENT)
+            mock_extract.assert_called_once_with("https://example.com", None)
