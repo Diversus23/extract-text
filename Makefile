@@ -163,7 +163,7 @@ test-docker: build ## 🐳 Запустить тестирование в Docker
 	@echo "🔧 Создание контейнера для тестирования..."
 	@docker run --rm -v $(shell pwd):/code -w /code $(IMAGE_NAME):$(TAG) \
 		bash -c "python3 -m pip install -q pytest==7.4.4 pytest-asyncio==0.23.2 pytest-cov==4.1.0 httpx==0.25.2 pytest-mock==3.12.0 requests==2.31.0 && \
-		python -m pytest -v --cov=app --cov-report=term-missing --cov-report=html:coverage_html --cov-fail-under=60" || \
+		python -m pytest -v --cov=app --cov-report=term-missing --cov-report=html:coverage_html --cov-report=xml:coverage.xml --cov-fail-under=60" || \
 		echo "⚠️ Некоторые тесты завершились с ошибками"
 	@echo ""
 	@echo "✅ Docker тестирование завершено!"

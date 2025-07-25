@@ -66,12 +66,13 @@ jobs:
         make test-docker
         
     - name: 📊 Загрузка отчета покрытия в Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
         
     - name: 📁 Сохранение артефактов покрытия
       uses: actions/upload-artifact@v4
@@ -120,12 +121,13 @@ jobs:
         python -m pytest -v --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=60
         
     - name: 📊 Загрузка покрытия для Python ${{ matrix.python-version }}
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
         flags: python-${{ matrix.python-version }}
         name: python-${{ matrix.python-version }}
         fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
 
   security:
     name: 🔒 Проверка безопасности
