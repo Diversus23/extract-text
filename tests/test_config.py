@@ -3,9 +3,9 @@
 import os
 from unittest.mock import patch
 
-from app.config import Settings
-
 import pytest
+
+from app.config import Settings
 
 
 @pytest.mark.unit

@@ -104,10 +104,10 @@ try:
 except ImportError:
     sync_playwright = None
 
+from fastapi import BackgroundTasks
+
 from app.config import settings
 from app.utils import get_file_extension, is_archive_format, is_supported_format
-
-from fastapi import BackgroundTasks
 
 logger = logging.getLogger(__name__)
 
@@ -229,25 +229,8 @@ class TextExtractor:
 
             with pdfplumber.open(temp_file_path) as pdf:
                 for page_num, page in enumerate(pdf.pages, 1):
-                    # Извлечение текста со страницы
-                    page_text = page.extract_text()
-                    if page_text:
-                        text_parts.append(f"[Страница {page_num}]\n{page_text}")
-
-                    # Извлечение изображений и OCR
-                    if page.images:
-                        for img_idx, img in enumerate(page.images):
-                            try:
-                                # Попытка извлечения изображения и OCR
-                                image_text = self._ocr_from_pdf_image_sync(page, img)
-                                if image_text.strip():
-                                    text_parts.append(
-                                        f"[Изображение {img_idx + 1}]\n{image_text}"
-                                    )
-                            except Exception as e:
-                                logger.warning(
-                                    f"Ошибка OCR изображения {img_idx + 1}: {str(e)}"
-                                )
+                    page_texts = self._extract_pdf_page_content(page, page_num)
+                    text_parts.extend(page_texts)
 
             return "\n\n".join(text_parts)
 
@@ -255,14 +238,46 @@ class TextExtractor:
             logger.error(f"Ошибка при обработке PDF: {str(e)}")
             raise ValueError(f"Error processing PDF: {str(e)}")
         finally:
-            # Гарантированное удаление временного файла
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.unlink(temp_file_path)
-                except OSError as e:
-                    logger.warning(
-                        f"Не удалось удалить временный файл {temp_file_path}: {str(e)}"
-                    )
+            self._cleanup_temp_file(temp_file_path)
+
+    def _extract_pdf_page_content(self, page, page_num: int) -> list:
+        """Извлечение содержимого страницы PDF."""
+        page_texts = []
+
+        # Извлечение текста со страницы
+        page_text = page.extract_text()
+        if page_text:
+            page_texts.append(f"[Страница {page_num}]\n{page_text}")
+
+        # Извлечение изображений и OCR
+        if page.images:
+            page_texts.extend(self._extract_pdf_page_images(page))
+
+        return page_texts
+
+    def _extract_pdf_page_images(self, page) -> list:
+        """Извлечение текста из изображений на странице PDF."""
+        image_texts = []
+
+        for img_idx, img in enumerate(page.images):
+            try:
+                image_text = self._ocr_from_pdf_image_sync(page, img)
+                if image_text.strip():
+                    image_texts.append(f"[Изображение {img_idx + 1}]\n{image_text}")
+            except Exception as e:
+                logger.warning(f"Ошибка OCR изображения {img_idx + 1}: {str(e)}")
+
+        return image_texts
+
+    def _cleanup_temp_file(self, temp_file_path: str) -> None:
+        """Безопасное удаление временного файла."""
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except OSError as e:
+                logger.warning(
+                    f"Не удалось удалить временный файл {temp_file_path}: {str(e)}"
+                )
 
     def _extract_from_docx_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из DOCX с полным извлечением согласно п.3.3 ТЗ."""
@@ -600,333 +615,270 @@ class TextExtractor:
     def _extract_from_txt_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из TXT файлов."""
         try:
-            # Попытка декодирования в разных кодировках
-            # Расширенный список кодировок для лучшей поддержки русского языка
-            # Порядок важен: более специфичные кодировки проверяются первыми
-            encodings = [
-                "utf-8",  # Стандартная UTF-8
-                "mac-cyrillic",  # Macintosh кодировка для кириллицы
-                "cp1251",  # Windows-1251 (основная кодировка Windows для русского)
-                "windows-1251",  # Альтернативное название для cp1251
-                "koi8-r",  # КОИ-8 (старая советская кодировка)
-                "cp866",  # DOS кодировка для русского
-                "iso-8859-5",  # ISO кодировка для кириллицы
-                "utf-16",  # UTF-16 (иногда используется в Windows)
-                "utf-16le",  # UTF-16 Little Endian
-                "utf-16be",  # UTF-16 Big Endian
-                "latin-1",  # ISO-8859-1 (fallback)
-                "ascii",  # ASCII (базовая кодировка)
-            ]
-
-            for encoding in encodings:
-                try:
-                    decoded_text = content.decode(encoding)
-                    # Проверяем, что текст корректно декодирован
-                    # Если в тексте есть заменяющие символы, пробуем следующую кодировку
-                    if "�" in decoded_text:
-                        replacement_ratio = decoded_text.count("�") / len(decoded_text)
-                        if (
-                            replacement_ratio > 0.1
-                        ):  # Если больше 10% заменяющих символов
-                            continue
-
-                    # Дополнительная проверка для кириллицы - если есть подозрительные символы
-                    # в начале строки, возможно, это неправильная кодировка
-                    if (
-                        encoding == "mac-cyrillic"
-                        and decoded_text
-                        and len(decoded_text) > 0
-                    ):
-                        # Проверяем первые символы на наличие кавычек или других странных символов
-                        suspicious_chars = [
-                            '"',
-                            "'",
-                            "`",
-                            "«",
-                            "»",
-                            '"',
-                            '"',
-                            """, """,
-                            chr(8220),
-                            chr(8221),
-                        ]
-                        if (
-                            decoded_text[0] in suspicious_chars
-                            and len(decoded_text) > 1
-                        ):
-                            # Это может быть неправильная кодировка, продолжаем поиск
-                            continue
-
-                        # Дополнительная проверка - если в тексте есть кириллица смешанная с латиницей
-                        # в неестественном порядке, это может быть неправильная кодировка
-                        cyrillic_count = sum(
-                            1 for char in decoded_text if "\u0400" <= char <= "\u04ff"
-                        )
-                        latin_count = sum(
-                            1 for char in decoded_text if "a" <= char.lower() <= "z"
-                        )
-                        total_letters = cyrillic_count + latin_count
-
-                        if total_letters > 0:
-                            # Если кириллица составляет менее 70% от общего количества букв,
-                            # и есть подозрительные комбинации, пробуем следующую кодировку
-                            if (
-                                cyrillic_count / total_letters < 0.7
-                                and cyrillic_count > 0
-                            ):
-                                continue
-
-                    return decoded_text
-                except UnicodeError:
-                    continue
-
-            # Если не удалось декодировать ни одной кодировкой, используем замещение символов
-            logger.warning(
-                "Не удалось определить кодировку файла, используем UTF-8 с заменой символов"
-            )
-            return content.decode("utf-8", errors="replace")
-
+            return self._decode_text_content(content)
         except Exception as e:
             logger.error(f"Ошибка при обработке TXT: {str(e)}")
             raise ValueError(f"Error processing TXT: {str(e)}")
+
+    def _decode_text_content(self, content: bytes) -> str:
+        """Декодирование содержимого с автоопределением кодировки."""
+        encodings = self._get_encoding_list()
+
+        for encoding in encodings:
+            decoded_text = self._try_decode_with_encoding(content, encoding)
+            if decoded_text is not None:
+                return decoded_text
+
+        # Если не удалось декодировать ни одной кодировкой, используем замещение символов
+        logger.warning(
+            "Не удалось определить кодировку файла, используем UTF-8 с заменой символов"
+        )
+        return content.decode("utf-8", errors="replace")
+
+    def _get_encoding_list(self) -> list:
+        """Получение списка кодировок для проверки."""
+        return [
+            "utf-8",  # Стандартная UTF-8
+            "mac-cyrillic",  # Macintosh кодировка для кириллицы
+            "cp1251",  # Windows-1251 (основная кодировка Windows для русского)
+            "windows-1251",  # Альтернативное название для cp1251
+            "koi8-r",  # КОИ-8 (старая советская кодировка)
+            "cp866",  # DOS кодировка для русского
+            "iso-8859-5",  # ISO кодировка для кириллицы
+            "utf-16",  # UTF-16 (иногда используется в Windows)
+            "utf-16le",  # UTF-16 Little Endian
+            "utf-16be",  # UTF-16 Big Endian
+            "latin-1",  # ISO-8859-1 (fallback)
+            "ascii",  # ASCII (базовая кодировка)
+        ]
+
+    def _try_decode_with_encoding(self, content: bytes, encoding: str) -> str:
+        """Попытка декодирования с проверкой качества."""
+        try:
+            decoded_text = content.decode(encoding)
+
+            if not self._is_decoding_quality_good(decoded_text):
+                return None
+
+            if not self._is_mac_cyrillic_valid(decoded_text, encoding):
+                return None
+
+            return decoded_text
+        except UnicodeError:
+            return None
+
+    def _is_decoding_quality_good(self, text: str) -> bool:
+        """Проверка качества декодирования по количеству заменяющих символов."""
+        if "�" in text:
+            replacement_ratio = text.count("�") / len(text)
+            return replacement_ratio <= 0.1  # Не больше 10% заменяющих символов
+        return True
+
+    def _is_mac_cyrillic_valid(self, text: str, encoding: str) -> bool:
+        """Дополнительная валидация для mac-cyrillic кодировки."""
+        if encoding != "mac-cyrillic" or not text:
+            return True
+
+        if self._has_suspicious_start_chars(text):
+            return False
+
+        return self._has_valid_cyrillic_ratio(text)
+
+    def _has_suspicious_start_chars(self, text: str) -> bool:
+        """Проверка на подозрительные символы в начале текста."""
+        suspicious_chars = [
+            '"',
+            "'",
+            "`",
+            "«",
+            "»",
+            '"',
+            '"',
+            """, """,
+            chr(8220),
+            chr(8221),
+        ]
+        return len(text) > 1 and text[0] in suspicious_chars
+
+    def _has_valid_cyrillic_ratio(self, text: str) -> bool:
+        """Проверка соотношения кириллицы и латиницы."""
+        cyrillic_count = sum(1 for char in text if "\u0400" <= char <= "\u04ff")
+        latin_count = sum(1 for char in text if "a" <= char.lower() <= "z")
+        total_letters = cyrillic_count + latin_count
+
+        if total_letters == 0:
+            return True
+
+        # Если кириллица составляет менее 70% и она есть, то это подозрительно
+        return not (cyrillic_count / total_letters < 0.7 and cyrillic_count > 0)
 
     def _extract_from_source_code_sync(
         self, content: bytes, extension: str, filename: str
     ) -> str:
         """Синхронное извлечение текста из файлов исходного кода."""
         try:
-            # Попытка декодирования в разных кодировках
-            # Расширенный список кодировок для лучшей поддержки различных языков
-            # Порядок важен: более специфичные кодировки проверяются первыми
-            encodings = [
-                "utf-8",  # Стандартная UTF-8
-                "mac-cyrillic",  # Macintosh кодировка для кириллицы
-                "cp1251",  # Windows-1251 (основная кодировка Windows для русского)
-                "windows-1251",  # Альтернативное название для cp1251
-                "koi8-r",  # КОИ-8 (старая советская кодировка)
-                "cp866",  # DOS кодировка для русского
-                "iso-8859-5",  # ISO кодировка для кириллицы
-                "utf-16",  # UTF-16 (иногда используется в Windows)
-                "utf-16le",  # UTF-16 Little Endian
-                "utf-16be",  # UTF-16 Big Endian
-                "latin-1",  # ISO-8859-1 (fallback для европейских языков)
-                "ascii",  # ASCII (базовая кодировка)
-            ]
+            # Декодируем содержимое файла
+            text = self._decode_text_content(content)
 
-            text = None
-            for encoding in encodings:
-                try:
-                    decoded_text = content.decode(encoding)
-                    # Проверяем, что текст корректно декодирован
-                    # Если в тексте есть заменяющие символы, пробуем следующую кодировку
-                    if "�" in decoded_text:
-                        replacement_ratio = decoded_text.count("�") / len(decoded_text)
-                        if (
-                            replacement_ratio > 0.1
-                        ):  # Если больше 10% заменяющих символов
-                            continue
-
-                    # Дополнительная проверка для кириллицы - если есть подозрительные символы
-                    # в начале строки, возможно, это неправильная кодировка
-                    if (
-                        encoding == "mac-cyrillic"
-                        and decoded_text
-                        and len(decoded_text) > 0
-                    ):
-                        # Проверяем первые символы на наличие кавычек или других странных символов
-                        suspicious_chars = [
-                            '"',
-                            "'",
-                            "`",
-                            "«",
-                            "»",
-                            '"',
-                            '"',
-                            """, """,
-                            chr(8220),
-                            chr(8221),
-                        ]
-                        if (
-                            decoded_text[0] in suspicious_chars
-                            and len(decoded_text) > 1
-                        ):
-                            # Это может быть неправильная кодировка, продолжаем поиск
-                            continue
-
-                        # Дополнительная проверка - если в тексте есть кириллица смешанная с латиницей
-                        # в неестественном порядке, это может быть неправильная кодировка
-                        cyrillic_count = sum(
-                            1 for char in decoded_text if "\u0400" <= char <= "\u04ff"
-                        )
-                        latin_count = sum(
-                            1 for char in decoded_text if "a" <= char.lower() <= "z"
-                        )
-                        total_letters = cyrillic_count + latin_count
-
-                        if total_letters > 0:
-                            # Если кириллица составляет менее 70% от общего количества букв,
-                            # и есть подозрительные комбинации, пробуем следующую кодировку
-                            if (
-                                cyrillic_count / total_letters < 0.7
-                                and cyrillic_count > 0
-                            ):
-                                continue
-
-                    text = decoded_text
-                    break
-                except UnicodeError:
-                    continue
-
-            if text is None:
-                # Если не удалось декодировать ни одной кодировкой, используем замещение символов
-                logger.warning(
-                    f"Не удалось определить кодировку файла {filename}, используем UTF-8 с заменой символов"
-                )
-                text = content.decode("utf-8", errors="replace")
-
-            # Определение языка программирования по расширению
-            language_map = {
-                # Python
-                "py": "Python",
-                "pyx": "Python",
-                "pyi": "Python",
-                "pyw": "Python",
-                # JavaScript/TypeScript
-                "js": "JavaScript",
-                "jsx": "JavaScript",
-                "ts": "TypeScript",
-                "tsx": "TypeScript",
-                "mjs": "JavaScript",
-                "cjs": "JavaScript",
-                # Java
-                "java": "Java",
-                "jav": "Java",
-                # C/C++
-                "c": "C",
-                "cpp": "C++",
-                "cxx": "C++",
-                "cc": "C++",
-                "c++": "C++",
-                "h": "C Header",
-                "hpp": "C++ Header",
-                "hxx": "C++ Header",
-                "h++": "C++ Header",
-                # C#
-                "cs": "C#",
-                "csx": "C#",
-                # PHP
-                "php": "PHP",
-                "php3": "PHP",
-                "php4": "PHP",
-                "php5": "PHP",
-                "phtml": "PHP",
-                # Ruby
-                "rb": "Ruby",
-                "rbw": "Ruby",
-                "rake": "Ruby",
-                "gemspec": "Ruby",
-                # Go
-                "go": "Go",
-                "mod": "Go Module",
-                "sum": "Go Sum",
-                # Rust
-                "rs": "Rust",
-                "rlib": "Rust Library",
-                # Swift
-                "swift": "Swift",
-                # Kotlin
-                "kt": "Kotlin",
-                "kts": "Kotlin Script",
-                # Scala
-                "scala": "Scala",
-                "sc": "Scala",
-                # R
-                "r": "R",
-                "R": "R",
-                "rmd": "R Markdown",
-                "Rmd": "R Markdown",
-                # SQL
-                "sql": "SQL",
-                "ddl": "SQL DDL",
-                "dml": "SQL DML",
-                # Shell
-                "sh": "Shell",
-                "bash": "Bash",
-                "zsh": "Zsh",
-                "fish": "Fish",
-                "ksh": "Ksh",
-                "csh": "Csh",
-                "tcsh": "Tcsh",
-                # PowerShell
-                "ps1": "PowerShell",
-                "psm1": "PowerShell Module",
-                "psd1": "PowerShell Data",
-                # Perl
-                "pl": "Perl",
-                "pm": "Perl Module",
-                "pod": "Perl Documentation",
-                "t": "Perl Test",
-                # Lua
-                "lua": "Lua",
-                # 1C and OneScript
-                "bsl": "1C:Enterprise",
-                "os": "OneScript",
-                # Configuration files
-                "ini": "INI Config",
-                "cfg": "Config",
-                "conf": "Config",
-                "config": "Config",
-                "toml": "TOML",
-                "properties": "Properties",
-                # Web
-                "css": "CSS",
-                "scss": "SCSS",
-                "sass": "Sass",
-                "less": "Less",
-                "styl": "Stylus",
-                # Markup
-                "tex": "LaTeX",
-                "latex": "LaTeX",
-                "rst": "reStructuredText",
-                "adoc": "AsciiDoc",
-                "asciidoc": "AsciiDoc",
-                # Data
-                "jsonl": "JSON Lines",
-                "ndjson": "NDJSON",
-                "jsonc": "JSON with Comments",
-                # Docker
-                "dockerfile": "Dockerfile",
-                "containerfile": "Containerfile",
-                # Makefile
-                "makefile": "Makefile",
-                "mk": "Makefile",
-                "mak": "Makefile",
-                # Git
-                "gitignore": "Git Ignore",
-                "gitattributes": "Git Attributes",
-                "gitmodules": "Git Modules",
-            }
-
-            language = language_map.get(extension.lower(), "Source Code")
-
-            # Формирование заголовка с информацией о файле
-            header = f"=== {language} File: {filename} ===\n"
-
-            # Добавление информации о количестве строк
-            lines = text.split("\n")
-            line_count = len(lines)
-            header += f"Lines: {line_count}\n"
-
-            # Если файл слишком длинный, добавляем предупреждение
-            if line_count > 1000:
-                header += f"Warning: Large file with {line_count} lines\n"
-
-            # Возвращаем заголовок + содержимое файла
-            return header + "=" * 50 + "\n" + text
+            # Получаем информацию о языке программирования и форматируем результат
+            return self._format_source_code_output(text, extension, filename)
 
         except Exception as e:
             logger.error(f"Ошибка при обработке исходного кода {filename}: {str(e)}")
             raise ValueError(f"Error processing source code: {str(e)}")
+
+    def _format_source_code_output(
+        self, text: str, extension: str, filename: str
+    ) -> str:
+        """Форматирование вывода для файлов исходного кода."""
+        language = self._get_programming_language(extension)
+        header = self._create_source_code_header(language, filename, text)
+        return header + "=" * 50 + "\n" + text
+
+    def _get_programming_language(self, extension: str) -> str:
+        """Определение языка программирования по расширению файла."""
+        language_map = self._get_language_map()
+        return language_map.get(extension.lower(), "Source Code")
+
+    def _get_language_map(self) -> dict:
+        """Получение словаря соответствия расширений языкам программирования."""
+        return {
+            # Python
+            "py": "Python",
+            "pyx": "Python",
+            "pyi": "Python",
+            "pyw": "Python",
+            # JavaScript/TypeScript
+            "js": "JavaScript",
+            "jsx": "JavaScript",
+            "ts": "TypeScript",
+            "tsx": "TypeScript",
+            "mjs": "JavaScript",
+            "cjs": "JavaScript",
+            # Java
+            "java": "Java",
+            "jav": "Java",
+            # C/C++
+            "c": "C",
+            "cpp": "C++",
+            "cxx": "C++",
+            "cc": "C++",
+            "c++": "C++",
+            "h": "C Header",
+            "hpp": "C++ Header",
+            "hxx": "C++ Header",
+            "h++": "C++ Header",
+            # C#
+            "cs": "C#",
+            "csx": "C#",
+            # PHP
+            "php": "PHP",
+            "php3": "PHP",
+            "php4": "PHP",
+            "php5": "PHP",
+            "phtml": "PHP",
+            # Ruby
+            "rb": "Ruby",
+            "rbw": "Ruby",
+            "rake": "Ruby",
+            "gemspec": "Ruby",
+            # Go
+            "go": "Go",
+            "mod": "Go Module",
+            "sum": "Go Sum",
+            # Rust
+            "rs": "Rust",
+            "rlib": "Rust Library",
+            # Swift
+            "swift": "Swift",
+            # Kotlin
+            "kt": "Kotlin",
+            "kts": "Kotlin Script",
+            # Scala
+            "scala": "Scala",
+            "sc": "Scala",
+            # R
+            "r": "R",
+            "R": "R",
+            "rmd": "R Markdown",
+            "Rmd": "R Markdown",
+            # SQL
+            "sql": "SQL",
+            "ddl": "SQL DDL",
+            "dml": "SQL DML",
+            # Shell
+            "sh": "Shell",
+            "bash": "Bash",
+            "zsh": "Zsh",
+            "fish": "Fish",
+            "ksh": "Ksh",
+            "csh": "Csh",
+            "tcsh": "Tcsh",
+            # PowerShell
+            "ps1": "PowerShell",
+            "psm1": "PowerShell Module",
+            "psd1": "PowerShell Data",
+            # Perl
+            "pl": "Perl",
+            "pm": "Perl Module",
+            "pod": "Perl Documentation",
+            "t": "Perl Test",
+            # Lua
+            "lua": "Lua",
+            # 1C and OneScript
+            "bsl": "1C:Enterprise",
+            "os": "OneScript",
+            # Configuration files
+            "ini": "INI Config",
+            "cfg": "Config",
+            "conf": "Config",
+            "config": "Config",
+            "toml": "TOML",
+            "properties": "Properties",
+            # Web
+            "css": "CSS",
+            "scss": "SCSS",
+            "sass": "Sass",
+            "less": "Less",
+            "styl": "Stylus",
+            # Markup
+            "tex": "LaTeX",
+            "latex": "LaTeX",
+            "rst": "reStructuredText",
+            "adoc": "AsciiDoc",
+            "asciidoc": "AsciiDoc",
+            # Data
+            "jsonl": "JSON Lines",
+            "ndjson": "NDJSON",
+            "jsonc": "JSON with Comments",
+            # Docker
+            "dockerfile": "Dockerfile",
+            "containerfile": "Containerfile",
+            # Makefile
+            "makefile": "Makefile",
+            "mk": "Makefile",
+            "mak": "Makefile",
+            # Git
+            "gitignore": "Git Ignore",
+            "gitattributes": "Git Attributes",
+            "gitmodules": "Git Modules",
+        }
+
+    def _create_source_code_header(
+        self, language: str, filename: str, text: str
+    ) -> str:
+        """Создание заголовка для файла исходного кода."""
+        header = f"=== {language} File: {filename} ===\n"
+
+        lines = text.split("\n")
+        line_count = len(lines)
+        header += f"Lines: {line_count}\n"
+
+        # Если файл слишком длинный, добавляем предупреждение
+        if line_count > 1000:
+            header += f"Warning: Large file with {line_count} lines\n"
+
+        return header
 
     def _extract_from_html_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из HTML."""
@@ -1059,29 +1011,41 @@ class TextExtractor:
         try:
             text = content.decode("utf-8", errors="replace")
             data = yaml.safe_load(text)
-
-            # Рекурсивное извлечение всех строковых значений
-            def extract_strings(obj, path=""):
-                strings = []
-                if isinstance(obj, dict):
-                    for key, value in obj.items():
-                        new_path = f"{path}.{key}" if path else key
-                        strings.extend(extract_strings(value, new_path))
-                elif isinstance(obj, list):
-                    for i, value in enumerate(obj):
-                        new_path = f"{path}[{i}]" if path else f"[{i}]"
-                        strings.extend(extract_strings(value, new_path))
-                elif isinstance(obj, str):
-                    if obj.strip():
-                        strings.append(f"{path}: {obj}")
-                return strings
-
-            strings = extract_strings(data)
+            strings = self._extract_yaml_strings(data)
             return "\n".join(strings)
 
         except Exception as e:
             logger.error(f"Ошибка при обработке YAML: {str(e)}")
             raise ValueError(f"Error processing YAML: {str(e)}")
+
+    def _extract_yaml_strings(self, obj, path="") -> list:
+        """Рекурсивное извлечение всех строковых значений из YAML."""
+        strings = []
+
+        if isinstance(obj, dict):
+            strings.extend(self._extract_yaml_dict_strings(obj, path))
+        elif isinstance(obj, list):
+            strings.extend(self._extract_yaml_list_strings(obj, path))
+        elif isinstance(obj, str) and obj.strip():
+            strings.append(f"{path}: {obj}")
+
+        return strings
+
+    def _extract_yaml_dict_strings(self, obj_dict: dict, path: str) -> list:
+        """Извлечение строк из словаря YAML."""
+        strings = []
+        for key, value in obj_dict.items():
+            new_path = f"{path}.{key}" if path else key
+            strings.extend(self._extract_yaml_strings(value, new_path))
+        return strings
+
+    def _extract_yaml_list_strings(self, obj_list: list, path: str) -> list:
+        """Извлечение строк из списка YAML."""
+        strings = []
+        for i, value in enumerate(obj_list):
+            new_path = f"{path}[{i}]" if path else f"[{i}]"
+            strings.extend(self._extract_yaml_strings(value, new_path))
+        return strings
 
     def _extract_from_odt_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из ODT."""
@@ -1129,45 +1093,56 @@ class TextExtractor:
 
             with zipfile.ZipFile(io.BytesIO(content), "r") as zip_ref:
                 for file_info in zip_ref.infolist():
-                    # Ограничиваем размер распакованного содержимого
-                    if (
-                        extracted_size + file_info.file_size
-                        > settings.MAX_EXTRACTED_SIZE
+                    if self._should_stop_epub_extraction(
+                        extracted_size, file_info.file_size
                     ):
-                        logger.warning(
-                            "Достигнут лимит размера распакованного содержимого EPUB"
-                        )
                         break
 
-                    if file_info.filename.endswith((".html", ".xhtml", ".htm")):
-                        try:
-                            html_content = zip_ref.read(file_info.filename)
-                            html_text = html_content.decode("utf-8", errors="replace")
-
-                            # Парсинг HTML
-                            soup = BeautifulSoup(html_text, "html.parser")
-
-                            # Удаление script и style тегов
-                            for script in soup(["script", "style"]):
-                                script.decompose()
-
-                            # Извлечение текста
-                            text = soup.get_text()
-                            if text.strip():
-                                text_parts.append(text.strip())
-
-                            extracted_size += file_info.file_size
-
-                        except Exception as e:
-                            logger.warning(
-                                f"Ошибка при обработке файла {file_info.filename}: {e}"
-                            )
+                    if self._is_epub_html_file(file_info.filename):
+                        text, new_size = self._extract_epub_html_text(
+                            zip_ref, file_info
+                        )
+                        if text:
+                            text_parts.append(text)
+                        extracted_size += new_size
 
             return "\n\n".join(text_parts)
 
         except Exception as e:
             logger.error(f"Ошибка при обработке EPUB: {str(e)}")
             raise ValueError(f"Error processing EPUB: {str(e)}")
+
+    def _should_stop_epub_extraction(self, current_size: int, file_size: int) -> bool:
+        """Проверка лимита размера для EPUB."""
+        if current_size + file_size > settings.MAX_EXTRACTED_SIZE:
+            logger.warning("Достигнут лимит размера распакованного содержимого EPUB")
+            return True
+        return False
+
+    def _is_epub_html_file(self, filename: str) -> bool:
+        """Проверка является ли файл HTML для EPUB."""
+        return filename.endswith((".html", ".xhtml", ".htm"))
+
+    def _extract_epub_html_text(self, zip_ref, file_info) -> tuple:
+        """Извлечение текста из HTML файла EPUB."""
+        try:
+            html_content = zip_ref.read(file_info.filename)
+            html_text = html_content.decode("utf-8", errors="replace")
+
+            # Парсинг HTML
+            soup = BeautifulSoup(html_text, "html.parser")
+
+            # Удаление script и style тегов
+            for script in soup(["script", "style"]):
+                script.decompose()
+
+            # Извлечение текста
+            text = soup.get_text()
+            return text.strip() if text.strip() else None, file_info.file_size
+
+        except Exception as e:
+            logger.warning(f"Ошибка при обработке файла {file_info.filename}: {e}")
+            return None, 0
 
     def _extract_from_eml_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из EML."""
@@ -1596,71 +1571,84 @@ class TextExtractor:
         nesting_level: int,
     ) -> List[Dict[str, Any]]:
         """Извлечение файлов из ZIP-архива."""
-        extracted_files = []
-        total_size = 0
-
         try:
             with zipfile.ZipFile(archive_path, "r") as zip_ref:
-                # Проверяем размер распакованных файлов
-                for info in zip_ref.infolist():
-                    if info.is_dir():
-                        continue
-                    total_size += info.file_size
-
-                    if total_size > settings.MAX_EXTRACTED_SIZE:
-                        raise ValueError(
-                            "Extracted files size exceeds maximum allowed size (zip bomb protection)"
-                        )
-
-                # Извлекаем файлы
-                for info in zip_ref.infolist():
-                    if info.is_dir():
-                        continue
-
-                    # Санитизируем имя файла
-                    safe_filename = self._sanitize_archive_filename(info.filename)
-                    if not safe_filename:
-                        continue
-
-                    # Фильтруем системные файлы
-                    if self._is_system_file(safe_filename):
-                        continue
-
-                    # Создаем безопасный путь для извлечения
-                    safe_path = extract_dir / safe_filename
-                    safe_path.parent.mkdir(parents=True, exist_ok=True)
-
-                    try:
-                        # Извлекаем файл
-                        with (
-                            zip_ref.open(info) as source,
-                            open(safe_path, "wb") as target,
-                        ):
-                            shutil.copyfileobj(source, target)
-
-                        # Обрабатываем файл
-                        file_content = safe_path.read_bytes()
-                        file_result = self._process_extracted_file(
-                            file_content,
-                            safe_filename,
-                            safe_path.name,
-                            archive_name,
-                            nesting_level,
-                        )
-
-                        if file_result:
-                            extracted_files.extend(file_result)
-
-                    except Exception as e:
-                        logger.warning(
-                            f"Ошибка при обработке файла {safe_filename} из архива {archive_name}: {str(e)}"
-                        )
-                        continue
-
+                self._validate_zip_size(zip_ref)
+                return self._process_zip_files(
+                    zip_ref, extract_dir, archive_name, nesting_level
+                )
         except zipfile.BadZipFile:
             raise ValueError("Invalid ZIP file")
 
+    def _validate_zip_size(self, zip_ref) -> None:
+        """Проверка размера файлов в ZIP-архиве для защиты от zip bomb."""
+        total_size = 0
+        for info in zip_ref.infolist():
+            if not info.is_dir():
+                total_size += info.file_size
+                if total_size > settings.MAX_EXTRACTED_SIZE:
+                    raise ValueError(
+                        "Extracted files size exceeds maximum allowed size (zip bomb protection)"
+                    )
+
+    def _process_zip_files(
+        self, zip_ref, extract_dir: Path, archive_name: str, nesting_level: int
+    ) -> List[Dict[str, Any]]:
+        """Обработка всех файлов в ZIP-архиве."""
+        extracted_files = []
+
+        for info in zip_ref.infolist():
+            if info.is_dir():
+                continue
+
+            file_result = self._extract_single_zip_file(
+                info, zip_ref, extract_dir, archive_name, nesting_level
+            )
+            if file_result:
+                extracted_files.extend(file_result)
+
         return extracted_files
+
+    def _extract_single_zip_file(
+        self, info, zip_ref, extract_dir: Path, archive_name: str, nesting_level: int
+    ) -> List[Dict[str, Any]]:
+        """Извлечение и обработка одного файла из ZIP-архива."""
+        # Санитизируем имя файла
+        safe_filename = self._sanitize_archive_filename(info.filename)
+        if not safe_filename:
+            return []
+
+        # Фильтруем системные файлы
+        if self._is_system_file(safe_filename):
+            return []
+
+        # Создаем безопасный путь для извлечения
+        safe_path = extract_dir / safe_filename
+        safe_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Извлекаем файл
+            with zip_ref.open(info) as source, open(safe_path, "wb") as target:
+                shutil.copyfileobj(source, target)
+
+            # Обрабатываем файл
+            file_content = safe_path.read_bytes()
+            return (
+                self._process_extracted_file(
+                    file_content,
+                    safe_filename,
+                    safe_path.name,
+                    archive_name,
+                    nesting_level,
+                )
+                or []
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"Ошибка при обработке файла {safe_filename} из архива {archive_name}: {str(e)}"
+            )
+            return []
 
     def _extract_tar_files(
         self,

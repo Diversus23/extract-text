@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Union
 
 import magic
-
 from werkzeug.utils import secure_filename
 
 from .config import settings

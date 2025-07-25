@@ -8,10 +8,10 @@ import zipfile
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, mock_open, patch
 
+import pytest
+
 from app.config import settings
 from app.extractors import TextExtractor
-
-import pytest
 
 
 @pytest.mark.unit
