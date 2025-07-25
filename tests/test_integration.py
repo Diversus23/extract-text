@@ -118,7 +118,6 @@ class TestAllRealFiles:
         test_files_to_skip,
     ):
         """Тест обработки всех поддерживаемых файлов из папки tests."""
-
         # Мокаем валидацию файлов чтобы пропустить MIME проверки
         mock_validate_file_type.return_value = (True, None)
 

@@ -116,6 +116,7 @@ class TextExtractor:
     """Класс для извлечения текста из файлов различных форматов."""
 
     def __init__(self):
+        """Инициализация экстрактора текста."""
         self.ocr_languages = settings.OCR_LANGUAGES
         self.timeout = settings.PROCESSING_TIMEOUT_SECONDS
         # Создаем пул потоков для CPU-bound операций
@@ -167,7 +168,6 @@ class TextExtractor:
         self, content: bytes, extension: str, filename: str
     ) -> str:
         """Извлечение текста в зависимости от формата (синхронная версия)."""
-
         # Проверяем, является ли файл исходным кодом
         source_code_extensions = settings.SUPPORTED_FORMATS.get("source_code", [])
 
@@ -1516,7 +1516,6 @@ class TextExtractor:
         self, content: bytes, filename: str, nesting_level: int = 0
     ) -> List[Dict[str, Any]]:
         """Безопасное извлечение файлов из архива."""
-
         # Проверка глубины вложенности
         if nesting_level >= settings.MAX_ARCHIVE_NESTING:
             logger.warning(
@@ -1845,7 +1844,7 @@ class TextExtractor:
                 sz_ref.extractall(extract_dir)
 
                 # Обрабатываем извлеченные файлы
-                for root, dirs, files in os.walk(extract_dir):
+                for root, _dirs, files in os.walk(extract_dir):
                     for file in files:
                         file_path = Path(root) / file
                         relative_path = file_path.relative_to(extract_dir)
@@ -2594,7 +2593,7 @@ class TextExtractor:
         extraction_options: Optional[Any] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Извлечение текста с HTML страницы (выделено из extract_from_url в v1.10.3)
+        Извлечение текста с HTML страницы (выделено из extract_from_url в v1.10.3).
 
         Args:
             url: URL HTML страницы
@@ -2675,7 +2674,7 @@ class TextExtractor:
         extraction_options: Optional[Any] = None,
     ) -> tuple[str, str]:
         """
-        Извлечение HTML контента страницы с помощью requests (без JS, обновлено в v1.10.2)
+        Извлечение HTML контента страницы с помощью requests (без JS, обновлено в v1.10.2).
 
         Args:
             url: URL страницы

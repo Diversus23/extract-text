@@ -47,7 +47,7 @@ def setup_logging() -> None:
 
 
 def get_file_extension(filename: str) -> Optional[str]:
-    """Получение расширения файла"""
+    """Получение расширения файла."""
     if not filename or "." not in filename:
         return None
 

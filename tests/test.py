@@ -10,6 +10,7 @@ class TextProcessor:
     """Класс для обработки текста."""
 
     def __init__(self, language: str = "ru"):
+        """Инициализация процессора текста."""
         self.language = language
         self.processed_count = 0
 
