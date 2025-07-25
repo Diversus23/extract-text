@@ -12,14 +12,6 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
-import uvicorn
-
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.concurrency import run_in_threadpool
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-
 from app.config import settings
 from app.extractors import TextExtractor
 from app.utils import (
@@ -29,6 +21,15 @@ from app.utils import (
     setup_logging,
     validate_file_type,
 )
+
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from pydantic import BaseModel, Field
+
+import uvicorn
 
 # Настройка логирования
 setup_logging()

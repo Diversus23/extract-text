@@ -7,13 +7,14 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from app.config import settings
+from app.main import app
+
 from fastapi.testclient import TestClient
 
 import pytest
-import requests
 
-from app.config import settings
-from app.main import app
+import requests
 
 
 @pytest.mark.integration

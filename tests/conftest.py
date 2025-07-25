@@ -7,13 +7,15 @@ from pathlib import Path
 from typing import Any, BinaryIO, Generator
 from unittest.mock import Mock, patch
 
-from fastapi.testclient import TestClient
-from httpx import AsyncClient
-import pytest
-
 from app.config import settings
 from app.extractors import TextExtractor
 from app.main import app
+
+from fastapi.testclient import TestClient
+
+from httpx import AsyncClient
+
+import pytest
 
 
 @pytest.fixture(scope="session")

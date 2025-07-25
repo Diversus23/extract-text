@@ -16,8 +16,6 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import BackgroundTasks
-
 # Импорты для архивов
 try:
     import rarfile
@@ -108,6 +106,8 @@ except ImportError:
 
 from app.config import settings
 from app.utils import get_file_extension, is_archive_format, is_supported_format
+
+from fastapi import BackgroundTasks
 
 logger = logging.getLogger(__name__)
 
