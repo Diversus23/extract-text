@@ -208,8 +208,8 @@ class TestSetupLogging:
     def test_setup_logging_calls(self):
         """Тест вызова setup_logging"""
         with patch("logging.getLogger") as mock_get_logger:
-            with patch("logging.StreamHandler") as mock_stream_handler:
-                with patch("logging.Formatter") as mock_formatter:
+            with patch("logging.StreamHandler"):
+                with patch("logging.Formatter"):
                     mock_root_logger = Mock()
                     mock_uvicorn_logger = Mock()
                     mock_get_logger.side_effect = [

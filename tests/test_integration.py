@@ -258,7 +258,7 @@ class TestAllRealFiles:
 
         # Выводим статистику
         total_files = len(all_files)
-        print(f"\n=== Статистика тестирования файлов ===")
+        print("\n=== Статистика тестирования файлов ===")
         print(f"Всего файлов: {total_files}")
         print(f"Успешно обработано: {successful_files}")
         print(f"Пропущено: {skipped_files}")
@@ -748,7 +748,7 @@ class TestPerformance:
 
         # Создаем 5 одновременных запросов
         threads = []
-        for i in range(5):
+        for _i in range(5):
             t = threading.Thread(target=make_request)
             threads.append(t)
             t.start()

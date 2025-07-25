@@ -1,13 +1,11 @@
-"""
-Конфигурация приложения
-"""
+"""Конфигурация приложения."""
 
 import os
 from typing import List
 
 
 class Settings:
-    """Настройки приложения"""
+    """Настройки приложения."""
 
     # Основные настройки
     VERSION: str = "1.10.3"
@@ -281,7 +279,7 @@ class Settings:
 
     @property
     def all_supported_extensions(self) -> List[str]:
-        """Все поддерживаемые расширения файлов"""
+        """Все поддерживаемые расширения файлов."""
         extensions = []
         for format_group in self.SUPPORTED_FORMATS.values():
             extensions.extend(format_group)

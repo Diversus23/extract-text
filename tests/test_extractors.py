@@ -18,10 +18,10 @@ from app.extractors import TextExtractor
 
 @pytest.mark.unit
 class TestTextExtractor:
-    """Тесты для класса TextExtractor"""
+    """Тесты для класса TextExtractor."""
 
     def test_init(self):
-        """Тест инициализации TextExtractor"""
+        """Тест инициализации TextExtractor."""
         extractor = TextExtractor()
         assert extractor.ocr_languages == settings.OCR_LANGUAGES
         assert extractor.timeout == settings.PROCESSING_TIMEOUT_SECONDS
@@ -29,7 +29,7 @@ class TestTextExtractor:
         assert extractor._thread_pool._max_workers == 4
 
     def test_extract_text_simple_txt(self, text_extractor):
-        """Тест извлечения текста из простого текстового файла"""
+        """Тест извлечения текста из простого текстового файла."""
         test_content = "Тестовый текст для проверки"
         content_bytes = test_content.encode("utf-8")
 
@@ -42,14 +42,14 @@ class TestTextExtractor:
         assert result[0]["size"] == len(content_bytes)
 
     def test_extract_text_unsupported_format(self, text_extractor):
-        """Тест извлечения текста из неподдерживаемого формата"""
+        """Тест извлечения текста из неподдерживаемого формата."""
         content_bytes = b"some content"
 
         with pytest.raises(ValueError, match="Unsupported file format"):
             text_extractor.extract_text(content_bytes, "test.xyz")
 
     def test_extract_text_timeout(self):
-        """Тест обработки таймаута"""
+        """Тест обработки таймаута."""
         extractor = TextExtractor()
 
         # Мокаем метод для имитации таймаута
@@ -60,7 +60,7 @@ class TestTextExtractor:
                 extractor.extract_text(b"test content", "test.txt")
 
     def test_extract_from_txt_sync(self, text_extractor):
-        """Тест синхронного извлечения из текстового файла"""
+        """Тест синхронного извлечения из текстового файла."""
         test_content = "Простой текст\nВторая строка"
         content_bytes = test_content.encode("utf-8")
 
@@ -69,7 +69,7 @@ class TestTextExtractor:
         assert result == test_content
 
     def test_extract_from_txt_sync_encoding_fallback(self, text_extractor):
-        """Тест извлечения текста с разными кодировками"""
+        """Тест извлечения текста с разными кодировками."""
         # Текст в CP1251
         test_content = "Тестовый текст"
         content_bytes = test_content.encode("cp1251")
@@ -79,7 +79,7 @@ class TestTextExtractor:
         assert result == test_content
 
     def test_extract_from_json_sync(self, text_extractor):
-        """Тест синхронного извлечения из JSON файла"""
+        """Тест синхронного извлечения из JSON файла."""
         json_content = '{"name": "Тест", "value": 42, "nested": {"key": "значение"}}'
         content_bytes = json_content.encode("utf-8")
 
@@ -92,14 +92,14 @@ class TestTextExtractor:
         assert "value: 42" not in result
 
     def test_extract_from_json_sync_invalid(self, text_extractor):
-        """Тест обработки некорректного JSON"""
+        """Тест обработки некорректного JSON."""
         invalid_json = b'{"invalid": json}'
 
         with pytest.raises(ValueError, match="Error processing JSON"):
             text_extractor._extract_from_json_sync(invalid_json)
 
     def test_extract_from_csv_sync(self, text_extractor):
-        """Тест синхронного извлечения из CSV файла"""
+        """Тест синхронного извлечения из CSV файла."""
         csv_content = "Название,Цена,Количество\nТовар 1,100,5\nТовар 2,200,3"
         content_bytes = csv_content.encode("utf-8")
 
@@ -110,7 +110,7 @@ class TestTextExtractor:
         assert "Товар 2,200,3" in result
 
     def test_extract_from_xml_sync(self, text_extractor):
-        """Тест синхронного извлечения из XML файла"""
+        """Тест синхронного извлечения из XML файла."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <root>
             <item id="1">
@@ -126,14 +126,14 @@ class TestTextExtractor:
         assert "100" in result
 
     def test_extract_from_xml_sync_invalid(self, text_extractor):
-        """Тест обработки некорректного XML"""
+        """Тест обработки некорректного XML."""
         invalid_xml = b"<invalid><unclosed>tag</invalid>"
 
         with pytest.raises(ValueError, match="Error processing XML"):
             text_extractor._extract_from_xml_sync(invalid_xml)
 
     def test_extract_from_yaml_sync(self, text_extractor):
-        """Тест синхронного извлечения из YAML файла"""
+        """Тест синхронного извлечения из YAML файла."""
         yaml_content = "name: Тест\nvalue: 42\nnested:\n  key: значение"
         content_bytes = yaml_content.encode("utf-8")
 
@@ -146,14 +146,14 @@ class TestTextExtractor:
         assert "value: 42" not in result
 
     def test_extract_from_yaml_sync_invalid(self, text_extractor):
-        """Тест обработки некорректного YAML"""
+        """Тест обработки некорректного YAML."""
         invalid_yaml = b"invalid: yaml: content: ["
 
         with pytest.raises(ValueError, match="Error processing YAML"):
             text_extractor._extract_from_yaml_sync(invalid_yaml)
 
     def test_extract_from_html_sync(self, text_extractor):
-        """Тест синхронного извлечения из HTML файла"""
+        """Тест синхронного извлечения из HTML файла."""
         html_content = """<html>
         <head><title>Тестовая страница</title></head>
         <body>
@@ -170,7 +170,7 @@ class TestTextExtractor:
         assert "Тестовый параграф с жирным текстом." in result
 
     def test_extract_from_source_code_sync(self, text_extractor):
-        """Тест синхронного извлечения из файла исходного кода"""
+        """Тест синхронного извлечения из файла исходного кода."""
         python_content = """#!/usr/bin/env python3
 # Тестовый Python файл
 
@@ -378,28 +378,28 @@ if __name__ == "__main__":
     def test_is_system_file(self, text_extractor):
         """Тест проверки системных файлов"""
         # Файлы с директориями работают (содержат слеш)
-        assert text_extractor._is_system_file("folder/.git/config") == True
-        assert text_extractor._is_system_file("path/.svn/file") == True
-        assert text_extractor._is_system_file("path/.hg/file") == True
+        assert text_extractor._is_system_file("folder/.git/config") is True
+        assert text_extractor._is_system_file("path/.svn/file") is True
+        assert text_extractor._is_system_file("path/.hg/file") is True
 
         # Простые файлы могут не работать из-за точного соответствия
         # Проверяем реальное поведение
-        assert text_extractor._is_system_file("normal_file.txt") == False
-        assert text_extractor._is_system_file("document.pdf") == False
-        assert text_extractor._is_system_file("image.jpg") == False
-        assert text_extractor._is_system_file("data.csv") == False
+        assert text_extractor._is_system_file("normal_file.txt") is False
+        assert text_extractor._is_system_file("document.pdf") is False
+        assert text_extractor._is_system_file("image.jpg") is False
+        assert text_extractor._is_system_file("data.csv") is False
 
     def test_check_mime_type(self, text_extractor):
         """Тест проверки MIME типа"""
         # Тестируем текстовый файл
         content = b"This is a text file"
         result = text_extractor._check_mime_type(content, "test.txt")
-        assert result == True
+        assert result is True
 
         # Тестируем PDF файл
         pdf_content = b"%PDF-1.4"
         result = text_extractor._check_mime_type(pdf_content, "test.pdf")
-        assert result == True
+        assert result is True
 
 
 @pytest.mark.unit
@@ -510,7 +510,7 @@ class TestWebExtractionWithMockRequests:
 
     @patch("requests.get")
     def test_extract_from_url_with_base64_images(self, mock_get, text_extractor):
-        """Тест извлечения URL с base64 изображениями"""
+        """Тест извлечения URL с base64 изображениями."""
         # HTML с base64 изображением
         html_content = """
         <html>
@@ -541,7 +541,7 @@ class TestWebExtractionWithMockRequests:
 
     @patch("requests.get")
     def test_extract_from_url_requests_fallback(self, mock_get, text_extractor):
-        """Тест fallback на requests при выключенном JavaScript"""
+        """Тест fallback на requests при выключенном JavaScript."""
         html_content = "<html><body><h1>Simple Page</h1></body></html>"
 
         mock_response = Mock()

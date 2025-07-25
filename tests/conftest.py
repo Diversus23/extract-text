@@ -1,6 +1,4 @@
-"""
-Общие фикстуры для тестирования Text Extraction API
-"""
+"""Общие фикстуры для тестирования Text Extraction API."""
 
 import asyncio
 import os
@@ -10,7 +8,9 @@ from typing import Any, BinaryIO, Generator
 from unittest.mock import Mock, patch
 
 import pytest
+
 from fastapi.testclient import TestClient
+
 from httpx import AsyncClient
 
 from app.config import settings
@@ -20,7 +20,7 @@ from app.main import app
 
 @pytest.fixture(scope="session")
 def event_loop():
-    """Создает event loop для сессии тестирования"""
+    """Создает event loop для сессии тестирования."""
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
@@ -28,33 +28,33 @@ def event_loop():
 
 @pytest.fixture
 def test_client():
-    """Создает тестовый клиент для FastAPI"""
+    """Создает тестовый клиент для FastAPI."""
     return TestClient(app)
 
 
 @pytest.fixture
 async def async_client():
-    """Создает асинхронный HTTP клиент для тестирования"""
+    """Создает асинхронный HTTP клиент для тестирования."""
     async with AsyncClient(app=app, base_url="http://testserver") as client:
         yield client
 
 
 @pytest.fixture
 def text_extractor():
-    """Создает экземпляр TextExtractor для тестирования"""
+    """Создает экземпляр TextExtractor для тестирования."""
     return TextExtractor()
 
 
 @pytest.fixture
 def temp_dir():
-    """Создает временную директорию для тестов"""
+    """Создает временную директорию для тестов."""
     with tempfile.TemporaryDirectory() as temp_dir:
         yield Path(temp_dir)
 
 
 @pytest.fixture
 def sample_text_file(temp_dir):
-    """Создает временный текстовый файл для тестов"""
+    """Создает временный текстовый файл для тестов."""
     file_path = temp_dir / "test.txt"
     with open(file_path, "w", encoding="utf-8") as f:
         f.write("Тестовый текст для проверки\nВторая строка\nТретья строка")
@@ -63,7 +63,7 @@ def sample_text_file(temp_dir):
 
 @pytest.fixture
 def sample_json_file(temp_dir):
-    """Создает временный JSON файл для тестов"""
+    """Создает временный JSON файл для тестов."""
     file_path = temp_dir / "test.json"
     with open(file_path, "w", encoding="utf-8") as f:
         f.write('{"name": "Тест", "description": "Тестовое описание", "count": 42}')
@@ -72,7 +72,7 @@ def sample_json_file(temp_dir):
 
 @pytest.fixture
 def sample_csv_file(temp_dir):
-    """Создает временный CSV файл для тестов"""
+    """Создает временный CSV файл для тестов."""
     file_path = temp_dir / "test.csv"
     with open(file_path, "w", encoding="utf-8") as f:
         f.write("Название,Цена,Количество\nТовар 1,100,5\nТовар 2,200,3")
@@ -81,7 +81,7 @@ def sample_csv_file(temp_dir):
 
 @pytest.fixture
 def sample_python_file(temp_dir):
-    """Создает временный Python файл для тестов"""
+    """Создает временный Python файл для тестов."""
     file_path = temp_dir / "test.py"
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(
@@ -104,7 +104,7 @@ if __name__ == "__main__":
 
 @pytest.fixture
 def sample_html_file(temp_dir):
-    """Создает временный HTML файл для тестов"""
+    """Создает временный HTML файл для тестов."""
     file_path = temp_dir / "test.html"
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(
@@ -128,7 +128,7 @@ def sample_html_file(temp_dir):
 
 @pytest.fixture
 def sample_xml_file(temp_dir):
-    """Создает временный XML файл для тестов"""
+    """Создает временный XML файл для тестов."""
     file_path = temp_dir / "test.xml"
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(
@@ -149,7 +149,7 @@ def sample_xml_file(temp_dir):
 
 @pytest.fixture
 def sample_yaml_file(temp_dir):
-    """Создает временный YAML файл для тестов"""
+    """Создает временный YAML файл для тестов."""
     file_path = temp_dir / "test.yaml"
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(
@@ -169,13 +169,13 @@ config:
 
 @pytest.fixture
 def real_test_files_dir():
-    """Путь к реальным тестовым файлам"""
+    """Путь к реальным тестовым файлам."""
     return Path(__file__).parent
 
 
 @pytest.fixture
 def mock_tesseract():
-    """Мокает pytesseract для тестирования OCR"""
+    """Мокает pytesseract для тестирования OCR."""
     with patch("pytesseract.image_to_string") as mock_ocr:
         mock_ocr.return_value = "Распознанный текст с изображения"
         yield mock_ocr

@@ -175,7 +175,7 @@ class TestSettings:
         settings = Settings()
         all_formats = []
 
-        for category, formats in settings.SUPPORTED_FORMATS.items():
+        for _category, formats in settings.SUPPORTED_FORMATS.items():
             all_formats.extend(formats)
 
         # Проверяем, что нет дубликатов
@@ -199,12 +199,12 @@ class TestSettings:
         assert settings.WEB_PAGE_TIMEOUT == 30
         assert settings.IMAGE_DOWNLOAD_TIMEOUT == 15
         assert settings.DEFAULT_USER_AGENT == "Text Extraction Bot 1.0"
-        assert settings.ENABLE_JAVASCRIPT == False
+        assert settings.ENABLE_JAVASCRIPT is False
 
         # Настройки v1.10.1 (Playwright)
-        assert settings.ENABLE_BASE64_IMAGES == True
+        assert settings.ENABLE_BASE64_IMAGES is True
         assert settings.WEB_PAGE_DELAY == 3
-        assert settings.ENABLE_LAZY_LOADING_WAIT == True
+        assert settings.ENABLE_LAZY_LOADING_WAIT is True
         assert settings.JS_RENDER_TIMEOUT == 10
         assert settings.MAX_SCROLL_ATTEMPTS == 3
 
@@ -227,8 +227,8 @@ class TestSettings:
         importlib.reload(config)
         settings = config.Settings()
 
-        assert settings.ENABLE_JAVASCRIPT == True
-        assert settings.ENABLE_BASE64_IMAGES == False
+        assert settings.ENABLE_JAVASCRIPT is True
+        assert settings.ENABLE_BASE64_IMAGES is False
         assert settings.WEB_PAGE_DELAY == 5
         assert settings.JS_RENDER_TIMEOUT == 15
         assert settings.MAX_SCROLL_ATTEMPTS == 5

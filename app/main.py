@@ -12,10 +12,12 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
 import uvicorn
+
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -585,7 +587,7 @@ async def extract_text_from_url(request: URLRequest):
                 content={
                     "status": "error",
                     "url": url,
-                    "message": f"Не удалось загрузить страницу: превышен лимит времени ожидания.",
+                    "message": "Не удалось загрузить страницу: превышен лимит времени ожидания.",
                 },
             )
         elif "connection" in error_msg.lower() or "failed to load" in error_msg.lower():

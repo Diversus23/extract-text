@@ -1,3 +1,1 @@
-"""
-Пакет тестов для Text Extraction API
-"""
+"""Пакет тестов для Text Extraction API."""

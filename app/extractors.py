@@ -1,6 +1,4 @@
-"""
-Модуль для извлечения текста из файлов различных форматов
-"""
+"""Модуль для извлечения текста из файлов различных форматов."""
 
 import asyncio
 import concurrent.futures
@@ -43,8 +41,6 @@ try:
     from docx import Document
 except ImportError:
     Document = None
-
-import subprocess
 
 try:
     import pandas as pd
@@ -117,7 +113,7 @@ logger = logging.getLogger(__name__)
 
 
 class TextExtractor:
-    """Класс для извлечения текста из файлов различных форматов"""
+    """Класс для извлечения текста из файлов различных форматов."""
 
     def __init__(self):
         self.ocr_languages = settings.OCR_LANGUAGES
@@ -126,7 +122,7 @@ class TextExtractor:
         self._thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
     def extract_text(self, file_content: bytes, filename: str) -> List[Dict[str, Any]]:
-        """Основной метод извлечения текста (теперь синхронный для выполнения в threadpool)"""
+        """Основной метод извлечения текста (теперь синхронный для выполнения в threadpool)."""
 
         # Проверка, является ли файл архивом
         if is_archive_format(filename, settings.SUPPORTED_FORMATS):
@@ -171,7 +167,7 @@ class TextExtractor:
     def _extract_text_by_format(
         self, content: bytes, extension: str, filename: str
     ) -> str:
-        """Извлечение текста в зависимости от формата (синхронная версия)"""
+        """Извлечение текста в зависимости от формата (синхронная версия)."""
 
         # Проверяем, является ли файл исходным кодом
         source_code_extensions = settings.SUPPORTED_FORMATS.get("source_code", [])
@@ -220,7 +216,7 @@ class TextExtractor:
             raise ValueError(f"Unsupported file format: {extension}")
 
     def _extract_from_pdf_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из PDF"""
+        """Синхронное извлечение текста из PDF."""
         if not pdfplumber:
             raise ImportError("pdfplumber не установлен")
 
@@ -270,7 +266,7 @@ class TextExtractor:
                     )
 
     def _extract_from_docx_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из DOCX с полным извлечением согласно п.3.3 ТЗ"""
+        """Синхронное извлечение текста из DOCX с полным извлечением согласно п.3.3 ТЗ."""
         if not Document:
             raise ImportError("python-docx не установлен")
 
@@ -358,7 +354,7 @@ class TextExtractor:
             raise ValueError(f"Error processing DOCX: {str(e)}")
 
     def _extract_from_doc_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из DOC через конвертацию в DOCX с помощью LibreOffice"""
+        """Синхронное извлечение текста из DOC через конвертацию в DOCX с помощью LibreOffice."""
         if not Document:
             raise ImportError("python-docx не установлен")
 
@@ -441,7 +437,7 @@ class TextExtractor:
             raise ValueError(f"Error processing DOC: {str(e)}")
 
     def _extract_from_excel_sync(self, content: bytes) -> str:
-        """Синхронное извлечение данных из Excel файлов"""
+        """Синхронное извлечение данных из Excel файлов."""
         if not pd:
             raise ImportError("pandas не установлен")
 
@@ -460,7 +456,7 @@ class TextExtractor:
             raise ValueError(f"Error processing Excel: {str(e)}")
 
     def _extract_from_csv_sync(self, content: bytes) -> str:
-        """Синхронное извлечение данных из CSV файлов"""
+        """Синхронное извлечение данных из CSV файлов."""
         if not pd:
             raise ImportError("pandas не установлен")
 
@@ -682,7 +678,7 @@ class TextExtractor:
                                 continue
 
                     return decoded_text
-                except (UnicodeDecodeError, UnicodeError):
+                except UnicodeError:
                     continue
 
             # Если не удалось декодировать ни одной кодировкой, используем замещение символов
@@ -779,7 +775,7 @@ class TextExtractor:
 
                     text = decoded_text
                     break
-                except (UnicodeDecodeError, UnicodeError):
+                except UnicodeError:
                     continue
 
             if text is None:
@@ -1140,7 +1136,7 @@ class TextExtractor:
                         > settings.MAX_EXTRACTED_SIZE
                     ):
                         logger.warning(
-                            f"Достигнут лимит размера распакованного содержимого EPUB"
+                            "Достигнут лимит размера распакованного содержимого EPUB"
                         )
                         break
 
@@ -2992,7 +2988,7 @@ class TextExtractor:
             img_src = img_tag.get("src", "")
             logger.info(f"Processing image: {img_src}")
             if not img_src:
-                logger.warning(f"Image has no src attribute")
+                logger.warning("Image has no src attribute")
                 return None
 
             # Преобразуем относительный URL в абсолютный
@@ -3031,7 +3027,7 @@ class TextExtractor:
             img_content = response.content
             logger.info(f"Image content size: {len(img_content)} bytes")
             if len(img_content) == 0:
-                logger.warning(f"Image content is empty")
+                logger.warning("Image content is empty")
                 return None
 
             # Открываем изображение для проверки размеров
@@ -3054,7 +3050,7 @@ class TextExtractor:
                 logger.info(f"OCR result length: {len(text) if text else 0} characters")
 
                 if not text or not text.strip():
-                    logger.warning(f"No text found in image")
+                    logger.warning("No text found in image")
                     return None
 
                 # Извлекаем имя файла из URL
@@ -3102,7 +3098,7 @@ class TextExtractor:
             logger.info(f"Processing base64 image: {img_src[:50]}...")
 
             if not img_src.startswith("data:image/"):
-                logger.warning(f"Invalid base64 image format")
+                logger.warning("Invalid base64 image format")
                 return None
 
             # Определяем настройки
@@ -3116,7 +3112,7 @@ class TextExtractor:
             # Извлекаем MIME-тип
             mime_type = extract_mime_from_base64_data_uri(img_src)
             if not mime_type:
-                logger.warning(f"Could not extract MIME type from base64 image")
+                logger.warning("Could not extract MIME type from base64 image")
                 return None
 
             # Определяем расширение файла
@@ -3128,7 +3124,7 @@ class TextExtractor:
             # Декодируем base64 изображение
             img_content = decode_base64_image(img_src)
             if not img_content:
-                logger.warning(f"Failed to decode base64 image")
+                logger.warning("Failed to decode base64 image")
                 return None
 
             logger.info(f"Base64 image decoded, size: {len(img_content)} bytes")
@@ -3148,12 +3144,12 @@ class TextExtractor:
                     return None
 
                 # OCR изображения
-                logger.info(f"Starting OCR for base64 image")
+                logger.info("Starting OCR for base64 image")
                 text = self._safe_tesseract_ocr(img)
                 logger.info(f"OCR result length: {len(text) if text else 0} characters")
 
                 if not text or not text.strip():
-                    logger.warning(f"No text found in base64 image")
+                    logger.warning("No text found in base64 image")
                     return None
 
                 # Формируем имя файла

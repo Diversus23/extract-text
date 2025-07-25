@@ -55,6 +55,8 @@ Sources structure and main files:
 
 ## Commands
 
-- `make test` run tests
-- `make lint` full check linters
-- 
+- `make test` - run tests in docker
+- `make lint` - full check linters
+- `make install-linters` - setup tools
+- `make format`  - auto code format
+- `make lint-check` - checking with the linter without corrections

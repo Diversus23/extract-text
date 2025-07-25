@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Union
 
 import magic
+
 from werkzeug.utils import secure_filename
 
 from .config import settings
@@ -89,7 +90,7 @@ def is_archive_format(filename: str, supported_formats: dict) -> bool:
 
 
 def safe_filename(filename: str) -> str:
-    """Безопасное имя файла для логов"""
+    """Безопасное имя файла для логов."""
     if not filename:
         return "unknown_file"
 
@@ -106,7 +107,7 @@ def safe_filename(filename: str) -> str:
 
 def sanitize_filename(filename: str) -> str:
     """
-    Санитизация имени файла для безопасности с поддержкой кириллицы
+    Санитизация имени файла для безопасности с поддержкой кириллицы.
 
     Удаляет опасные символы для path traversal атак, но сохраняет кириллические символы
     """
@@ -143,7 +144,7 @@ def sanitize_filename(filename: str) -> str:
 
 def validate_file_type(content: bytes, filename: str) -> tuple[bool, Optional[str]]:
     """
-    Проверка соответствия расширения файла его содержимому
+    Проверка соответствия расширения файла его содержимому.
 
     Returns:
         tuple: (is_valid, error_message)
@@ -358,7 +359,8 @@ def validate_file_type(content: bytes, filename: str) -> tuple[bool, Optional[st
 
 def cleanup_temp_files() -> None:
     """
-    Очистка временных файлов при старте приложения
+    Очистка временных файлов при старте приложения.
+
     Удаляет временные файлы, которые могли остаться после предыдущих запусков
     """
     try:
@@ -407,7 +409,7 @@ def cleanup_temp_files() -> None:
                         os.unlink(temp_file)
                         files_removed += 1
                         logger.debug(f"Удален временный файл: {temp_file}")
-                except (OSError, IOError) as e:
+                except OSError as e:
                     logger.warning(
                         f"Не удалось удалить временный файл {temp_file}: {str(e)}"
                     )
@@ -430,7 +432,7 @@ def cleanup_temp_files() -> None:
                             shutil.rmtree(temp_dir_path, ignore_errors=True)
                             dirs_removed += 1
                             logger.debug(f"Удалена временная папка: {temp_dir_path}")
-                    except (OSError, IOError) as e:
+                    except OSError as e:
                         logger.warning(
                             f"Не удалось удалить временную папку {temp_dir_path}: {str(e)}"
                         )
@@ -450,7 +452,8 @@ def cleanup_temp_files() -> None:
 
 def cleanup_recent_temp_files() -> None:
     """
-    Немедленная очистка временных файлов текущего процесса
+    Немедленная очистка временных файлов текущего процесса.
+
     Удаляет временные файлы, созданные в последние 10 минут
     """
     try:
@@ -506,7 +509,7 @@ def cleanup_recent_temp_files() -> None:
                         os.unlink(temp_file)
                         files_removed += 1
                         logger.debug(f"Удален недавний временный файл: {temp_file}")
-                except (OSError, IOError) as e:
+                except OSError as e:
                     logger.debug(
                         f"Не удалось удалить временный файл {temp_file}: {str(e)}"
                     )
@@ -529,7 +532,7 @@ def cleanup_recent_temp_files() -> None:
                             logger.debug(
                                 f"Удалена недавняя временная папка: {temp_dir_path}"
                             )
-                    except (OSError, IOError) as e:
+                    except OSError as e:
                         logger.debug(
                             f"Не удалось удалить временную папку {temp_dir_path}: {str(e)}"
                         )
@@ -552,7 +555,7 @@ def run_subprocess_with_limits(
     **kwargs,
 ) -> subprocess.CompletedProcess:
     """
-    Запуск подпроцесса с ограничениями ресурсов
+    Запуск подпроцесса с ограничениями ресурсов.
 
     Args:
         command: Команда для выполнения
@@ -581,7 +584,7 @@ def run_subprocess_with_limits(
         memory_limit = settings.MAX_SUBPROCESS_MEMORY
 
     def preexec_fn():
-        """Функция для установки ограничений ресурсов перед выполнением"""
+        """Функция для установки ограничений ресурсов перед выполнением."""
         try:
             # Устанавливаем ограничение на использование виртуальной памяти
             resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
@@ -612,7 +615,7 @@ def run_subprocess_with_limits(
 
         return result
 
-    except subprocess.TimeoutExpired as e:
+    except subprocess.TimeoutExpired:
         logger.error(f"Процесс превысил таймаут {timeout}s: {' '.join(command)}")
         raise
     except subprocess.CalledProcessError as e:
@@ -634,7 +637,7 @@ def run_subprocess_with_limits(
 
 def validate_image_for_ocr(image_content: bytes) -> tuple[bool, Optional[str]]:
     """
-    Валидация изображения перед OCR для предотвращения DoS атак
+    Валидация изображения перед OCR для предотвращения DoS атак.
 
     Args:
         image_content: Содержимое изображения
@@ -680,7 +683,7 @@ def validate_image_for_ocr(image_content: bytes) -> tuple[bool, Optional[str]]:
 
 def get_memory_usage() -> Dict[str, Any]:
     """
-    Получение информации об использовании памяти
+    Получение информации об использовании памяти.
 
     Returns:
         Dict[str, Any]: Информация о памяти
@@ -716,7 +719,7 @@ def get_extension_from_mime(
     content_type: str, supported_formats: dict
 ) -> Optional[str]:
     """
-    Определение расширения файла по MIME-типу с учетом поддерживаемых форматов
+    Определение расширения файла по MIME-типу с учетом поддерживаемых форматов.
 
     Args:
         content_type: MIME-тип из заголовка Content-Type
@@ -774,7 +777,7 @@ def get_extension_from_mime(
 
 def decode_base64_image(base64_data: str) -> Optional[bytes]:
     """
-    Декодирование base64 изображения из data URI
+    Декодирование base64 изображения из data URI.
 
     Args:
         base64_data: Строка в формате data:image/jpeg;base64,/9j/4AAQ...
@@ -805,7 +808,7 @@ def decode_base64_image(base64_data: str) -> Optional[bytes]:
 
 def extract_mime_from_base64_data_uri(data_uri: str) -> Optional[str]:
     """
-    Извлечение MIME-типа из data URI
+    Извлечение MIME-типа из data URI.
 
     Args:
         data_uri: Строка в формате data:image/jpeg;base64,/9j/4AAQ...
