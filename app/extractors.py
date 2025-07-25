@@ -2553,7 +2553,6 @@ class TextExtractor:
         extraction_options: Optional[Any] = None,
     ) -> List[Dict[str, Any]]:
         """Извлечение текста с веб-страницы или файла по URL (обновлено в v1.10.3)."""
-
         # Проверка безопасности URL
         if not self._is_safe_url(url):
             raise ValueError(

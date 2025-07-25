@@ -5,9 +5,9 @@ import json
 from io import BytesIO
 from unittest.mock import AsyncMock, Mock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
+import pytest
 
 from app.config import settings
 from app.main import app

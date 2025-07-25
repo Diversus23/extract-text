@@ -18,7 +18,6 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -34,6 +33,9 @@ from app.utils import (
 # Настройка логирования
 setup_logging()
 logger = logging.getLogger(__name__)
+
+# Константы для FastAPI аргументов
+FILE_UPLOAD = File(...)
 
 # Инициализация экстрактора текста
 text_extractor = TextExtractor()
@@ -203,7 +205,7 @@ async def supported_formats() -> Dict[str, list]:
 
 
 @app.post("/v1/extract/file")
-async def extract_text(file: UploadFile = File(...)):
+async def extract_text(file: UploadFile = FILE_UPLOAD):
     """Извлечение текста из файла."""
     try:
         # Санитизация имени файла

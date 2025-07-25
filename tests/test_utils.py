@@ -5,8 +5,6 @@ import sys
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-import pytest
-
 from app.utils import (
     get_file_extension,
     is_archive_format,
@@ -16,6 +14,8 @@ from app.utils import (
     setup_logging,
     validate_file_type,
 )
+
+import pytest
 
 
 @pytest.mark.unit
