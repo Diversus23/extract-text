@@ -1891,13 +1891,309 @@ class TextExtractor:
         except Exception as e:
             logger.warning(f"Ошибка при скролле для lazy loading: {str(e)}")
     
+    def _determine_content_type(self, url: str, user_agent: Optional[str] = None, extraction_options: Optional[Any] = None) -> tuple[str, str]:
+        """
+        Определение типа контента через HEAD запрос (новое в v1.10.3)
+        
+        Args:
+            url: URL для проверки
+            user_agent: Пользовательский User-Agent
+            extraction_options: Настройки извлечения
+            
+        Returns:
+            tuple[str, str]: (content_type, final_url) - тип контента и финальный URL после редиректов
+        """
+        if not requests:
+            raise ValueError("requests library not available for content type determination")
+        
+        # Определяем настройки с учетом переданных параметров или значений по умолчанию
+        head_timeout = (extraction_options.web_page_timeout 
+                       if extraction_options and extraction_options.web_page_timeout is not None 
+                       else settings.HEAD_REQUEST_TIMEOUT)
+        
+        follow_redirects = (extraction_options.follow_redirects 
+                           if extraction_options and extraction_options.follow_redirects is not None 
+                           else True)
+        
+        max_redirects = (extraction_options.max_redirects 
+                        if extraction_options and extraction_options.max_redirects is not None 
+                        else 5)
+        
+        # Установка User-Agent и заголовков
+        headers = {
+            'User-Agent': user_agent or settings.DEFAULT_USER_AGENT,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'ru,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+        }
+        
+        # Создание сессии для следования редиректам
+        session = requests.Session()
+        session.headers.update(headers)
+        
+        try:
+            logger.info(f"Выполняю HEAD запрос для определения типа контента: {url}")
+            
+            response = session.head(
+                url,
+                timeout=head_timeout,
+                allow_redirects=follow_redirects,
+                stream=True
+            )
+            
+            if follow_redirects and len(response.history) > max_redirects:
+                logger.warning(f"Превышено максимальное количество редиректов ({max_redirects})")
+            
+            response.raise_for_status()
+            
+            content_type = response.headers.get('content-type', '').lower()
+            final_url = response.url
+            
+            logger.info(f"Определен Content-Type: {content_type} для URL: {final_url}")
+            
+            return content_type, final_url
+            
+        except Exception as e:
+            logger.warning(f"Ошибка HEAD запроса: {str(e)}, попробуем GET запрос")
+            # Fallback: делаем GET запрос но читаем только заголовки
+            try:
+                response = session.get(
+                    url,
+                    timeout=head_timeout,
+                    allow_redirects=follow_redirects,
+                    stream=True
+                )
+                response.raise_for_status()
+                
+                content_type = response.headers.get('content-type', '').lower()
+                final_url = response.url
+                
+                # Закрываем соединение, не читая тело
+                response.close()
+                
+                logger.info(f"Определен Content-Type через GET: {content_type} для URL: {final_url}")
+                return content_type, final_url
+                
+            except Exception as get_error:
+                logger.error(f"Ошибка при определении типа контента: {str(get_error)}")
+                raise ValueError(f"Unable to determine content type: {str(get_error)}")
+        finally:
+            session.close()
+    
+    def _is_html_content(self, content_type: str, url: str) -> bool:
+        """
+        Определение является ли контент HTML страницей (новое в v1.10.3)
+        
+        Args:
+            content_type: MIME тип из заголовков
+            url: URL для анализа расширения как fallback
+            
+        Returns:
+            bool: True если это HTML страница
+        """
+        # Приоритет: Content-Type
+        if 'text/html' in content_type or 'application/xhtml' in content_type:
+            return True
+        
+        # Проверяем специфические случаи
+        if 'text/plain' in content_type:
+            # Для text/plain проверяем расширение URL
+            from app.utils import get_file_extension
+            extension = get_file_extension(url.split('?')[0])  # убираем параметры
+            return extension in ['html', 'htm']
+        
+        # Если Content-Type неопределенный или отсутствует
+        if not content_type or 'application/octet-stream' in content_type:
+            # Используем расширение URL как fallback
+            from app.utils import get_file_extension
+            extension = get_file_extension(url.split('?')[0])  # убираем параметры
+            return extension in ['html', 'htm'] or extension is None  # None означает вероятно динамическая страница
+        
+        return False
+    
+    def _download_and_extract_file(self, url: str, user_agent: Optional[str] = None, extraction_options: Optional[Any] = None) -> List[Dict[str, Any]]:
+        """
+        Скачивание файла по URL и его обработка как обычного файла (новое в v1.10.3)
+        
+        Args:
+            url: URL файла для скачивания
+            user_agent: Пользовательский User-Agent
+            extraction_options: Настройки извлечения
+            
+        Returns:
+            List[Dict[str, Any]]: Результат извлечения текста как от /v1/extract/file
+        """
+        if not requests:
+            raise ValueError("requests library not available for file download")
+        
+        # Определяем настройки с учетом переданных параметров или значений по умолчанию
+        download_timeout = (extraction_options.web_page_timeout 
+                           if extraction_options and extraction_options.web_page_timeout is not None 
+                           else settings.FILE_DOWNLOAD_TIMEOUT)
+        
+        follow_redirects = (extraction_options.follow_redirects 
+                           if extraction_options and extraction_options.follow_redirects is not None 
+                           else True)
+        
+        # Установка User-Agent и заголовков
+        headers = {
+            'User-Agent': user_agent or settings.DEFAULT_USER_AGENT,
+            'Accept': '*/*',
+            'Connection': 'keep-alive',
+        }
+        
+        # Создание сессии
+        session = requests.Session()
+        session.headers.update(headers)
+        
+        temp_file_path = None
+        try:
+            logger.info(f"Скачиваю файл с URL: {url}")
+            
+            response = session.get(
+                url,
+                timeout=download_timeout,
+                allow_redirects=follow_redirects,
+                stream=True
+            )
+            response.raise_for_status()
+            
+            # Проверяем размер файла
+            content_length = response.headers.get('content-length')
+            if content_length and int(content_length) > settings.MAX_FILE_SIZE:
+                raise ValueError(f"File too large: {content_length} bytes (max {settings.MAX_FILE_SIZE} bytes)")
+            
+            # Определяем имя файла
+            filename = self._extract_filename_from_response(response, url)
+            
+            # Создаем временный файл
+            import tempfile
+            suffix = f".{get_file_extension(filename)}" if get_file_extension(filename) else ""
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                temp_file_path = temp_file.name
+                
+                # Скачиваем файл порциями с проверкой размера
+                downloaded_size = 0
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        downloaded_size += len(chunk)
+                        if downloaded_size > settings.MAX_FILE_SIZE:
+                            raise ValueError(f"File too large: exceeded {settings.MAX_FILE_SIZE} bytes during download")
+                        temp_file.write(chunk)
+            
+            logger.info(f"Файл скачан ({downloaded_size} байт): {filename}")
+            
+            # Читаем скачанный файл и обрабатываем его как обычный файл
+            with open(temp_file_path, 'rb') as f:
+                file_content = f.read()
+            
+            # Используем существующую логику извлечения текста
+            return self.extract_text(file_content, filename)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при скачивании файла {url}: {str(e)}")
+            raise ValueError(f"Error downloading file: {str(e)}")
+        finally:
+            # Очистка временного файла
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                    logger.debug(f"Временный файл удален: {temp_file_path}")
+                except OSError as e:
+                    logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {str(e)}")
+            session.close()
+    
+    def _extract_filename_from_response(self, response, url: str) -> str:
+        """
+        Извлечение имени файла из HTTP ответа (новое в v1.10.3)
+        
+        Args:
+            response: HTTP ответ requests
+            url: Исходный URL
+            
+        Returns:
+            str: Имя файла
+        """
+        # Пытаемся получить имя файла из заголовка Content-Disposition
+        content_disposition = response.headers.get('content-disposition', '')
+        if 'filename=' in content_disposition:
+            import re
+            filename_match = re.search(r'filename=["\']*([^"\';\r\n]*)', content_disposition)
+            if filename_match:
+                filename = filename_match.group(1).strip()
+                if filename:
+                    from app.utils import sanitize_filename
+                    return sanitize_filename(filename)
+        
+        # Используем последний сегмент URL как имя файла
+        from urllib.parse import urlparse, unquote
+        parsed_url = urlparse(url)
+        filename = unquote(parsed_url.path.split('/')[-1])
+        
+        # Если нет расширения, пытаемся определить его по Content-Type
+        if not get_file_extension(filename):
+            content_type = response.headers.get('content-type', '').lower()
+            extension = self._get_extension_from_content_type(content_type)
+            if extension:
+                filename = f"{filename}.{extension}"
+        
+        from app.utils import sanitize_filename
+        return sanitize_filename(filename) if filename else "downloaded_file"
+    
+    def _get_extension_from_content_type(self, content_type: str) -> Optional[str]:
+        """
+        Определение расширения файла по Content-Type (новое в v1.10.3)
+        
+        Args:
+            content_type: MIME тип
+            
+        Returns:
+            Optional[str]: Расширение файла или None
+        """
+        # Маппинг популярных MIME типов на расширения
+        mime_to_extension = settings.MIME_TO_EXTENSION
+        
+        # Убираем параметры из Content-Type (например, charset)
+        clean_content_type = content_type.split(';')[0].strip()
+        
+        return mime_to_extension.get(clean_content_type)
+    
     def extract_from_url(self, url: str, user_agent: Optional[str] = None, extraction_options: Optional[Any] = None) -> List[Dict[str, Any]]:
-        """Извлечение текста с веб-страницы (синхронный метод, обновлено в v1.10.2)"""
+        """Извлечение текста с веб-страницы или файла по URL (обновлено в v1.10.3)"""
         
         # Проверка безопасности URL
         if not self._is_safe_url(url):
             raise ValueError("Access to internal IP addresses is prohibited for security reasons")
         
+        try:
+            # Шаг 1: Определяем тип контента через HEAD запрос
+            content_type, final_url = self._determine_content_type(url, user_agent, extraction_options)
+            
+            # Шаг 2: Выбираем стратегию обработки
+            if self._is_html_content(content_type, final_url):
+                logger.info(f"URL {final_url} определен как HTML страница (Content-Type: {content_type}), используем веб-экстрактор")
+                return self._extract_html_page(final_url, user_agent, extraction_options)
+            else:
+                logger.info(f"URL {final_url} определен как файл (Content-Type: {content_type}), скачиваем и обрабатываем")
+                return self._download_and_extract_file(final_url, user_agent, extraction_options)
+                
+        except Exception as e:
+            logger.error(f"Ошибка при обработке URL {url}: {str(e)}")
+            raise ValueError(f"Error processing URL: {str(e)}")
+    
+    def _extract_html_page(self, url: str, user_agent: Optional[str] = None, extraction_options: Optional[Any] = None) -> List[Dict[str, Any]]:
+        """
+        Извлечение текста с HTML страницы (выделено из extract_from_url в v1.10.3)
+        
+        Args:
+            url: URL HTML страницы
+            user_agent: Пользовательский User-Agent
+            extraction_options: Настройки извлечения
+            
+        Returns:
+            List[Dict[str, Any]]: Результат извлечения текста со страницы
+        """
         html_content = ""
         final_url = url
         
@@ -1946,7 +2242,7 @@ class TextExtractor:
             return results
             
         except Exception as e:
-            raise ValueError(f"Error processing web page: {str(e)}")
+            raise ValueError(f"Error processing HTML page: {str(e)}")
     
     def _extract_page_with_requests(self, url: str, user_agent: Optional[str] = None, extraction_options: Optional[Any] = None) -> tuple[str, str]:
         """

@@ -247,6 +247,12 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Линтеры и инструменты проверки кода
+.flake8-cache/
+.bandit/
+bandit-report.json
+safety-report.json
+
 # Результаты тестов
 tests/*.ok.txt
 tests/*.err.txt

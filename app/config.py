@@ -10,7 +10,7 @@ class Settings:
     """Настройки приложения"""
     
     # Основные настройки
-    VERSION: str = "1.10.2"
+    VERSION: str = "1.10.3"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # Настройки API
@@ -54,6 +54,10 @@ class Settings:
     IMAGE_DOWNLOAD_TIMEOUT: int = int(os.getenv("IMAGE_DOWNLOAD_TIMEOUT", "15"))  # секунды
     DEFAULT_USER_AGENT: str = os.getenv("DEFAULT_USER_AGENT", "Text Extraction Bot 1.0")
     ENABLE_JAVASCRIPT: bool = os.getenv("ENABLE_JAVASCRIPT", "false").lower() == "true"
+    
+    # Новые настройки для определения типа контента и скачивания файлов (v1.10.3)
+    HEAD_REQUEST_TIMEOUT: int = int(os.getenv("HEAD_REQUEST_TIMEOUT", "10"))  # таймаут HEAD запроса
+    FILE_DOWNLOAD_TIMEOUT: int = int(os.getenv("FILE_DOWNLOAD_TIMEOUT", "60"))  # таймаут скачивания файла
     
     # Новые настройки веб-экстрактора (v1.10.1)
     ENABLE_BASE64_IMAGES: bool = os.getenv("ENABLE_BASE64_IMAGES", "true").lower() == "true"
@@ -137,6 +141,32 @@ class Settings:
         ],
         "other": ["txt", "html", "htm", "md", "markdown", "epub", "eml", "msg"],
         "archives": ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz", "tbz2", "txz", "tar.gz", "tar.bz2", "tar.xz"]
+    }
+
+    MIME_TO_EXTENSION = {
+        'application/pdf': 'pdf',
+        'application/msword': 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+        'application/vnd.ms-excel': 'xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+        'application/vnd.ms-powerpoint': 'ppt',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+        'application/zip': 'zip',
+        'application/x-rar-compressed': 'rar',
+        'application/x-7z-compressed': '7z',
+        'application/x-tar': 'tar',
+        'application/gzip': 'gz',
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/gif': 'gif',
+        'image/bmp': 'bmp',
+        'image/tiff': 'tiff',
+        'text/plain': 'txt',
+        'text/html': 'html',
+        'text/csv': 'csv',
+        'application/json': 'json',
+        'application/xml': 'xml',
+        'text/xml': 'xml',
     }
     
     @property

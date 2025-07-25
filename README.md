@@ -1,5 +1,11 @@
 # Text Extraction API for RAG
 
+[![CI/CD Pipeline](https://github.com/YOUR_USERNAME/extract-text/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/YOUR_USERNAME/extract-text/actions)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://docker.com)
+
 API для извлечения текста из файлов различных форматов, предназначенный для создания векторных представлений (embeddings) в системах RAG (Retrieval-Augmented Generation).
 
 ## Особенности
@@ -172,7 +178,7 @@ curl -X POST \
   http://localhost:7555/v1/extract/base64
 ```
 
-#### `POST /v1/extract/url` - Извлечение текста с веб-страницы (новое в v1.10.0, расширено в v1.10.2)
+#### `POST /v1/extract/url` - Извлечение текста с веб-страниц и файлов по URL (новое в v1.10.0, расширено в v1.10.2, v1.10.3)
 
 **Базовый запрос (для обратной совместимости):**
 ```bash
@@ -201,6 +207,16 @@ curl -X POST \
       "max_images_per_page": 5,
       "web_page_timeout": 20
     }
+  }' \
+  http://localhost:7555/v1/extract/url
+```
+
+**Скачивание файла по URL (новое в v1.10.3):**
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/document.pdf"
   }' \
   http://localhost:7555/v1/extract/url
 ```
@@ -275,6 +291,49 @@ curl -X POST \
       "size": 189432,
       "type": "png", 
       "text": "Данные с диаграммы: 2023 - 45%, 2024 - 67%"
+    }
+  ]
+}
+```
+
+#### Успешное извлечение (скачанный файл по URL, новое в v1.10.3)
+```json
+{
+  "status": "success",
+  "url": "https://example.com/document.pdf",
+  "count": 1,
+  "files": [
+    {
+      "filename": "document.pdf",
+      "path": "document.pdf",
+      "size": 1024000,
+      "type": "pdf",
+      "text": "Извлеченный текст из скачанного PDF документа..."
+    }
+  ]
+}
+```
+
+#### Успешное извлечение (скачанный архив по URL, новое в v1.10.3)
+```json
+{
+  "status": "success",
+  "url": "https://example.com/files.zip",
+  "count": 2,
+  "files": [
+    {
+      "filename": "document1.docx",
+      "path": "files/document1.docx",
+      "size": 524288,
+      "type": "docx",
+      "text": "Текст из первого документа в архиве..."
+    },
+    {
+      "filename": "image1.jpg",
+      "path": "files/images/image1.jpg",
+      "size": 102400,
+      "type": "jpg",
+      "text": "Распознанный текст с изображения из архива..."
     }
   ]
 }
@@ -397,6 +456,9 @@ API теперь поддерживает гибкие настройки изв
 - Извлекаете текст напрямую с веб-страниц
 - Работаете с современными веб-приложениями (SPA)
 - Нужен контроль над процессом извлечения (JavaScript, lazy loading, изображения)
+- **Скачиваете и обрабатываете файлы по URL (новое в v1.10.3)**
+- Работаете с прямыми ссылками на документы, PDF, архивы и другие файлы
+- Интегрируетесь с системами где файлы доступны через HTTP/HTTPS ссылки
 
 ### Примеры ошибок безопасности
 
@@ -515,6 +577,13 @@ JS_RENDER_TIMEOUT=10
 
 # Максимальное количество попыток скролла для lazy loading (по умолчанию: 3)
 MAX_SCROLL_ATTEMPTS=3
+
+# Новые настройки для определения типа контента и скачивания файлов (v1.10.3)
+# Таймаут HEAD запроса для определения типа контента в секундах (по умолчанию: 10)
+HEAD_REQUEST_TIMEOUT=10
+
+# Таймаут скачивания файлов в секундах (по умолчанию: 60)
+FILE_DOWNLOAD_TIMEOUT=60
 ```
 
 ### Настройка .env файла
@@ -549,6 +618,12 @@ make test-integration # Только integration тесты
 make test-docker    # Тестирование в Docker
 make test-coverage  # Показать отчет покрытия
 make test-legacy    # Старые функциональные тесты
+
+# Проверка кода
+make install-linters # Установить инструменты для проверки кода
+make lint           # Проверить код всеми линтерами
+make lint-check     # Проверить код без исправлений
+make format         # Автоформатирование кода (black + isort)
 
 # Очистка
 make clean          # Полная очистка системы
@@ -633,7 +708,7 @@ make test-docker       # Тестирование в Docker
 
 **Современная система тестирования:**
 - **Framework**: pytest + pytest-asyncio
-- **Покрытие**: pytest-cov с минимальным порогом 30%
+- **Покрытие**: pytest-cov с минимальным порогом 60%
 - **HTTP тесты**: httpx для тестирования API
 - **Моки**: pytest-mock для внешних зависимостей
 - **Типы тестов**: Unit, Integration, Real Files
@@ -652,7 +727,7 @@ tests/
 
 **Статистика тестирования:**
 - **Всего тестов**: 120+
-- **Покрытие кода**: 37%+ (выше минимального порога 30%)
+- **Покрытие кода**: 37%+ (требуется минимум 60%)
 - **Поддерживаемые форматы**: 130+
 - **Тестовые файлы**: 126+
 - **Успешность**: 94.4% (119 из 126 файлов)
@@ -686,6 +761,63 @@ make test-legacy
 
 - **Swagger UI**: http://localhost:7555/docs
 - **ReDoc**: http://localhost:7555/redoc
+
+## Проверка качества кода
+
+### Линтеры и форматирование
+
+Проект использует современные инструменты для поддержания качества кода:
+
+```bash
+# Установка инструментов
+make install-linters
+
+# Автоформатирование кода
+make format
+
+# Проверка всеми линтерами
+make lint
+
+# Проверка без исправлений  
+make lint-check
+```
+
+### Используемые инструменты
+
+**Форматирование:**
+- **Black**: Автоформатирование Python кода
+- **isort**: Сортировка и организация импортов
+
+**Проверка стиля:**
+- **Flake8**: Проверка соответствия PEP 8 и поиск ошибок
+- **MyPy**: Статическая проверка типов (опционально)
+
+**Безопасность:**
+- **Bandit**: Поиск уязвимостей в коде
+- **Safety**: Проверка зависимостей на известные уязвимости
+
+### Конфигурация
+
+Настройки линтеров находятся в:
+- `pyproject.toml` - конфигурация Black, isort, MyPy, pytest
+- `.flake8` - настройки Flake8
+- `requirements-lint.txt` - зависимости для проверки кода
+
+### GitHub Actions
+
+Проект включает полный CI/CD pipeline:
+- **Линтинг**: Автоматическая проверка кода при каждом коммите
+- **Тестирование**: Запуск тестов в Docker и на разных версиях Python  
+- **Безопасность**: Проверка на уязвимости
+- **Покрытие**: Генерация отчетов покрытия и загрузка в Codecov
+- **Артефакты**: Сохранение отчетов для анализа
+
+```bash
+# Локальная проверка перед коммитом
+make format    # Исправить форматирование
+make lint      # Проверить все аспекты
+make test      # Запустить тесты
+```
 
 ## Мониторинг и логирование
 
@@ -902,5 +1034,5 @@ curl -X POST -F "file=@tests/test.txt" http://localhost:7555/v1/extract/file
 
 ---
 
-**Версия**: 1.10.2
+**Версия**: 1.10.3
 **Разработчик**: Барилко Виталий

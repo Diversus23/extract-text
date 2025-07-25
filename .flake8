@@ -1,0 +1,41 @@
+[flake8]
+max-line-length = 88
+extend-ignore = 
+    # Совместимость с Black
+    E203,  # whitespace before ':'
+    W503,  # line break before binary operator
+    W504,  # line break after binary operator
+    # Общие исключения
+    E501,  # line too long (дублирует max-line-length)
+    F401,  # imported but unused (может быть полезно для __init__.py)
+
+exclude = 
+    .git,
+    __pycache__,
+    .pytest_cache,
+    .mypy_cache,
+    .coverage,
+    coverage_html,
+    .tox,
+    .venv,
+    venv,
+    build,
+    dist,
+    *.egg-info,
+    .eggs,
+    tests/test_*.txt,
+    tests/test_*.ok.txt,
+    tests/test_*.err.txt
+
+per-file-ignores =
+    # Игнорируем некоторые правила в тестах
+    tests/*:F401,F811,S101
+    # __init__.py файлы могут содержать неиспользуемые импорты
+    __init__.py:F401
+    # Конфигурационные файлы
+    app/config.py:E501
+
+max-complexity = 10
+count = True
+statistics = True
+show-source = True 
