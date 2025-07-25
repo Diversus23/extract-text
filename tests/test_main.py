@@ -1,6 +1,6 @@
 """
-Integration тесты для FastAPI приложения
-"""
+Integration тесты для FastAPI приложения.
+."""
 
 import base64
 import json
@@ -17,10 +17,10 @@ from app.main import app
 
 @pytest.mark.integration
 class TestHealthEndpoints:
-    """Тесты для эндпоинтов проверки состояния"""
+    """Тесты для эндпоинтов проверки состояния."""
 
     def test_root_endpoint(self, test_client):
-        """Тест главного эндпоинта"""
+        """Тест главного эндпоинта."""
         response = test_client.get("/")
 
         assert response.status_code == 200
@@ -30,7 +30,7 @@ class TestHealthEndpoints:
         assert data["contact"] == "Барилко Виталий"
 
     def test_health_endpoint(self, test_client):
-        """Тест эндпоинта проверки здоровья"""
+        """Тест health."""
         response = test_client.get("/health")
 
         assert response.status_code == 200
@@ -38,7 +38,7 @@ class TestHealthEndpoints:
         assert data["status"] == "ok"
 
     def test_supported_formats_endpoint(self, test_client):
-        """Тест эндпоинта поддерживаемых форматов"""
+        """Тест эндпоинта поддерживаемых форматов."""
         response = test_client.get("/v1/supported-formats")
 
         assert response.status_code == 200
@@ -67,10 +67,10 @@ class TestHealthEndpoints:
 
 @pytest.mark.integration
 class TestExtractEndpoint:
-    """Тесты для эндпоинта извлечения текста"""
+    """Тесты для эндпоинта извлечения текста."""
 
     def test_extract_text_file_success(self, test_client):
-        """Тест успешного извлечения текста из текстового файла"""
+        """Тест успешного извлечения текста из текстового файла."""
         test_content = "Тестовый текст для проверки"
 
         with patch("app.extractors.TextExtractor.extract_text") as mock_extract:
@@ -104,7 +104,7 @@ class TestExtractEndpoint:
             assert data["files"][0]["text"] == test_content
 
     def test_extract_json_file_success(self, test_client):
-        """Тест успешного извлечения из JSON файла"""
+        """Тест успешного извлечения из JSON файла."""
         test_content = '{"name": "Тест", "value": 42}'
 
         with patch("app.extractors.TextExtractor.extract_text") as mock_extract:
@@ -136,7 +136,7 @@ class TestExtractEndpoint:
             assert data["count"] == 1
 
     def test_extract_empty_file_error(self, test_client):
-        """Тест ошибки при обработке пустого файла"""
+        """Тест ошибки при обработке пустого файла."""
         response = test_client.post(
             "/v1/extract/file",
             files={"file": ("empty.txt", BytesIO(b""), "text/plain")},
@@ -146,7 +146,7 @@ class TestExtractEndpoint:
         assert "empty" in response.json()["detail"].lower()
 
     def test_extract_large_file_error(self, test_client):
-        """Тест ошибки при обработке слишком большого файла"""
+        """Тест ошибки при обработке слишком большого файла."""
         large_content = b"x" * (settings.MAX_FILE_SIZE + 1)
 
         response = test_client.post(
@@ -158,7 +158,7 @@ class TestExtractEndpoint:
         assert "size exceeds maximum" in response.json()["detail"].lower()
 
     def test_extract_unsupported_format_error(self, test_client):
-        """Тест ошибки при обработке неподдерживаемого формата"""
+        """Тест ошибки при обработке неподдерживаемого формата."""
         test_content = b"Some binary content"
 
         with patch("app.extractors.TextExtractor.extract_text") as mock_extract:
@@ -181,7 +181,7 @@ class TestExtractEndpoint:
             assert "неподдерживаемый формат" in data["message"].lower()
 
     def test_extract_corrupted_file_error(self, test_client):
-        """Тест ошибки при обработке поврежденного файла"""
+        """Тест ошибки при обработке поврежденного файла."""
         test_content = b"corrupted content"
 
         # Мокаем валидацию файла - пропускаем проверку типа
@@ -206,7 +206,7 @@ class TestExtractEndpoint:
                 assert "поврежден" in data["message"]
 
     def test_extract_no_content_length_error(self, test_client):
-        """Тест ошибки при отсутствии Content-Length"""
+        """Тест ошибки при отсутствии Content-Length."""
         # Создаем запрос без Content-Length заголовка
         response = test_client.post("/v1/extract/file")
 
@@ -214,7 +214,7 @@ class TestExtractEndpoint:
         # FastAPI автоматически возвращает ошибку при отсутствии файла
 
     def test_extract_archive_file_error(self, test_client):
-        """Тест ошибки при обработке архива (без распаковки)"""
+        """Тест ошибки при обработке архива (без распаковки)."""
         # Минимальный ZIP файл
         zip_content = b"PK\x03\x04\x14\x00\x00\x00\x08\x00"
 
@@ -230,7 +230,7 @@ class TestExtractEndpoint:
             assert response.status_code in [200, 415]
 
     def test_extract_multiple_files_from_archive(self, test_client):
-        """Тест извлечения нескольких файлов из архива"""
+        """Тест извлечения нескольких файлов из архива."""
         test_content = b"fake archive content"
 
         # Мокаем валидацию файла
@@ -273,7 +273,7 @@ class TestExtractEndpoint:
                 assert data["files"][1]["filename"] == "file2.txt"
 
     def test_extract_with_file_type_validation_error(self, test_client):
-        """Тест ошибки при валидации типа файла"""
+        """Тест ошибки при валидации типа файла."""
         # Файл с неподходящим содержимым
         fake_pdf_content = b"This is not a PDF file"
 
@@ -296,7 +296,7 @@ class TestExtractEndpoint:
             assert "не соответствует" in data["message"]
 
     def test_extract_processing_timeout_error(self, test_client):
-        """Тест ошибки таймаута при обработке"""
+        """Тест ошибки таймаута при обработке."""
         test_content = b"large file content"
 
         # Мокаем валидацию файла
@@ -317,7 +317,7 @@ class TestExtractEndpoint:
                 assert "поврежден" in data["message"]
 
     def test_extract_file_without_extension(self, test_client):
-        """Тест обработки файла без расширения"""
+        """Тест обработки файла без расширения."""
         test_content = b"file content"
 
         # Мокаем валидацию файла - неудачная валидация
@@ -336,7 +336,7 @@ class TestExtractEndpoint:
             assert "не соответствует" in data["message"]
 
     def test_extract_success_with_multiple_files_in_archive(self, test_client):
-        """Тест успешного извлечения из архива с несколькими файлами"""
+        """Тест успешного извлечения из архива с несколькими файлами."""
         test_content = b"archive with multiple files"
 
         # Мокаем валидацию файла
@@ -386,7 +386,7 @@ class TestExtractEndpoint:
                 assert data["files"][1]["text"] == "Second document text"
 
     def test_extract_with_sanitized_filename(self, test_client):
-        """Тест обработки файла с небезопасным именем"""
+        """Тест обработки файла с небезопасным именем."""
         test_content = b"test content"
         unsafe_filename = "../../../etc/passwd"
 
@@ -414,7 +414,7 @@ class TestExtractEndpoint:
             assert data["files"][0]["filename"] == "etc_passwd"  # Санитизованное имя
 
     def test_extract_zero_size_file(self, test_client):
-        """Тест обработки файла нулевого размера"""
+        """Тест обработки файла нулевого размера."""
         response = test_client.post(
             "/v1/extract/file",
             files={"file": ("empty.txt", BytesIO(b""), "text/plain")},
@@ -425,7 +425,7 @@ class TestExtractEndpoint:
         assert "empty" in data["detail"].lower()
 
     def test_extract_file_with_special_characters_in_name(self, test_client):
-        """Тест обработки файла со специальными символами в имени"""
+        """Тест обработки файла со специальными символами в имени."""
         test_content = b"test content"
         special_filename = "тест файл с пробелами & символами!.txt"
 
@@ -454,10 +454,10 @@ class TestExtractEndpoint:
 
 @pytest.mark.integration
 class TestBase64ExtractEndpoint:
-    """Тесты для эндпоинта извлечения текста из base64-файлов"""
+    """Тесты для эндпоинта извлечения текста из base64-файлов."""
 
     def test_extract_base64_text_success(self, test_client):
-        """Тест успешного извлечения текста из base64-файла"""
+        """Тест успешного извлечения текста из base64-файла."""
         base64_content = "0J/RgNC40LLQtdGCINGN0YLQviDRgtC10LrRgdGCIQ=="
         expected_text = "Привет это текст!"
 
@@ -489,7 +489,7 @@ class TestBase64ExtractEndpoint:
             assert data["files"][0]["text"] == expected_text
 
     def test_extract_base64_invalid_base64(self, test_client):
-        """Тест ошибки при некорректном base64"""
+        """Тест ошибки при некорректном base64."""
         response = test_client.post(
             "/v1/extract/base64",
             json={
@@ -504,7 +504,7 @@ class TestBase64ExtractEndpoint:
         assert "base64" in data["message"].lower()
 
     def test_extract_base64_empty_filename(self, test_client):
-        """Тест ошибки при пустом filename"""
+        """Тест ошибки при пустом filename."""
         response = test_client.post(
             "/v1/extract/base64",
             json={"encoded_base64_file": "SGVsbG8gV29ybGQ=", "filename": ""},
@@ -518,7 +518,7 @@ class TestBase64ExtractEndpoint:
         assert "не соответствует" in data["message"]
 
     def test_extract_base64_large_file_error(self, test_client):
-        """Тест ошибки при превышении максимального размера файла"""
+        """Тест ошибки при превышении максимального размера файла."""
         # Создаем base64 файл больше лимита
         large_content = "A" * (settings.MAX_FILE_SIZE + 1)
         import base64
@@ -537,7 +537,7 @@ class TestBase64ExtractEndpoint:
         assert "exceeds maximum" in data["detail"]
 
     def test_extract_base64_unsupported_format(self, test_client):
-        """Тест ошибки при неподдерживаемом формате файла"""
+        """Тест ошибки при неподдерживаемом формате файла."""
         test_base64 = "SGVsbG8gV29ybGQ="  # "Hello World"
 
         with patch("app.extractors.TextExtractor.extract_text") as mock_extract:
@@ -554,7 +554,7 @@ class TestBase64ExtractEndpoint:
             assert "неподдерживаемый формат" in data["message"].lower()
 
     def test_extract_base64_corrupted_file(self, test_client):
-        """Тест ошибки при поврежденном файле"""
+        """Тест ошибки при поврежденном файле."""
         test_base64 = "SGVsbG8gV29ybGQ="
 
         # Мокаем валидацию файла - пропускаем проверку типа
@@ -576,7 +576,7 @@ class TestBase64ExtractEndpoint:
                 assert "поврежден" in data["message"]
 
     def test_extract_base64_with_sanitized_filename(self, test_client):
-        """Тест обработки base64 файла с небезопасным именем"""
+        """Тест обработки base64 файла с небезопасным именем."""
         test_base64 = "0J/RgNC40LLQtdGCINGN0YLQviDRgtC10LrRgdGCIQ=="
         unsafe_filename = "../../../etc/passwd"
 
@@ -604,7 +604,7 @@ class TestBase64ExtractEndpoint:
             assert data["files"][0]["filename"] == "etc_passwd"  # Санитизованное имя
 
     def test_extract_base64_json_file(self, test_client):
-        """Тест извлечения из JSON файла в base64"""
+        """Тест извлечения из JSON файла в base64."""
         json_content = '{"message": "Привет", "number": 42}'
         import base64
 
@@ -634,7 +634,7 @@ class TestBase64ExtractEndpoint:
             assert "Привет" in data["files"][0]["text"]
 
     def test_extract_base64_cyrillic_filename(self, test_client):
-        """Тест извлечения base64-файла с кириллицей в названии"""
+        """Тест извлечения base64-файла с кириллицей в названии."""
         # Кодируем простой текст в base64
         test_content = "Тест файла с кириллическим названием"
         content_base64 = base64.b64encode(test_content.encode()).decode()
@@ -662,10 +662,10 @@ class TestBase64ExtractEndpoint:
 
 @pytest.mark.integration
 class TestMiddleware:
-    """Тесты для middleware"""
+    """Тесты для middleware."""
 
     def test_cors_middleware(self, test_client):
-        """Тест CORS middleware"""
+        """Тест CORS middleware."""
         # Проверяем обычный запрос с заголовком Origin
         response = test_client.get("/", headers={"Origin": "http://localhost:3000"})
 
@@ -681,7 +681,7 @@ class TestMiddleware:
         )
 
     def test_logging_middleware(self, test_client):
-        """Тест middleware для логирования"""
+        """Тест middleware для логирования."""
         with patch("app.main.logger") as mock_logger:
             response = test_client.get("/health")
 
@@ -690,7 +690,7 @@ class TestMiddleware:
             mock_logger.info.assert_called()
 
     def test_logging_middleware_with_error(self, test_client):
-        """Тест logging middleware при ошибке"""
+        """Тест logging middleware при ошибке."""
         # Отправляем запрос на несуществующий endpoint
         response = test_client.get("/nonexistent")
 
@@ -704,10 +704,10 @@ class TestMiddleware:
 
 @pytest.mark.integration
 class TestAsyncEndpoints:
-    """Тесты для асинхронных endpoint'ов"""
+    """Тесты для асинхронных endpoint'ов."""
 
     def test_async_extract_endpoint(self, test_client):
-        """Тест асинхронного endpoint извлечения текста"""
+        """Тест асинхронного endpoint извлечения текста."""
         test_content = b"Test content"
 
         # Мокаем валидацию файла
@@ -737,7 +737,7 @@ class TestAsyncEndpoints:
                 mock_extract.assert_called_once()
 
     def test_async_health_endpoint(self, test_client):
-        """Тест асинхронного health endpoint"""
+        """Тест асинхронного health endpoint."""
         response = test_client.get("/health")
 
         assert response.status_code == 200
@@ -745,7 +745,7 @@ class TestAsyncEndpoints:
         assert data["status"] == "ok"
 
     def test_async_supported_formats_endpoint(self, test_client):
-        """Тест асинхронного endpoint поддерживаемых форматов"""
+        """Тест асинхронного endpoint поддерживаемых форматов."""
         response = test_client.get("/v1/supported-formats")
 
         assert response.status_code == 200
@@ -760,10 +760,10 @@ class TestAsyncEndpoints:
 
 @pytest.mark.integration
 class TestURLExtractionEndpoint:
-    """Тесты для веб-экстракции (новое в v1.10.0)"""
+    """Тесты для веб-экстракции (новое в v1.10.0)."""
 
     def test_extract_url_invalid_scheme(self, test_client):
-        """Тест с невалидной схемой URL"""
+        """Тест с невалидной схемой URL."""
         response = test_client.post(
             "/v1/extract/url", json={"url": "ftp://example.com"}
         )
@@ -774,14 +774,14 @@ class TestURLExtractionEndpoint:
         assert "http://" in data["message"] or "https://" in data["message"]
 
     def test_extract_url_empty_url(self, test_client):
-        """Тест с пустым URL"""
+        """Тест с пустым URL."""
         response = test_client.post("/v1/extract/url", json={"url": ""})
 
         assert response.status_code == 400
 
     @patch("app.extractors.TextExtractor.extract_from_url")
     def test_extract_url_success(self, mock_extract, test_client):
-        """Тест успешного извлечения текста с URL"""
+        """Тест успешного извлечения текста с URL."""
         # Мокаем успешный ответ
         mock_extract.return_value = [
             {
@@ -833,7 +833,7 @@ class TestURLExtractionEndpoint:
 
     @patch("app.extractors.TextExtractor.extract_from_url")
     def test_extract_url_blocked_ip(self, mock_extract, test_client):
-        """Тест блокировки внутренних IP-адресов"""
+        """Тест блокировки внутренних IP-адресов."""
         mock_extract.side_effect = ValueError(
             "Access to internal IP addresses is prohibited for security reasons"
         )
@@ -849,7 +849,7 @@ class TestURLExtractionEndpoint:
 
     @patch("app.extractors.TextExtractor.extract_from_url")
     def test_extract_url_connection_error(self, mock_extract, test_client):
-        """Тест ошибки подключения"""
+        """Тест ошибки подключения."""
         mock_extract.side_effect = ValueError("Failed to load page: Connection timeout")
 
         response = test_client.post(

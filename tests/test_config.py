@@ -1,5 +1,5 @@
 """
-Тесты для модуля конфигурации
+Тесты для модуля конфигурации.
 """
 
 import os
@@ -12,11 +12,11 @@ from app.config import Settings
 
 @pytest.mark.unit
 class TestSettings:
-    """Тесты для класса Settings"""
+    """Тесты для класса Settings."""
 
     @patch.dict(os.environ, {}, clear=True)
     def test_default_settings(self):
-        """Тест настроек по умолчанию (без переменных окружения)"""
+        """Тест настроек по умолчанию (без переменных окружения)."""
         # Перезагружаем модуль для учета очищенных переменных окружения
         import importlib
 
@@ -36,7 +36,7 @@ class TestSettings:
         assert settings.MAX_ARCHIVE_NESTING == 3
 
     def test_supported_formats_structure(self):
-        """Тест структуры поддерживаемых форматов"""
+        """Тест структуры поддерживаемых форматов."""
         settings = Settings()
 
         assert isinstance(settings.SUPPORTED_FORMATS, dict)
@@ -50,7 +50,7 @@ class TestSettings:
         assert "archives" in settings.SUPPORTED_FORMATS
 
     def test_supported_formats_content(self):
-        """Тест содержимого поддерживаемых форматов"""
+        """Тест содержимого поддерживаемых форматов."""
         settings = Settings()
         formats = settings.SUPPORTED_FORMATS
 
@@ -73,7 +73,7 @@ class TestSettings:
 
     @patch.dict(os.environ, {"API_PORT": "8080"})
     def test_environment_variable_override(self):
-        """Тест переопределения настроек через переменные окружения"""
+        """Тест переопределения настроек через переменные окружения."""
         # Перезагружаем модуль для учета новых переменных окружения
         import importlib
 
@@ -85,7 +85,7 @@ class TestSettings:
 
     @patch.dict(os.environ, {"OCR_LANGUAGES": "eng+rus+deu"})
     def test_ocr_languages_override(self):
-        """Тест переопределения языков OCR"""
+        """Тест переопределения языков OCR."""
         import importlib
 
         from app import config
@@ -96,7 +96,7 @@ class TestSettings:
 
     @patch.dict(os.environ, {"WORKERS": "4"})
     def test_workers_override(self):
-        """Тест переопределения количества workers"""
+        """Тест переопределения количества workers."""
         import importlib
 
         from app import config
@@ -107,7 +107,7 @@ class TestSettings:
 
     @patch.dict(os.environ, {"MAX_FILE_SIZE": "52428800"})  # 50MB
     def test_max_file_size_override(self):
-        """Тест переопределения максимального размера файла"""
+        """Тест переопределения максимального размера файла."""
         import importlib
 
         from app import config
@@ -118,7 +118,7 @@ class TestSettings:
 
     @patch.dict(os.environ, {"PROCESSING_TIMEOUT_SECONDS": "600"})
     def test_timeout_override(self):
-        """Тест переопределения таймаута обработки"""
+        """Тест переопределения таймаута обработки."""
         import importlib
 
         from app import config
@@ -129,7 +129,7 @@ class TestSettings:
 
     @patch.dict(os.environ, {"MAX_ARCHIVE_SIZE": "10485760"})  # 10MB
     def test_max_archive_size_override(self):
-        """Тест переопределения максимального размера архива"""
+        """Тест переопределения максимального размера архива."""
         import importlib
 
         from app import config
@@ -140,7 +140,7 @@ class TestSettings:
 
     @patch.dict(os.environ, {"MAX_EXTRACTED_SIZE": "52428800"})  # 50MB
     def test_max_extracted_size_override(self):
-        """Тест переопределения максимального размера распакованного архива"""
+        """Тест переопределения максимального размера распакованного архива."""
         import importlib
 
         from app import config
@@ -151,7 +151,7 @@ class TestSettings:
 
     @patch.dict(os.environ, {"MAX_ARCHIVE_NESTING": "5"})
     def test_max_archive_nesting_override(self):
-        """Тест переопределения максимальной глубины вложенности архивов"""
+        """Тест переопределения максимальной глубины вложенности архивов."""
         import importlib
 
         from app import config
@@ -161,7 +161,7 @@ class TestSettings:
         assert settings.MAX_ARCHIVE_NESTING == 5
 
     def test_all_formats_are_lowercase(self):
-        """Тест, что все форматы записаны в нижнем регистре"""
+        """Тест, что все форматы записаны в нижнем регистре."""
         settings = Settings()
 
         for category, formats in settings.SUPPORTED_FORMATS.items():
@@ -171,7 +171,7 @@ class TestSettings:
                 ), f"Формат {format_ext} в категории {category} не в нижнем регистре"
 
     def test_no_duplicate_formats(self):
-        """Тест, что нет дублирующихся форматов в разных категориях"""
+        """Тест, что нет дублирующихся форматов в разных категориях."""
         settings = Settings()
         all_formats = []
 
@@ -185,7 +185,7 @@ class TestSettings:
 
     @patch.dict(os.environ, {}, clear=True)
     def test_web_extractor_default_settings(self):
-        """Тест настроек веб-экстрактора по умолчанию"""
+        """Тест настроек веб-экстрактора по умолчанию."""
         import importlib
 
         from app import config
@@ -219,7 +219,7 @@ class TestSettings:
         },
     )
     def test_web_extractor_settings_override(self):
-        """Тест переопределения настроек веб-экстрактора"""
+        """Тест переопределения настроек веб-экстрактора."""
         import importlib
 
         from app import config
@@ -235,7 +235,7 @@ class TestSettings:
 
     @patch.dict(os.environ, {"MIN_IMAGE_SIZE_FOR_OCR": "10000"})
     def test_min_image_size_override(self):
-        """Тест переопределения минимального размера изображения для OCR"""
+        """Тест переопределения минимального размера изображения для OCR."""
         import importlib
 
         from app import config

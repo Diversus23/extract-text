@@ -183,7 +183,7 @@ def mock_tesseract():
 
 @pytest.fixture
 def mock_libreoffice():
-    """Мокает subprocess для LibreOffice"""
+    """Мокает subprocess для LibreOffice."""
     with patch("subprocess.run") as mock_run:
         mock_run.return_value.returncode = 0
         yield mock_run
@@ -191,7 +191,7 @@ def mock_libreoffice():
 
 @pytest.fixture
 def settings_override():
-    """Создает переопределенные настройки для тестов"""
+    """Создает переопределенные настройки для тестов."""
     original_settings = {}
 
     def override(**kwargs):
@@ -209,7 +209,7 @@ def settings_override():
 
 @pytest.fixture
 def uploaded_file_mock():
-    """Создает мок для UploadFile"""
+    """Создает мок для UploadFile."""
 
     def create_upload_file(
         filename: str, content: bytes, content_type: str = "text/plain"
@@ -237,7 +237,7 @@ def uploaded_file_mock():
     ]
 )
 def text_format_file(request, temp_dir):
-    """Параметризованная фикстура для создания файлов разных текстовых форматов"""
+    """Параметризованная фикстура для создания файлов разных текстовых форматов."""
     filename, content_type = request.param
     file_path = temp_dir / filename
 

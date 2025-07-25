@@ -7,14 +7,14 @@ from typing import Dict, List, Optional
 
 
 class TextProcessor:
-    """Класс для обработки текста"""
+    """Класс для обработки текста."""
 
     def __init__(self, language: str = "ru"):
         self.language = language
         self.processed_count = 0
 
     def process_text(self, text: str) -> str:
-        """Обрабатывает входной текст и возвращает результат"""
+        """Обрабатывает входной текст и возвращает результат."""
         if not text:
             return ""
 
@@ -25,12 +25,12 @@ class TextProcessor:
         return result
 
     def get_statistics(self) -> Dict[str, int]:
-        """Возвращает статистику обработки"""
+        """Возвращает статистику обработки."""
         return {"processed_count": self.processed_count, "language": self.language}
 
 
 def main():
-    """Основная функция программы"""
+    """Основная функция программы."""
     processor = TextProcessor()
 
     # Тестовые данные

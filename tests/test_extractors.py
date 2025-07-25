@@ -1,5 +1,5 @@
 """
-Unit тесты для модуля извлечения текста
+Unit тесты для модуля извлечения текста.
 """
 
 import asyncio
@@ -193,7 +193,7 @@ if __name__ == "__main__":
         assert 'print("Hello, World!")' in result
 
     def test_extract_from_source_code_sync_unknown_language(self, text_extractor):
-        """Тест извлечения из исходного кода неизвестного языка"""
+        """Тест извлечения из исходного кода неизвестного языка."""
         code_content = b'// Unknown language code\nfunction test() { return "hello"; }'
 
         result = text_extractor._extract_from_source_code_sync(
@@ -206,7 +206,7 @@ if __name__ == "__main__":
 
     @patch("app.extractors.pdfplumber")
     def test_extract_from_pdf_sync(self, mock_pdfplumber, text_extractor):
-        """Тест синхронного извлечения из PDF"""
+        """Тест синхронного извлечения из PDF."""
         mock_pdf = Mock()
         mock_page = Mock()
         mock_page.extract_text.return_value = "Тестовый текст PDF"
@@ -223,7 +223,7 @@ if __name__ == "__main__":
 
     @patch("app.extractors.pdfplumber")
     def test_extract_from_pdf_sync_with_images(self, mock_pdfplumber, text_extractor):
-        """Тест синхронного извлечения из PDF с изображениями"""
+        """Тест синхронного извлечения из PDF с изображениями."""
         mock_pdf = Mock()
         mock_page = Mock()
         mock_page.extract_text.return_value = "Текст страницы"
@@ -245,7 +245,7 @@ if __name__ == "__main__":
 
     @patch("app.extractors.Image")
     def test_extract_from_image_sync(self, mock_image_class, text_extractor):
-        """Тест синхронного извлечения из изображения"""
+        """Тест синхронного извлечения из изображения."""
         mock_image = Mock()
         mock_image_class.open.return_value = mock_image
 
@@ -261,7 +261,7 @@ if __name__ == "__main__":
 
     @patch("app.extractors.Image")
     def test_extract_from_image_sync_no_text(self, mock_image_class, text_extractor):
-        """Тест извлечения из изображения без текста"""
+        """Тест извлечения из изображения без текста."""
         mock_image = Mock()
         mock_image_class.open.return_value = mock_image
 
@@ -275,7 +275,7 @@ if __name__ == "__main__":
 
     @patch("app.extractors.Document")
     def test_extract_from_docx_sync(self, mock_document, text_extractor):
-        """Тест синхронного извлечения из DOCX"""
+        """Тест синхронного извлечения из DOCX."""
         mock_doc = Mock()
         mock_paragraph = Mock()
         mock_paragraph.text = "Тестовый параграф"
@@ -290,7 +290,7 @@ if __name__ == "__main__":
 
     @patch("app.extractors.Document")
     def test_extract_from_doc_sync(self, mock_document, text_extractor):
-        """Тест синхронного извлечения из DOC"""
+        """Тест синхронного извлечения из DOC."""
         mock_doc = Mock()
         mock_paragraph = Mock()
         mock_paragraph.text = "Тестовый параграф из DOC"
@@ -322,7 +322,7 @@ if __name__ == "__main__":
 
     @patch("app.extractors.pd")
     def test_extract_from_excel_sync(self, mock_pd, text_extractor):
-        """Тест синхронного извлечения из Excel"""
+        """Тест синхронного извлечения из Excel."""
         mock_dataframe = Mock()
         mock_dataframe.to_csv.return_value = "col1,col2\nvalue1,value2"
         mock_pd.read_excel.return_value = {"Sheet1": mock_dataframe}
@@ -334,7 +334,7 @@ if __name__ == "__main__":
         assert "value1,value2" in result
 
     def test_extract_from_archive(self, text_extractor):
-        """Тест извлечения из архива"""
+        """Тест извлечения из архива."""
         # Создаем простой zip архив в памяти
         archive_buffer = io.BytesIO()
         with zipfile.ZipFile(archive_buffer, "w") as zipf:
@@ -349,7 +349,7 @@ if __name__ == "__main__":
         assert result[0]["text"] == "Тестовый текст в архиве"
 
     def test_sanitize_archive_filename(self, text_extractor):
-        """Тест санитизации имени файла архива"""
+        """Тест санитизации имени файла архива."""
         # Тестируем удаление опасных путей
         assert (
             text_extractor._sanitize_archive_filename("../../../etc/passwd")
@@ -376,7 +376,7 @@ if __name__ == "__main__":
         assert text_extractor._sanitize_archive_filename("./") == ""
 
     def test_is_system_file(self, text_extractor):
-        """Тест проверки системных файлов"""
+        """Тест проверки системных файлов."""
         # Файлы с директориями работают (содержат слеш)
         assert text_extractor._is_system_file("folder/.git/config") is True
         assert text_extractor._is_system_file("path/.svn/file") is True
@@ -390,7 +390,7 @@ if __name__ == "__main__":
         assert text_extractor._is_system_file("data.csv") is False
 
     def test_check_mime_type(self, text_extractor):
-        """Тест проверки MIME типа"""
+        """Тест проверки MIME типа."""
         # Тестируем текстовый файл
         content = b"This is a text file"
         result = text_extractor._check_mime_type(content, "test.txt")
@@ -404,17 +404,17 @@ if __name__ == "__main__":
 
 @pytest.mark.unit
 class TestBase64ImageProcessing:
-    """Тесты для обработки base64 изображений (v1.10.1)"""
+    """Тесты для обработки base64 изображений (v1.10.1)."""
 
     @pytest.fixture
     def text_extractor(self):
-        """Фикстура для создания экстрактора"""
+        """Фикстура для создания экстрактора."""
         from app.extractors import TextExtractor
 
         return TextExtractor()
 
     def test_process_base64_image_valid_png(self, text_extractor):
-        """Тест обработки валидного base64 PNG изображения"""
+        """Тест обработки валидного base64 PNG изображения."""
         # Простое 1x1 PNG изображение в base64
         base64_data = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
@@ -424,14 +424,14 @@ class TestBase64ImageProcessing:
         assert result is None
 
     def test_process_base64_image_invalid_data(self, text_extractor):
-        """Тест обработки некорректного base64 изображения"""
+        """Тест обработки некорректного base64 изображения."""
         invalid_data = "data:image/png;base64,invalid-base64-data"
 
         result = text_extractor._process_base64_image(invalid_data)
         assert result is None
 
     def test_process_base64_image_unsupported_format(self, text_extractor):
-        """Тест обработки неподдерживаемого формата base64"""
+        """Тест обработки неподдерживаемого формата base64."""
         svg_data = (
             "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCI+PC9zdmc+"
         )
@@ -440,7 +440,7 @@ class TestBase64ImageProcessing:
         assert result is None
 
     def test_process_base64_image_no_data_uri(self, text_extractor):
-        """Тест обработки base64 без data URI префикса"""
+        """Тест обработки base64 без data URI префикса."""
         plain_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
         result = text_extractor._process_base64_image(plain_base64)
@@ -449,11 +449,11 @@ class TestBase64ImageProcessing:
 
 @pytest.mark.integration
 class TestPlaywrightIntegration:
-    """Тесты для Playwright интеграции (v1.10.1)"""
+    """Тесты для Playwright интеграции (v1.10.1)."""
 
     @pytest.fixture
     def text_extractor(self):
-        """Фикстура для создания экстрактора"""
+        """Фикстура для создания экстрактора."""
         from app.extractors import TextExtractor
 
         return TextExtractor()
@@ -462,7 +462,7 @@ class TestPlaywrightIntegration:
     def test_extract_page_with_playwright_failure(
         self, mock_playwright, text_extractor
     ):
-        """Тест обработки ошибки Playwright"""
+        """Тест обработки ошибки Playwright."""
         # Настройка мока для генерации исключения
         mock_playwright.return_value.__enter__.side_effect = Exception(
             "Playwright error"
@@ -473,7 +473,7 @@ class TestPlaywrightIntegration:
             text_extractor._extract_page_with_playwright("https://example.com")
 
     def test_safe_scroll_for_lazy_loading_stable_height(self, text_extractor):
-        """Тест безопасного скролла с неизменной высотой"""
+        """Тест безопасного скролла с неизменной высотой."""
         mock_page = Mock()
         mock_page.evaluate.return_value = 1000  # постоянная высота
 
@@ -485,7 +485,7 @@ class TestPlaywrightIntegration:
         )  # минимум 2 вызова для проверки высоты
 
     def test_safe_scroll_for_lazy_loading_changing_height(self, text_extractor):
-        """Тест безопасного скролла с изменяющейся высотой"""
+        """Тест безопасного скролла с изменяющейся высотой."""
         mock_page = Mock()
         # Имитируем увеличение высоты страницы
         mock_page.evaluate.side_effect = [
@@ -499,11 +499,11 @@ class TestPlaywrightIntegration:
 
 @pytest.mark.integration
 class TestWebExtractionWithMockRequests:
-    """Тесты веб-экстракции с мокированием HTTP-запросов"""
+    """Тесты веб-экстракции с мокированием HTTP-запросов."""
 
     @pytest.fixture
     def text_extractor(self):
-        """Фикстура для создания экстрактора"""
+        """Фикстура для создания экстрактора."""
         from app.extractors import TextExtractor
 
         return TextExtractor()

@@ -469,7 +469,7 @@ class TextExtractor:
             raise ValueError(f"Error processing CSV: {str(e)}")
 
     def _extract_from_pptx_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из PPTX с полным извлечением согласно п.3.3 ТЗ"""
+        """Синхронное извлечение текста из PPTX с полным извлечением согласно п.3.3 ТЗ."""
         if not Presentation:
             raise ImportError("python-pptx не установлен")
 
@@ -516,7 +516,7 @@ class TextExtractor:
             raise ValueError(f"Error processing PPTX: {str(e)}")
 
     def _extract_from_ppt_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из PPT через конвертацию в PPTX с помощью LibreOffice"""
+        """Синхронное извлечение текста из PPT через конвертацию в PPTX с помощью LibreOffice."""
         if not Presentation:
             raise ImportError("python-pptx не установлен")
 
@@ -599,7 +599,7 @@ class TextExtractor:
             raise ValueError(f"Error processing PPT: {str(e)}")
 
     def _extract_from_txt_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из TXT файлов"""
+        """Синхронное извлечение текста из TXT файлов."""
         try:
             # Попытка декодирования в разных кодировках
             # Расширенный список кодировок для лучшей поддержки русского языка
@@ -694,7 +694,7 @@ class TextExtractor:
     def _extract_from_source_code_sync(
         self, content: bytes, extension: str, filename: str
     ) -> str:
-        """Синхронное извлечение текста из файлов исходного кода"""
+        """Синхронное извлечение текста из файлов исходного кода."""
         try:
             # Попытка декодирования в разных кодировках
             # Расширенный список кодировок для лучшей поддержки различных языков
@@ -930,7 +930,7 @@ class TextExtractor:
             raise ValueError(f"Error processing source code: {str(e)}")
 
     def _extract_from_html_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из HTML"""
+        """Синхронное извлечение текста из HTML."""
         if not BeautifulSoup:
             raise ImportError("beautifulsoup4 не установлен")
 
@@ -955,7 +955,7 @@ class TextExtractor:
             raise ValueError(f"Error processing HTML: {str(e)}")
 
     def _extract_from_markdown_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из Markdown"""
+        """Синхронное извлечение текста из Markdown."""
         try:
             text = content.decode("utf-8", errors="replace")
 
@@ -974,7 +974,7 @@ class TextExtractor:
             raise ValueError(f"Error processing Markdown: {str(e)}")
 
     def _extract_from_json_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из JSON"""
+        """Синхронное извлечение текста из JSON."""
         import json
 
         try:
@@ -1005,7 +1005,7 @@ class TextExtractor:
             raise ValueError(f"Error processing JSON: {str(e)}")
 
     def _extract_from_rtf_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из RTF"""
+        """Синхронное извлечение текста из RTF."""
         if not rtf_to_text:
             raise ImportError("striprtf не установлен")
 
@@ -1019,7 +1019,7 @@ class TextExtractor:
             raise ValueError(f"Error processing RTF: {str(e)}")
 
     def _extract_from_xml_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из XML"""
+        """Синхронное извлечение текста из XML."""
         try:
             text = content.decode("utf-8", errors="replace")
             root = ET.fromstring(text)
@@ -1053,7 +1053,7 @@ class TextExtractor:
             raise ValueError(f"Error processing XML: {str(e)}")
 
     def _extract_from_yaml_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из YAML"""
+        """Синхронное извлечение текста из YAML."""
         if not yaml:
             raise ImportError("PyYAML не установлен")
 
@@ -1085,7 +1085,7 @@ class TextExtractor:
             raise ValueError(f"Error processing YAML: {str(e)}")
 
     def _extract_from_odt_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из ODT"""
+        """Синхронное извлечение текста из ODT."""
         if not load:
             raise ImportError("odfpy не установлен")
 
@@ -1120,7 +1120,7 @@ class TextExtractor:
                     )
 
     def _extract_from_epub_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из EPUB"""
+        """Синхронное извлечение текста из EPUB."""
         if not BeautifulSoup:
             raise ImportError("beautifulsoup4 не установлен")
 
@@ -1171,7 +1171,7 @@ class TextExtractor:
             raise ValueError(f"Error processing EPUB: {str(e)}")
 
     def _extract_from_eml_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из EML"""
+        """Синхронное извлечение текста из EML."""
         import email
         from email.header import decode_header
 
@@ -1264,7 +1264,7 @@ class TextExtractor:
             raise ValueError(f"Error processing EML: {str(e)}")
 
     def _extract_from_msg_sync(self, content: bytes) -> str:
-        """Синхронное извлечение текста из MSG"""
+        """Синхронное извлечение текста из MSG."""
         try:
             # Простая эвристика для MSG файлов
             # MSG файлы содержат текст в Unicode и могут содержать различные блоки данных
@@ -1334,7 +1334,7 @@ class TextExtractor:
 
     def _safe_tesseract_ocr(self, image, temp_image_path: str = None) -> str:
         """
-        Безопасный вызов Tesseract с ограничениями ресурсов
+        Безопасный вызов Tesseract с ограничениями ресурсов.
 
         Args:
             image: PIL Image объект
@@ -1436,7 +1436,7 @@ class TextExtractor:
                     )
 
     def _extract_from_image_sync(self, content: bytes) -> str:
-        """Синхронный OCR изображения"""
+        """Синхронный OCR изображения."""
         if not Image:
             raise ImportError("PIL не установлен")
 
@@ -1460,7 +1460,7 @@ class TextExtractor:
             raise ValueError(f"Error processing image: {str(e)}")
 
     def _check_mime_type(self, content: bytes, filename: str) -> bool:
-        """Проверка MIME-типа файла для предотвращения подделки расширений"""
+        """Проверка MIME-типа файла для предотвращения подделки расширений."""
         import mimetypes
 
         try:
@@ -1745,7 +1745,7 @@ class TextExtractor:
         archive_name: str,
         nesting_level: int,
     ) -> List[Dict[str, Any]]:
-        """Извлечение файлов из RAR-архива"""
+        """Извлечение файлов из RAR-архива."""
         if not rarfile:
             raise ValueError("RAR support not available. Install rarfile library.")
 
@@ -1923,7 +1923,7 @@ class TextExtractor:
             return None
 
     def _sanitize_archive_filename(self, filename: str) -> str:
-        """Санитизация имени файла из архива"""
+        """Санитизация имени файла из архива."""
         if not filename:
             return ""
 
@@ -1964,7 +1964,7 @@ class TextExtractor:
         return False
 
     def _ocr_from_pdf_image_sync(self, page, img_info) -> str:
-        """Синхронный OCR изображения из PDF"""
+        """Синхронный OCR изображения из PDF."""
         if not Image:
             return ""
 
@@ -2554,7 +2554,7 @@ class TextExtractor:
         user_agent: Optional[str] = None,
         extraction_options: Optional[Any] = None,
     ) -> List[Dict[str, Any]]:
-        """Извлечение текста с веб-страницы или файла по URL (обновлено в v1.10.3)"""
+        """Извлечение текста с веб-страницы или файла по URL (обновлено в v1.10.3)."""
 
         # Проверка безопасности URL
         if not self._is_safe_url(url):
@@ -2741,7 +2741,7 @@ class TextExtractor:
                 raise ValueError(f"Failed to load page: {str(e)}")
 
     def _is_safe_url(self, url: str) -> bool:
-        """Проверка безопасности URL (защита от SSRF)"""
+        """Проверка безопасности URL (защита от SSRF)."""
         try:
             parsed_url = urlparse(url)
 
@@ -2841,7 +2841,7 @@ class TextExtractor:
             return False
 
     def _extract_text_from_html(self, html_content: str) -> str:
-        """Извлечение текста из HTML контента"""
+        """Извлечение текста из HTML контента."""
         if not BeautifulSoup:
             raise ValueError("BeautifulSoup not available for HTML parsing")
 
@@ -2871,7 +2871,7 @@ class TextExtractor:
     def _extract_images_from_html(
         self, html_content: str, base_url: str, extraction_options: Optional[Any] = None
     ) -> List[Dict[str, Any]]:
-        """Извлечение и обработка изображений со страницы (обновлено в v1.10.2)"""
+        """Извлечение и обработка изображений со страницы (обновлено в v1.10.2)."""
         if not BeautifulSoup or not Image:
             return []
 
@@ -2983,7 +2983,7 @@ class TextExtractor:
     def _process_single_image(
         self, img_tag, base_url: str, extraction_options: Optional[Any] = None
     ) -> Optional[Dict[str, Any]]:
-        """Обработка одного изображения (обновлено в v1.10.2)"""
+        """Обработка одного изображения (обновлено в v1.10.2)."""
         try:
             img_src = img_tag.get("src", "")
             logger.info(f"Processing image: {img_src}")
@@ -3086,7 +3086,7 @@ class TextExtractor:
     def _process_base64_image(
         self, img_tag, extraction_options: Optional[Any] = None
     ) -> Optional[Dict[str, Any]]:
-        """Обработка base64 изображения из data URI (обновлено в v1.10.2)"""
+        """Обработка base64 изображения из data URI (обновлено в v1.10.2)."""
         try:
             from .utils import (
                 decode_base64_image,

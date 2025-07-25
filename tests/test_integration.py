@@ -1,5 +1,5 @@
 """
-Integration тесты с реальными файлами из папки tests
+Integration тесты с реальными файлами из папки tests.
 """
 
 import json
@@ -19,18 +19,18 @@ from app.main import app
 
 @pytest.mark.integration
 class TestAllRealFiles:
-    """Автоматические тесты для всех файлов из папки tests"""
+    """Автоматические тесты для всех файлов из папки tests."""
 
     @pytest.fixture
     def supported_formats(self, real_test_files_dir):
-        """Загружает поддерживаемые форматы из JSON файла"""
+        """Загружает поддерживаемые форматы из JSON файла."""
         supported_formats_file = real_test_files_dir / "supported_formats.json"
         with open(supported_formats_file, "r", encoding="utf-8") as f:
             return json.load(f)
 
     @pytest.fixture
     def all_supported_extensions(self, supported_formats):
-        """Возвращает все поддерживаемые расширения файлов"""
+        """Возвращает все поддерживаемые расширения файлов."""
         extensions = set()
         for category, formats in supported_formats.items():
             if category != "archives":  # Архивы обрабатываются отдельно
@@ -39,7 +39,7 @@ class TestAllRealFiles:
 
     @pytest.fixture
     def test_files_to_skip(self):
-        """Файлы, которые нужно пропустить при тестировании"""
+        """Файлы, которые нужно пропустить при тестировании."""
         return {
             # Конфигурационные файлы
             "supported_formats.json",
@@ -61,7 +61,7 @@ class TestAllRealFiles:
         }
 
     def should_skip_file(self, file_path, skip_patterns):
-        """Проверяет, нужно ли пропустить файл"""
+        """Проверяет, нужно ли пропустить файл."""
         filename = file_path.name
 
         # Проверяем точные совпадения
@@ -79,7 +79,7 @@ class TestAllRealFiles:
         return False
 
     def get_content_type(self, file_path):
-        """Определяет MIME тип файла"""
+        """Определяет MIME тип файла."""
         # Для архивов используем специальный тип
         if file_path.suffix.lower() in [
             ".zip",
@@ -119,7 +119,7 @@ class TestAllRealFiles:
         all_supported_extensions,
         test_files_to_skip,
     ):
-        """Тест обработки всех поддерживаемых файлов из папки tests"""
+        """Тест обработки всех поддерживаемых файлов из папки tests."""
 
         # Мокаем валидацию файлов чтобы пропустить MIME проверки
         mock_validate_file_type.return_value = (True, None)
@@ -280,7 +280,7 @@ class TestAllRealFiles:
         ), f"Слишком много критических ошибок: {error_rate:.1f}% (максимум 20%)"
 
     def test_archive_files_rejection(self, test_client, real_test_files_dir):
-        """Тест отклонения архивных файлов"""
+        """Тест отклонения архивных файлов."""
         archive_extensions = [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"]
 
         found_archives = []
@@ -310,10 +310,10 @@ class TestAllRealFiles:
 
 @pytest.mark.integration
 class TestRealFiles:
-    """Тесты с реальными файлами из папки tests"""
+    """Тесты с реальными файлами из папки tests."""
 
     def test_extract_real_text_file(self, test_client, real_test_files_dir):
-        """Тест извлечения из реального текстового файла"""
+        """Тест извлечения из реального текстового файла."""
         text_file = real_test_files_dir / "text.txt"
 
         if text_file.exists():
@@ -331,7 +331,7 @@ class TestRealFiles:
                 assert len(data["files"][0]["text"]) > 0
 
     def test_extract_real_json_file(self, test_client, real_test_files_dir):
-        """Тест извлечения из реального JSON файла"""
+        """Тест извлечения из реального JSON файла."""
         json_file = real_test_files_dir / "test.json"
 
         if json_file.exists():
@@ -350,7 +350,7 @@ class TestRealFiles:
                 assert len(data["files"][0]["text"]) > 0
 
     def test_extract_real_csv_file(self, test_client, real_test_files_dir):
-        """Тест извлечения из реального CSV файла"""
+        """Тест извлечения из реального CSV файла."""
         csv_file = real_test_files_dir / "test.csv"
 
         if csv_file.exists():
@@ -368,7 +368,7 @@ class TestRealFiles:
                 assert len(data["files"][0]["text"]) > 0
 
     def test_extract_real_python_file(self, test_client, real_test_files_dir):
-        """Тест извлечения из реального Python файла"""
+        """Тест извлечения из реального Python файла."""
         py_file = real_test_files_dir / "test.py"
 
         if py_file.exists():
@@ -388,7 +388,7 @@ class TestRealFiles:
                 assert data["files"][0]["type"] == "py"
 
     def test_extract_real_html_file(self, test_client, real_test_files_dir):
-        """Тест извлечения из реального HTML файла"""
+        """Тест извлечения из реального HTML файла."""
         html_file = real_test_files_dir / "test.html"
 
         if html_file.exists():
@@ -406,7 +406,7 @@ class TestRealFiles:
                 assert len(data["files"][0]["text"]) > 0
 
     def test_extract_real_xml_file(self, test_client, real_test_files_dir):
-        """Тест извлечения из реального XML файла"""
+        """Тест извлечения из реального XML файла."""
         xml_file = real_test_files_dir / "test.xml"
 
         if xml_file.exists():
@@ -425,7 +425,7 @@ class TestRealFiles:
                 assert len(data["files"][0]["text"]) > 0
 
     def test_extract_real_yaml_file(self, test_client, real_test_files_dir):
-        """Тест извлечения из реального YAML файла"""
+        """Тест извлечения из реального YAML файла."""
         yaml_file = real_test_files_dir / "test.yaml"
 
         if yaml_file.exists():
@@ -448,7 +448,7 @@ class TestRealFiles:
     def test_extract_real_image_file(
         self, mock_image_class, mock_tesseract, test_client, real_test_files_dir
     ):
-        """Тест извлечения из реального изображения"""
+        """Тест извлечения из реального изображения."""
         # Мокаем OCR для стабильности тестов
         mock_tesseract.image_to_string.return_value = "Распознанный текст с изображения"
         mock_image = Mock()
@@ -475,7 +475,7 @@ class TestRealFiles:
     def test_extract_real_pdf_file(
         self, mock_pdf_reader, test_client, real_test_files_dir
     ):
-        """Тест извлечения из реального PDF файла"""
+        """Тест извлечения из реального PDF файла."""
         # Мокаем PyPDF2 для стабильности тестов
         mock_reader = Mock()
         mock_page = Mock()
@@ -504,7 +504,7 @@ class TestRealFiles:
     def test_extract_real_docx_file(
         self, mock_document, test_client, real_test_files_dir
     ):
-        """Тест извлечения из реального DOCX файла"""
+        """Тест извлечения из реального DOCX файла."""
         # Мокаем python-docx для стабильности тестов
         mock_doc = Mock()
         mock_paragraph = Mock()
@@ -542,7 +542,7 @@ class TestRealFiles:
 
     @patch("app.extractors.pd")
     def test_extract_real_xlsx_file(self, mock_pd, test_client, real_test_files_dir):
-        """Тест извлечения из реального XLSX файла"""
+        """Тест извлечения из реального XLSX файла."""
         # Мокаем pandas для стабильности тестов
         mock_dataframe = Mock()
         mock_dataframe.to_csv.return_value = "col1,col2\ndata1,data2"
@@ -575,7 +575,7 @@ class TestRealFiles:
             pytest.skip("test.xlsx file not found")
 
     def test_extract_1c_enterprise_file(self, test_client, real_test_files_dir):
-        """Тест извлечения из файла 1C Enterprise"""
+        """Тест извлечения из файла 1C Enterprise."""
         bsl_file = real_test_files_dir / "test.bsl"
 
         if bsl_file.exists():
@@ -596,7 +596,7 @@ class TestRealFiles:
             pytest.skip("test.bsl file not found")
 
     def test_extract_onescript_file(self, test_client, real_test_files_dir):
-        """Тест извлечения из файла OneScript"""
+        """Тест извлечения из файла OneScript."""
         os_file = real_test_files_dir / "test.os"
 
         if os_file.exists():
@@ -617,7 +617,7 @@ class TestRealFiles:
             pytest.skip("test.os file not found")
 
     def test_extract_multiple_file_types(self, test_client, real_test_files_dir):
-        """Тест извлечения из нескольких типов файлов подряд"""
+        """Тест извлечения из нескольких типов файлов подряд."""
         test_files = [
             ("text.txt", "text/plain"),
             ("test.json", "application/json"),
@@ -642,7 +642,7 @@ class TestRealFiles:
                     assert len(data["files"]) == 1
 
     def test_extract_real_docx_file_content(self, test_client, real_test_files_dir):
-        """Тест извлечения конкретного содержимого из реального DOCX файла"""
+        """Тест извлечения конкретного содержимого из реального DOCX файла."""
         docx_file = real_test_files_dir / "test.docx"
 
         if docx_file.exists():
@@ -701,7 +701,7 @@ class TestRealFiles:
             pytest.skip("test.docx file not found")
 
     def test_extract_cyrillic_filename(self, test_client, real_test_files_dir):
-        """Тест извлечения файла с кириллицей в названии"""
+        """Тест извлечения файла с кириллицей в названии."""
         cyrillic_file = real_test_files_dir / "тест.md"
 
         if cyrillic_file.exists():
@@ -729,10 +729,10 @@ class TestRealFiles:
 
 @pytest.mark.integration
 class TestPerformance:
-    """Тесты производительности"""
+    """Тесты производительности."""
 
     def test_concurrent_requests(self, test_client):
-        """Тест одновременных запросов"""
+        """Тест одновременных запросов."""
         import threading
         import time
 
@@ -762,7 +762,7 @@ class TestPerformance:
         assert all(status == 200 for status in results)
 
     def test_large_text_file(self, test_client):
-        """Тест обработки большого текстового файла"""
+        """Тест обработки большого текстового файла."""
         # Создаем файл размером примерно 1MB
         large_content = (
             "Большой текстовый файл для тестирования производительности.\n" * 10000
@@ -782,7 +782,7 @@ class TestPerformance:
         assert len(data["files"][0]["text"]) > 0
 
     def test_response_time(self, test_client):
-        """Тест времени ответа"""
+        """Тест времени ответа."""
         import time
 
         test_content = "Тестовый контент для проверки времени ответа"
@@ -804,34 +804,34 @@ class TestPerformance:
 
 @pytest.mark.integration
 class TestErrorHandling:
-    """Тесты обработки ошибок"""
+    """Тесты обработки ошибок."""
 
     def test_malformed_request(self, test_client):
-        """Тест неправильно сформированного запроса"""
+        """Тест неправильно сформированного запроса."""
         response = test_client.post("/v1/extract/file")
 
         assert response.status_code == 422  # Unprocessable Entity
 
     def test_missing_file(self, test_client):
-        """Тест отсутствующего файла в запросе"""
+        """Тест отсутствующего файла в запросе."""
         response = test_client.post("/v1/extract/file", data={"not_file": "some_data"})
 
         assert response.status_code == 422
 
     def test_invalid_endpoint(self, test_client):
-        """Тест несуществующего эндпоинта"""
+        """Тест несуществующего эндпоинта."""
         response = test_client.get("/v1/nonexistent/")
 
         assert response.status_code == 404
 
     def test_invalid_method(self, test_client):
-        """Тест неподдерживаемого HTTP метода"""
+        """Тест неподдерживаемого HTTP метода."""
         response = test_client.put("/v1/extract/file")
 
         assert response.status_code == 405  # Method Not Allowed
 
     def test_server_error_simulation(self, test_client):
-        """Тест имитации серверной ошибки"""
+        """Тест имитации серверной ошибки."""
         test_content = b"test content"
 
         # Мокаем валидацию файла и имитируем серверную ошибку
@@ -854,10 +854,10 @@ class TestErrorHandling:
 
 @pytest.mark.integration
 class TestDocumentation:
-    """Тесты документации API"""
+    """Тесты документации API."""
 
     def test_openapi_schema(self, test_client):
-        """Тест OpenAPI схемы"""
+        """Тест OpenAPI схемы."""
         response = test_client.get("/openapi.json")
 
         assert response.status_code == 200
@@ -867,14 +867,14 @@ class TestDocumentation:
         assert "/v1/extract/file" in schema["paths"]
 
     def test_swagger_ui(self, test_client):
-        """Тест Swagger UI"""
+        """Тест Swagger UI."""
         response = test_client.get("/docs")
 
         assert response.status_code == 200
         assert "swagger" in response.text.lower()
 
     def test_redoc(self, test_client):
-        """Тест ReDoc документации"""
+        """Тест ReDoc документации."""
         response = test_client.get("/redoc")
 
         assert response.status_code == 200
@@ -883,10 +883,10 @@ class TestDocumentation:
 
 @pytest.mark.integration
 class TestURLExtractionIntegration:
-    """Интеграционные тесты для извлечения текста с URL (v1.10.1)"""
+    """Интеграционные тесты для извлечения текста с URL (v1.10.1)."""
 
     def test_extract_url_invalid_url(self, test_client):
-        """Тест обработки некорректного URL"""
+        """Тест обработки некорректного URL."""
         response = test_client.post("/v1/extract/url", json={"url": "not-a-valid-url"})
 
         assert response.status_code == 400
@@ -895,7 +895,7 @@ class TestURLExtractionIntegration:
         assert "URL" in data["message"] or "url" in data["message"]
 
     def test_extract_url_blocked_localhost(self, test_client):
-        """Тест блокировки localhost (защита от SSRF)"""
+        """Тест блокировки localhost (защита от SSRF)."""
         response = test_client.post(
             "/v1/extract/url", json={"url": "http://localhost:8080/admin"}
         )
@@ -909,7 +909,7 @@ class TestURLExtractionIntegration:
         )
 
     def test_extract_url_blocked_private_ip(self, test_client):
-        """Тест блокировки приватных IP (защита от SSRF)"""
+        """Тест блокировки приватных IP (защита от SSRF)."""
         response = test_client.post(
             "/v1/extract/url", json={"url": "http://192.168.1.1/config"}
         )
