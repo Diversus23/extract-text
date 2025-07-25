@@ -37,7 +37,7 @@ jobs:
         
     - name: 📏 Проверка стиля кода с Flake8
       run: |
-        flake8 app/ tests/ --max-line-length=88 --extend-ignore=E203,W503
+        python -m flake8 app/ tests/
         
     - name: 🔤 Проверка сортировки импортов с isort
       run: |
