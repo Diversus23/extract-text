@@ -1,6 +1,4 @@
-"""
-Integration тесты с реальными файлами из папки tests.
-"""
+"""Integration тесты с реальными файлами из папки tests."""
 
 import json
 import mimetypes

@@ -1,6 +1,4 @@
-"""
-Утилиты для приложения
-"""
+"""Утилиты для приложения."""
 
 import glob
 import logging
@@ -25,8 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def setup_logging() -> None:
-    """Настройка структурированного логирования"""
-
+    """Настройка структурированного логирования."""
     # Создание форматтера для логов
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -67,7 +64,7 @@ def get_file_extension(filename: str) -> Optional[str]:
 
 
 def is_supported_format(filename: str, supported_formats: dict) -> bool:
-    """Проверка поддерживается ли формат файла"""
+    """Проверка поддерживается ли формат файла."""
     extension = get_file_extension(filename)
     if not extension:
         return False
@@ -80,7 +77,7 @@ def is_supported_format(filename: str, supported_formats: dict) -> bool:
 
 
 def is_archive_format(filename: str, supported_formats: dict) -> bool:
-    """Проверка, является ли файл архивом"""
+    """Проверка, является ли файл архивом."""
     extension = get_file_extension(filename)
     if not extension:
         return False

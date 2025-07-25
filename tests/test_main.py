@@ -1,6 +1,4 @@
-"""
-Integration тесты для FastAPI приложения.
-."""
+"""Integration тесты для FastAPI приложения."""
 
 import base64
 import json

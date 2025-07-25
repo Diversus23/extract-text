@@ -123,7 +123,6 @@ class TextExtractor:
 
     def extract_text(self, file_content: bytes, filename: str) -> List[Dict[str, Any]]:
         """Основной метод извлечения текста (теперь синхронный для выполнения в threadpool)."""
-
         # Проверка, является ли файл архивом
         if is_archive_format(filename, settings.SUPPORTED_FORMATS):
             return self._extract_from_archive(file_content, filename)
@@ -1516,7 +1515,7 @@ class TextExtractor:
     def _extract_from_archive(
         self, content: bytes, filename: str, nesting_level: int = 0
     ) -> List[Dict[str, Any]]:
-        """Безопасное извлечение файлов из архива"""
+        """Безопасное извлечение файлов из архива."""
 
         # Проверка глубины вложенности
         if nesting_level >= settings.MAX_ARCHIVE_NESTING:
@@ -1597,7 +1596,7 @@ class TextExtractor:
         archive_name: str,
         nesting_level: int,
     ) -> List[Dict[str, Any]]:
-        """Извлечение файлов из ZIP-архива"""
+        """Извлечение файлов из ZIP-архива."""
         extracted_files = []
         total_size = 0
 
@@ -1671,7 +1670,7 @@ class TextExtractor:
         archive_name: str,
         nesting_level: int,
     ) -> List[Dict[str, Any]]:
-        """Извлечение файлов из TAR-архива"""
+        """Извлечение файлов из TAR-архива."""
         extracted_files = []
         total_size = 0
 
@@ -1822,7 +1821,7 @@ class TextExtractor:
         archive_name: str,
         nesting_level: int,
     ) -> List[Dict[str, Any]]:
-        """Извлечение файлов из 7Z-архива"""
+        """Извлечение файлов из 7Z-архива."""
         if not py7zr:
             raise ValueError("7Z support not available. Install py7zr library.")
 
@@ -1895,7 +1894,7 @@ class TextExtractor:
         archive_name: str,
         nesting_level: int,
     ) -> Optional[List[Dict[str, Any]]]:
-        """Обработка извлеченного файла"""
+        """Обработка извлеченного файла."""
         try:
             # Если файл является архивом, рекурсивно обрабатываем его
             if is_archive_format(basename, settings.SUPPORTED_FORMATS):
@@ -1943,7 +1942,7 @@ class TextExtractor:
         return "/".join(parts)
 
     def _is_system_file(self, filename: str) -> bool:
-        """Проверка, является ли файл системным"""
+        """Проверка, является ли файл системным."""
         system_files = [
             ".DS_Store",
             "Thumbs.db",
@@ -2049,7 +2048,7 @@ class TextExtractor:
         extraction_options: Optional[Any] = None,
     ) -> tuple[str, str]:
         """
-        Извлечение HTML контента страницы с помощью Playwright (с поддержкой JS, обновлено в v1.10.2)
+        Извлечение HTML контента страницы с помощью Playwright (с поддержкой JS, обновлено в v1.10.2).
 
         Args:
             url: URL страницы
@@ -2165,7 +2164,7 @@ class TextExtractor:
         self, page, extraction_options: Optional[Any] = None
     ) -> None:
         """
-        Безопасный скролл страницы для активации lazy loading с защитой от бесконечности (обновлено в v1.10.2)
+        Безопасный скролл страницы для активации lazy loading с защитой от бесконечности (обновлено в v1.10.2).
 
         Args:
             page: Playwright page объект
@@ -2243,7 +2242,7 @@ class TextExtractor:
         extraction_options: Optional[Any] = None,
     ) -> tuple[str, str]:
         """
-        Определение типа контента через HEAD запрос (новое в v1.10.3)
+        Определение типа контента через HEAD запрос (новое в v1.10.3).
 
         Args:
             url: URL для проверки
@@ -2342,7 +2341,7 @@ class TextExtractor:
 
     def _is_html_content(self, content_type: str, url: str) -> bool:
         """
-        Определение является ли контент HTML страницей (новое в v1.10.3)
+        Определение является ли контент HTML страницей (новое в v1.10.3).
 
         Args:
             content_type: MIME тип из заголовков
@@ -2382,7 +2381,7 @@ class TextExtractor:
         extraction_options: Optional[Any] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Скачивание файла по URL и его обработка как обычного файла (новое в v1.10.3)
+        Скачивание файла по URL и его обработка как обычного файла (новое в v1.10.3).
 
         Args:
             url: URL файла для скачивания
@@ -2489,7 +2488,7 @@ class TextExtractor:
 
     def _extract_filename_from_response(self, response, url: str) -> str:
         """
-        Извлечение имени файла из HTTP ответа (новое в v1.10.3)
+        Извлечение имени файла из HTTP ответа (новое в v1.10.3).
 
         Args:
             response: HTTP ответ requests
@@ -2532,7 +2531,7 @@ class TextExtractor:
 
     def _get_extension_from_content_type(self, content_type: str) -> Optional[str]:
         """
-        Определение расширения файла по Content-Type (новое в v1.10.3)
+        Определение расширения файла по Content-Type (новое в v1.10.3).
 
         Args:
             content_type: MIME тип

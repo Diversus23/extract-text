@@ -1,5 +1,6 @@
 """
-Text Extraction API for RAG
+Text Extraction API for RAG.
+
 Главный модуль FastAPI приложения
 """
 
@@ -40,7 +41,7 @@ text_extractor = TextExtractor()
 
 # Pydantic модели
 class Base64FileRequest(BaseModel):
-    """Модель для запроса обработки base64-файла"""
+    """Модель для запроса обработки base64-файла."""
 
     encoded_base64_file: str = Field(
         "0J/RgNC40LLQtdGCINC80LjRgCEg0K3RgtC+INGC0LXRgdGCIGJhc2U2NArQntGH0LXQvdGMINC00LvQuNC90L3Ri9C5LCDRgSDQv9C10YDQtdC90L7RgdC+0Lwg0YHRgtGA0L7Qui4=",
@@ -50,7 +51,7 @@ class Base64FileRequest(BaseModel):
 
 
 class ExtractionOptions(BaseModel):
-    """Настройки извлечения текста для веб-страниц (новое в v1.10.2)"""
+    """Настройки извлечения текста для веб-страниц (новое в v1.10.2)."""
 
     # JavaScript и рендеринг
     enable_javascript: Optional[bool] = Field(
@@ -103,7 +104,7 @@ class ExtractionOptions(BaseModel):
 
 
 class URLRequest(BaseModel):
-    """Модель для запроса обработки веб-страницы (обновлено в v1.10.2)"""
+    """Модель для запроса обработки веб-страницы (обновлено в v1.10.2)."""
 
     url: str = Field(
         "https://habr.com/ru/companies/softonit/articles/911520/",
@@ -120,7 +121,7 @@ class URLRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager для FastAPI приложения"""
+    """Lifecycle manager для FastAPI приложения."""
     logger.info(f"Запуск Text Extraction API v{settings.VERSION}")
 
     # Очистка временных файлов при старте
@@ -156,7 +157,7 @@ app.add_middleware(
 
 @app.middleware("http")
 async def logging_middleware(request: Request, call_next):
-    """Middleware для логирования запросов"""
+    """Middleware для логирования запросов."""
     start_time = time.time()
 
     logger.info(f"Запрос: {request.method} {request.url}")
@@ -181,7 +182,7 @@ async def logging_middleware(request: Request, call_next):
 
 @app.get("/")
 async def root() -> Dict[str, str]:
-    """Информация о API"""
+    """Информация о API."""
     return {
         "api_name": "Text Extraction API for RAG",
         "version": settings.VERSION,
@@ -191,19 +192,19 @@ async def root() -> Dict[str, str]:
 
 @app.get("/health")
 async def health() -> Dict[str, str]:
-    """Проверка состояния API"""
+    """Проверка состояния API."""
     return {"status": "ok"}
 
 
 @app.get("/v1/supported-formats")
 async def supported_formats() -> Dict[str, list]:
-    """Поддерживаемые форматы файлов"""
+    """Поддерживаемые форматы файлов."""
     return settings.SUPPORTED_FORMATS
 
 
 @app.post("/v1/extract/file")
 async def extract_text(file: UploadFile = File(...)):
-    """Извлечение текста из файла"""
+    """Извлечение текста из файла."""
     try:
         # Санитизация имени файла
         original_filename = file.filename or "unknown_file"
@@ -351,7 +352,7 @@ async def extract_text(file: UploadFile = File(...)):
 
 @app.post("/v1/extract/base64")
 async def extract_text_base64(request: Base64FileRequest):
-    """Извлечение текста из base64-файла"""
+    """Извлечение текста из base64-файла."""
     try:
         # Санитизация имени файла
         original_filename = request.filename
@@ -498,7 +499,7 @@ async def extract_text_base64(request: Base64FileRequest):
 
 @app.post("/v1/extract/url")
 async def extract_text_from_url(request: URLRequest):
-    """Извлечение текста с веб-страницы (обновлено в v1.10.2)"""
+    """Извлечение текста с веб-страницы (обновлено в v1.10.2)."""
     url = request.url.strip()
 
     if not url:
