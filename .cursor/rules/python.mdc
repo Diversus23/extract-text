@@ -14,27 +14,27 @@ You are an expert in Python, FastAPI, and scalable API development.
 
 When creating the TS, you must include the following sections:
 
-* 1. Purpose and Goal:
-  * Briefly describe what the service is for and who its end-user is.
-* 2. Functional Requirements:
-  * Describe the general operational logic (e.g., "extract text from a file, including OCR").
-  * Detail the processing steps for each file type (PDF, DOCX, images, spreadsheets).
-* 3. API Requirements:
-  * List all endpoints (`/`, `/health`, `/v1/...`).
-  * For each endpoint, specify: HTTP method, URL, and a brief description.
-  * For each endpoint, provide JSON response examples for successful execution.
-  * Create a comprehensive list of all possible errors with their corresponding HTTP statuses (`413`, `415`, `422`, `504`) and a JSON response example for an error condition.
-  * Mention the availability of auto-generated documentation (e.g., at `/docs`).
-* 4. Non-Functional Requirements (NFRs):
-  * Specify concrete, measurable performance parameters (e.g., max file size in MB, processing timeout in seconds).
-  * Describe requirements for logging and configuration via environment variables (specify their names: `API_PORT`, `OCR_LANGUAGES`, etc.).
-* 5. Technology Stack and Deployment:
-  * Specify the mandatory technology stack if it is predefined (e.g., `Python`, `FastAPI`, `Uvicorn`).
-  * Describe the requirement to deliver the service as a `Docker container` and to fix dependencies in a `requirements.txt` file.
-* 6. Testing and Project Management:
-  * Describe the purpose of a `Makefile` with commands for managing the project lifecycle (`dev`, `prod`, `test`).
-  * Describe the logic for the test scenario (`make test`), including the naming convention for output files (e.g., `.ok.txt`, `.err.txt`).
-  * Specify that test results must be added to `.gitignore`.
+- Purpose and Goal:
+  - Briefly describe what the service is for and who its end-user is.
+- Functional Requirements:
+  - Describe the general operational logic (e.g., "extract text from a file, including OCR").
+  - Detail the processing steps for each file type (PDF, DOCX, images, spreadsheets).
+- API Requirements:
+  - List all endpoints (`/`, `/health`, `/v1/...`).
+  - For each endpoint, specify: HTTP method, URL, and a brief description.
+  - For each endpoint, provide JSON response examples for successful execution.
+  - Create a comprehensive list of all possible errors with their corresponding HTTP statuses (`413`, `415`, `422`, `504`) and a JSON response example for an error condition.
+  - Mention the availability of auto-generated documentation (e.g., at `/docs`).
+- Non-Functional Requirements (NFRs):
+  - Specify concrete, measurable performance parameters (e.g., max file size in MB, processing timeout in seconds).
+  - Describe requirements for logging and configuration via environment variables (specify their names: `API_PORT`, `OCR_LANGUAGES`, etc.).
+- Technology Stack and Deployment:
+  - Specify the mandatory technology stack if it is predefined (e.g., `Python`, `FastAPI`, `Uvicorn`).
+  - Describe the requirement to deliver the service as a `Docker container` and to fix dependencies in a `requirements.txt` file.
+- Testing and Project Management:
+  - Describe the purpose of a `Makefile` with commands for managing the project lifecycle (`dev`, `prod`, `test`).
+  - Describe the logic for the test scenario (`make test`), including the naming convention for output files (e.g., `.ok.txt`, `.err.txt`).
+  - Specify that test results must be added to `.gitignore`.
 
 ## Project
 
@@ -60,3 +60,8 @@ Sources structure and main files:
 - `make install-linters` - setup tools
 - `make format`  - auto code format
 - `make lint-check` - checking with the linter without corrections
+
+## Github
+
+- This project added to the github https://github.com/Diversus23/extract-text
+- github workflow in file `.github/workflows/ci.yml`
