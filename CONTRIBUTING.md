@@ -17,9 +17,9 @@ source venv/bin/activate  # Linux/Mac
 # или venv\Scripts\activate  # Windows
 
 # Установка всех зависимостей
-pip install -r requirements.txt
-pip install -r requirements-test.txt
-pip install -r requirements-lint.txt
+pip3 install -r requirements.txt
+pip3 install -r requirements-test.txt
+pip3 install -r requirements-lint.txt
 
 # Копирование переменных окружения
 cp env_example .env
@@ -71,7 +71,7 @@ make lint
 
 2. **Установите pre-commit хуки (опционально):**
    ```bash
-   pip install pre-commit
+   pip3 install pre-commit
    pre-commit install
    ```
 
@@ -92,7 +92,7 @@ make lint
 3. **Следуйте соглашениям:**
    - Используйте docstrings для функций и классов
    - Комментируйте сложную логику
-   - Поддерживайте покрытие тестами >30%
+   - Поддерживайте покрытие тестами >60%
 
 ### Перед отправкой PR
 
@@ -332,9 +332,9 @@ python -c "import pstats; pstats.Stats('profile.stats').sort_stats('cumulative')
 
 ```bash
 # Переустановка всех зависимостей
-pip install --force-reinstall -r requirements.txt
-pip install --force-reinstall -r requirements-test.txt
-pip install --force-reinstall -r requirements-lint.txt
+pip3 install --force-reinstall -r requirements.txt
+pip3 install --force-reinstall -r requirements-test.txt
+pip3 install --force-reinstall -r requirements-lint.txt
 ```
 
 ### 2. Ошибки линтеров
@@ -388,7 +388,7 @@ docker exec -it extract-text-api-1 /bin/bash
 - [ ] Код отформатирован (`make format`)
 - [ ] Все линтеры проходят (`make lint-check`)
 - [ ] Тесты проходят (`make test`)
-- [ ] Покрытие не упало (>30%)
+- [ ] Покрытие не упало (>60%)
 - [ ] Добавлены тесты для нового функционала
 - [ ] Обновлена документация (если нужно)
 - [ ] Commit messages следуют Conventional Commits

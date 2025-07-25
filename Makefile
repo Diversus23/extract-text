@@ -110,7 +110,7 @@ test: ## 🧪 Запустить тестирование с покрытием 
 	@echo "  - Проверку производительности"
 	@echo ""
 	@echo "🔧 Попытка установки зависимостей..."
-	@if pip install -q -r requirements-test.txt; then \
+	@if python3 -m pip install -q -r requirements-test.txt; then \
 		echo "✅ Зависимости установлены локально"; \
 		echo "🏃 Запуск pytest с покрытием..."; \
 		python -m pytest -v --cov=app --cov-report=term-missing --cov-report=html:coverage_html --cov-fail-under=60 || echo "⚠️ Некоторые тесты завершились с ошибками"; \
@@ -128,12 +128,12 @@ test: ## 🧪 Запустить тестирование с покрытием 
 
 test-unit: ## 🔬 Запустить только unit тесты
 	@echo "🔬 Запуск unit тестов..."
-	@pip install -q -r requirements-test.txt || echo "⚠️ Не удалось установить зависимости"
+	@python3 -m pip install -q -r requirements-test.txt || echo "⚠️ Не удалось установить зависимости"
 	@python -m pytest tests/ -m unit -v --cov=app --cov-report=term-missing
 
 test-integration: ## 🔗 Запустить только integration тесты
 	@echo "🔗 Запуск integration тестов..."
-	@pip install -q -r requirements-test.txt || echo "⚠️ Не удалось установить зависимости"
+	@python3 -m pip install -q -r requirements-test.txt || echo "⚠️ Не удалось установить зависимости"
 	@python -m pytest tests/ -m integration -v --cov=app --cov-report=term-missing
 
 test-coverage: ## 📊 Показать отчет покрытия в браузере
@@ -162,7 +162,7 @@ test-docker: build ## 🐳 Запустить тестирование в Docker
 	@echo ""
 	@echo "🔧 Создание контейнера для тестирования..."
 	@docker run --rm -v $(shell pwd):/code -w /code $(IMAGE_NAME):$(TAG) \
-		bash -c "pip install -q pytest==7.4.4 pytest-asyncio==0.23.2 pytest-cov==4.1.0 httpx==0.25.2 pytest-mock==3.12.0 requests==2.31.0 && \
+		bash -c "python3 -m pip install -q pytest==7.4.4 pytest-asyncio==0.23.2 pytest-cov==4.1.0 httpx==0.25.2 pytest-mock==3.12.0 requests==2.31.0 && \
 		python -m pytest -v --cov=app --cov-report=term-missing --cov-report=html:coverage_html --cov-fail-under=60" || \
 		echo "⚠️ Некоторые тесты завершились с ошибками"
 	@echo ""
@@ -171,30 +171,30 @@ test-docker: build ## 🐳 Запустить тестирование в Docker
 # Команды для проверки кода
 install-linters: ## 🛠️ Установить инструменты для проверки кода
 	@echo "🛠️ Установка инструментов для проверки кода..."
-	@pip install --upgrade pip
-	@pip install -r requirements-lint.txt
+	@python3 -m pip install --upgrade pip
+	@python3 -m pip install -r requirements-lint.txt
 	@echo "✅ Инструменты установлены!"
 
 lint: install-linters ## 🔍 Проверить код всеми линтерами
 	@echo "🔍 Проверка кода всеми линтерами..."
 	@echo ""
 	@echo "🎨 Проверка форматирования с Black..."
-	@black --check --diff app/ tests/ || echo "⚠️ Найдены проблемы форматирования"
+	@python3 -m black --check --diff app/ tests/ || echo "⚠️ Найдены проблемы форматирования"
 	@echo ""
 	@echo "📏 Проверка стиля кода с Flake8..."
-	@flake8 app/ tests/ || echo "⚠️ Найдены нарушения стиля кода"
+	@python3 -m flake8 app/ tests/ || echo "⚠️ Найдены нарушения стиля кода"
 	@echo ""
 	@echo "🔤 Проверка сортировки импортов с isort..."
-	@isort --check-only --diff app/ tests/ || echo "⚠️ Импорты не отсортированы"
+	@python3 -m isort --check-only --diff app/ tests/ || echo "⚠️ Импорты не отсортированы"
 	@echo ""
 	@echo "🔎 Проверка типов с MyPy..."
-	@mypy app/ --ignore-missing-imports --no-strict-optional || echo "⚠️ Найдены проблемы типизации"
+	@python3 -m mypy app/ --ignore-missing-imports --no-strict-optional || echo "⚠️ Найдены проблемы типизации"
 	@echo ""
 	@echo "🛡️ Проверка безопасности с Bandit..."
-	@bandit -r app/ || echo "⚠️ Найдены потенциальные уязвимости"
+	@python3 -m bandit -r app/ || echo "⚠️ Найдены потенциальные уязвимости"
 	@echo ""
 	@echo "🔒 Проверка зависимостей с Safety..."
-	@safety check || echo "⚠️ Найдены уязвимые зависимости"
+	@python3 -m safety check || echo "⚠️ Найдены уязвимые зависимости"
 	@echo ""
 	@echo "✅ Проверка кода завершена!"
 
@@ -202,13 +202,13 @@ lint-check: install-linters ## 🔍 Проверить код без испра�
 	@echo "🔍 Проверка кода без автоисправлений..."
 	@echo ""
 	@echo "🎨 Black (только проверка)..."
-	@black --check app/ tests/
+	@python3 -m black --check app/ tests/
 	@echo ""
 	@echo "📏 Flake8..."
-	@flake8 app/ tests/
+	@python3 -m flake8 app/ tests/
 	@echo ""
 	@echo "🔤 isort (только проверка)..."
-	@isort --check-only app/ tests/
+	@python3 -m isort --check-only app/ tests/
 	@echo ""
 	@echo "✅ Проверка завершена!"
 
@@ -216,10 +216,10 @@ format: install-linters ## 🎨 Автоформатирование кода
 	@echo "🎨 Автоформатирование кода..."
 	@echo ""
 	@echo "🔤 Сортировка импортов с isort..."
-	@isort app/ tests/
+	@python3 -m isort app/ tests/
 	@echo ""
 	@echo "🎨 Форматирование с Black..."
-	@black app/ tests/
+	@python3 -m black app/ tests/
 	@echo ""
 	@echo "✅ Форматирование завершено!"
 

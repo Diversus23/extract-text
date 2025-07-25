@@ -2,29 +2,29 @@
 max-line-length = 88
 extend-ignore = 
     # Совместимость с Black
-    E203,  # whitespace before ':'
-    W503,  # line break before binary operator
-    W504,  # line break after binary operator
+    E203
+    W503
+    W504
     # Общие исключения
-    E501,  # line too long (дублирует max-line-length)
-    F401,  # imported but unused (может быть полезно для __init__.py)
+    E501
+    F401
 
 exclude = 
-    .git,
-    __pycache__,
-    .pytest_cache,
-    .mypy_cache,
-    .coverage,
-    coverage_html,
-    .tox,
-    .venv,
-    venv,
-    build,
-    dist,
-    *.egg-info,
-    .eggs,
-    tests/test_*.txt,
-    tests/test_*.ok.txt,
+    .git
+    __pycache__
+    .pytest_cache
+    .mypy_cache
+    .coverage
+    coverage_html
+    .tox
+    .venv
+    venv
+    build
+    dist
+    *.egg-info
+    .eggs
+    tests/test_*.txt
+    tests/test_*.ok.txt
     tests/test_*.err.txt
 
 per-file-ignores =

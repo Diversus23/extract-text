@@ -53,4 +53,8 @@ Sources structure and main files:
   - For example: VERSION: str = "1.8.0", current day `2025-07-06` -> Heading in CHANGELOG.md `## [1.8.0] - 2025-07-06`.
 - `README.md` - readme file. Always update this file if necessary.
 
-Command `make test` run tests.
+## Commands
+
+- `make test` run tests
+- `make lint` full check linters
+- 

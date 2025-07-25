@@ -1,20 +1,21 @@
 """
 Общие фикстуры для тестирования Text Extraction API
 """
-import pytest
+
 import asyncio
-import tempfile
 import os
+import tempfile
 from pathlib import Path
-from typing import BinaryIO, Generator, Any
+from typing import Any, BinaryIO, Generator
 from unittest.mock import Mock, patch
 
-from httpx import AsyncClient
+import pytest
 from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
-from app.main import app
 from app.config import settings
 from app.extractors import TextExtractor
+from app.main import app
 
 
 @pytest.fixture(scope="session")
@@ -83,7 +84,8 @@ def sample_python_file(temp_dir):
     """Создает временный Python файл для тестов"""
     file_path = temp_dir / "test.py"
     with open(file_path, "w", encoding="utf-8") as f:
-        f.write("""#!/usr/bin/env python3
+        f.write(
+            """#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 \"\"\"
 Тестовый Python файл
@@ -95,7 +97,8 @@ def hello_world():
 
 if __name__ == "__main__":
     hello_world()
-""")
+"""
+        )
     return file_path
 
 
@@ -104,7 +107,8 @@ def sample_html_file(temp_dir):
     """Создает временный HTML файл для тестов"""
     file_path = temp_dir / "test.html"
     with open(file_path, "w", encoding="utf-8") as f:
-        f.write("""<!DOCTYPE html>
+        f.write(
+            """<!DOCTYPE html>
 <html>
 <head>
     <title>Тестовая страница</title>
@@ -117,7 +121,8 @@ def sample_html_file(temp_dir):
         <li>Элемент списка 2</li>
     </ul>
 </body>
-</html>""")
+</html>"""
+        )
     return file_path
 
 
@@ -126,7 +131,8 @@ def sample_xml_file(temp_dir):
     """Создает временный XML файл для тестов"""
     file_path = temp_dir / "test.xml"
     with open(file_path, "w", encoding="utf-8") as f:
-        f.write("""<?xml version="1.0" encoding="UTF-8"?>
+        f.write(
+            """<?xml version="1.0" encoding="UTF-8"?>
 <root>
     <item id="1">
         <name>Товар 1</name>
@@ -136,7 +142,8 @@ def sample_xml_file(temp_dir):
         <name>Товар 2</name>
         <price>200</price>
     </item>
-</root>""")
+</root>"""
+        )
     return file_path
 
 
@@ -145,7 +152,8 @@ def sample_yaml_file(temp_dir):
     """Создает временный YAML файл для тестов"""
     file_path = temp_dir / "test.yaml"
     with open(file_path, "w", encoding="utf-8") as f:
-        f.write("""name: Тестовый проект
+        f.write(
+            """name: Тестовый проект
 version: 1.0.0
 description: Описание тестового проекта
 dependencies:
@@ -154,7 +162,8 @@ dependencies:
 config:
   debug: true
   port: 8000
-""")
+"""
+        )
     return file_path
 
 
@@ -184,15 +193,15 @@ def mock_libreoffice():
 def settings_override():
     """Создает переопределенные настройки для тестов"""
     original_settings = {}
-    
+
     def override(**kwargs):
         for key, value in kwargs.items():
             if hasattr(settings, key):
                 original_settings[key] = getattr(settings, key)
                 setattr(settings, key, value)
-    
+
     yield override
-    
+
     # Восстанавливаем исходные настройки
     for key, value in original_settings.items():
         setattr(settings, key, value)
@@ -201,32 +210,37 @@ def settings_override():
 @pytest.fixture
 def uploaded_file_mock():
     """Создает мок для UploadFile"""
-    def create_upload_file(filename: str, content: bytes, content_type: str = "text/plain"):
+
+    def create_upload_file(
+        filename: str, content: bytes, content_type: str = "text/plain"
+    ):
         file_mock = Mock()
         file_mock.filename = filename
         file_mock.size = len(content)
         file_mock.content_type = content_type
         file_mock.read = Mock(return_value=content)
         return file_mock
-    
+
     return create_upload_file
 
 
 # Параметризованные фикстуры для тестирования различных форматов
-@pytest.fixture(params=[
-    ("test.txt", "text/plain"),
-    ("test.json", "application/json"),
-    ("test.csv", "text/csv"),
-    ("test.py", "text/x-python"),
-    ("test.html", "text/html"),
-    ("test.xml", "application/xml"),
-    ("test.yaml", "application/x-yaml"),
-])
+@pytest.fixture(
+    params=[
+        ("test.txt", "text/plain"),
+        ("test.json", "application/json"),
+        ("test.csv", "text/csv"),
+        ("test.py", "text/x-python"),
+        ("test.html", "text/html"),
+        ("test.xml", "application/xml"),
+        ("test.yaml", "application/x-yaml"),
+    ]
+)
 def text_format_file(request, temp_dir):
     """Параметризованная фикстура для создания файлов разных текстовых форматов"""
     filename, content_type = request.param
     file_path = temp_dir / filename
-    
+
     content_map = {
         "test.txt": "Простой текстовый файл",
         "test.json": '{"test": "json content"}',
@@ -236,8 +250,8 @@ def text_format_file(request, temp_dir):
         "test.xml": "<root><item>test</item></root>",
         "test.yaml": "key: value\\nlist:\\n  - item1\\n  - item2",
     }
-    
+
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(content_map[filename])
-    
-    return file_path, content_type 
+
+    return file_path, content_type
