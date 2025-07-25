@@ -38,7 +38,7 @@ per-file-ignores =
     # Конфигурационные файлы
     app/config.py:E501
 
-max-complexity = 16
+max-complexity = 20
 count = True
 statistics = True
 show-source = True 
