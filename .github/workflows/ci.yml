@@ -65,6 +65,27 @@ jobs:
       run: |
         make test-docker
         
+    - name: 📊 Извлечение процента покрытия
+      id: coverage
+      run: |
+        if [ -f "coverage.xml" ]; then
+          coverage_percent=$(python -c "
+        import xml.etree.ElementTree as ET
+        try:
+            tree = ET.parse('coverage.xml')
+            root = tree.getroot()
+            coverage = root.attrib.get('line-rate', '0')
+            print(int(float(coverage) * 100))
+        except:
+            print('0')
+        ")
+          echo "coverage=$coverage_percent" >> $GITHUB_OUTPUT
+          echo "Coverage: $coverage_percent%"
+        else
+          echo "coverage=0" >> $GITHUB_OUTPUT
+          echo "Coverage file not found"
+        fi
+        
     - name: 📊 Загрузка отчета покрытия в Codecov
       uses: codecov/codecov-action@v4
       with:
@@ -72,7 +93,7 @@ jobs:
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
-        token: ${{ secrets.CODECOV_TOKEN }}
+      continue-on-error: true
         
     - name: 📁 Сохранение артефактов покрытия
       uses: actions/upload-artifact@v4
@@ -127,7 +148,6 @@ jobs:
         flags: python-${{ matrix.python-version }}
         name: python-${{ matrix.python-version }}
         fail_ci_if_error: false
-        token: ${{ secrets.CODECOV_TOKEN }}
 
   security:
     name: 🔒 Проверка безопасности
