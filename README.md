@@ -1,8 +1,9 @@
 # Text Extraction API for RAG
 
 [![CI/CD Pipeline](https://github.com/Diversus23/extract-text/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/Diversus23/extract-text/actions)
-[![Tests](https://github.com/Diversus23/extract-text/actions/workflows/ci.yml/badge.svg)](https://github.com/Diversus23/extract-text/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-60%25-brightgreen)](https://github.com/Diversus23/extract-text/actions)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-005571?logo=fastapi)](https://fastapi.tiangolo.com)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://docker.com)
