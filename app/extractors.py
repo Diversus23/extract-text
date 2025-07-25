@@ -168,51 +168,57 @@ class TextExtractor:
         self, content: bytes, extension: str, filename: str
     ) -> str:
         """Извлечение текста в зависимости от формата (синхронная версия)."""
+        # Создаем словарь сопоставления расширений с методами извлечения
+        extraction_methods = self._get_extraction_methods_mapping()
+
         # Проверяем, является ли файл исходным кодом
         source_code_extensions = settings.SUPPORTED_FORMATS.get("source_code", [])
-
-        if extension == "pdf":
-            return self._extract_from_pdf_sync(content)
-        elif extension in ["docx"]:
-            return self._extract_from_docx_sync(content)
-        elif extension in ["doc"]:
-            return self._extract_from_doc_sync(content)
-        elif extension in ["xls", "xlsx"]:
-            return self._extract_from_excel_sync(content)
-        elif extension in ["csv"]:
-            return self._extract_from_csv_sync(content)
-        elif extension in ["pptx"]:
-            return self._extract_from_pptx_sync(content)
-        elif extension in ["ppt"]:
-            return self._extract_from_ppt_sync(content)
-        elif extension in ["jpg", "jpeg", "png", "tiff", "tif", "bmp", "gif"]:
-            return self._extract_from_image_sync(content)
-        elif extension in source_code_extensions:
+        if extension in source_code_extensions:
             return self._extract_from_source_code_sync(content, extension, filename)
-        elif extension in ["txt"]:
-            return self._extract_from_txt_sync(content)
-        elif extension in ["html", "htm"]:
-            return self._extract_from_html_sync(content)
-        elif extension in ["md", "markdown"]:
-            return self._extract_from_markdown_sync(content)
-        elif extension in ["json"]:
-            return self._extract_from_json_sync(content)
-        elif extension in ["rtf"]:
-            return self._extract_from_rtf_sync(content)
-        elif extension in ["odt"]:
-            return self._extract_from_odt_sync(content)
-        elif extension in ["xml"]:
-            return self._extract_from_xml_sync(content)
-        elif extension in ["yaml", "yml"]:
-            return self._extract_from_yaml_sync(content)
-        elif extension in ["epub"]:
-            return self._extract_from_epub_sync(content)
-        elif extension in ["eml"]:
-            return self._extract_from_eml_sync(content)
-        elif extension in ["msg"]:
-            return self._extract_from_msg_sync(content)
-        else:
-            raise ValueError(f"Unsupported file format: {extension}")
+
+        # Ищем подходящий метод извлечения
+        extractor_method = extraction_methods.get(extension)
+        if extractor_method:
+            return extractor_method(content)
+
+        # Проверяем группы расширений
+        for extensions_group, method in self._get_group_extraction_methods():
+            if extension in extensions_group:
+                return method(content)
+
+        raise ValueError(f"Unsupported file format: {extension}")
+
+    def _get_extraction_methods_mapping(self) -> dict:
+        """Получение словаря сопоставления расширений с методами извлечения."""
+        return {
+            "pdf": self._extract_from_pdf_sync,
+            "docx": self._extract_from_docx_sync,
+            "doc": self._extract_from_doc_sync,
+            "csv": self._extract_from_csv_sync,
+            "pptx": self._extract_from_pptx_sync,
+            "ppt": self._extract_from_ppt_sync,
+            "txt": self._extract_from_txt_sync,
+            "json": self._extract_from_json_sync,
+            "rtf": self._extract_from_rtf_sync,
+            "odt": self._extract_from_odt_sync,
+            "xml": self._extract_from_xml_sync,
+            "epub": self._extract_from_epub_sync,
+            "eml": self._extract_from_eml_sync,
+            "msg": self._extract_from_msg_sync,
+        }
+
+    def _get_group_extraction_methods(self) -> list:
+        """Получение списка групп расширений с соответствующими методами."""
+        return [
+            (["xls", "xlsx"], self._extract_from_excel_sync),
+            (
+                ["jpg", "jpeg", "png", "tiff", "tif", "bmp", "gif"],
+                self._extract_from_image_sync,
+            ),
+            (["html", "htm"], self._extract_from_html_sync),
+            (["md", "markdown"], self._extract_from_markdown_sync),
+            (["yaml", "yml"], self._extract_from_yaml_sync),
+        ]
 
     def _extract_from_pdf_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из PDF."""
@@ -288,84 +294,100 @@ class TextExtractor:
             doc = Document(io.BytesIO(content))
             text_parts = []
 
-            # Основной текст
-            for paragraph in doc.paragraphs:
-                if paragraph.text.strip():
-                    text_parts.append(paragraph.text)
-
-            # Таблицы
-            for table in doc.tables:
-                table_text = []
-                for row in table.rows:
-                    row_text = []
-                    for cell in row.cells:
-                        row_text.append(cell.text.strip())
-                    table_text.append("\t".join(row_text))
-
-                if table_text:
-                    text_parts.append("\n".join(table_text))
-
-            # Колонтитулы (headers и footers) - согласно п.3.3 ТЗ
-            for section in doc.sections:
-                # Извлечение заголовка
-                if section.header:
-                    header_text = []
-                    for paragraph in section.header.paragraphs:
-                        if paragraph.text.strip():
-                            header_text.append(paragraph.text)
-                    if header_text:
-                        text_parts.append(
-                            f"[Колонтитул - Заголовок]\n{' '.join(header_text)}"
-                        )
-
-                # Извлечение подвала
-                if section.footer:
-                    footer_text = []
-                    for paragraph in section.footer.paragraphs:
-                        if paragraph.text.strip():
-                            footer_text.append(paragraph.text)
-                    if footer_text:
-                        text_parts.append(
-                            f"[Колонтитул - Подвал]\n{' '.join(footer_text)}"
-                        )
-
-            # Извлечение сносок - согласно п.3.3 ТЗ
-            try:
-                # Сноски могут быть недоступны в некоторых версиях python-docx
-                # Поэтому используем try/except
-                if hasattr(doc, "footnotes") and doc.footnotes:
-                    footnotes_text = []
-                    for footnote in doc.footnotes:
-                        if hasattr(footnote, "paragraphs"):
-                            for paragraph in footnote.paragraphs:
-                                if paragraph.text.strip():
-                                    footnotes_text.append(paragraph.text)
-                    if footnotes_text:
-                        text_parts.append(f"[Сноски]\n{' '.join(footnotes_text)}")
-            except Exception as e:
-                logger.debug(f"Не удалось извлечь сноски из DOCX: {str(e)}")
-
-            # Извлечение комментариев - согласно п.3.3 ТЗ
-            try:
-                # Комментарии могут быть недоступны в некоторых версиях python-docx
-                # Поэтому используем try/except
-                if hasattr(doc, "comments") and doc.comments:
-                    comments_text = []
-                    for comment in doc.comments:
-                        if hasattr(comment, "paragraphs"):
-                            for paragraph in comment.paragraphs:
-                                if paragraph.text.strip():
-                                    comments_text.append(paragraph.text)
-                    if comments_text:
-                        text_parts.append(f"[Комментарии]\n{' '.join(comments_text)}")
-            except Exception as e:
-                logger.debug(f"Не удалось извлечь комментарии из DOCX: {str(e)}")
+            # Извлекаем различные части документа
+            text_parts.extend(self._extract_docx_paragraphs(doc))
+            text_parts.extend(self._extract_docx_tables(doc))
+            text_parts.extend(self._extract_docx_headers_footers(doc))
+            text_parts.extend(self._extract_docx_footnotes(doc))
+            text_parts.extend(self._extract_docx_comments(doc))
 
             return "\n\n".join(text_parts)
 
         except Exception as e:
             logger.error(f"Ошибка при обработке DOCX: {str(e)}")
             raise ValueError(f"Error processing DOCX: {str(e)}")
+
+    def _extract_docx_paragraphs(self, doc) -> list:
+        """Извлечение основного текста из параграфов DOCX."""
+        text_parts = []
+        for paragraph in doc.paragraphs:
+            if paragraph.text.strip():
+                text_parts.append(paragraph.text)
+        return text_parts
+
+    def _extract_docx_tables(self, doc) -> list:
+        """Извлечение текста из таблиц DOCX."""
+        text_parts = []
+        for table in doc.tables:
+            table_text = []
+            for row in table.rows:
+                row_text = []
+                for cell in row.cells:
+                    row_text.append(cell.text.strip())
+                table_text.append("\t".join(row_text))
+
+            if table_text:
+                text_parts.append("\n".join(table_text))
+        return text_parts
+
+    def _extract_docx_headers_footers(self, doc) -> list:
+        """Извлечение текста из колонтитулов DOCX."""
+        text_parts = []
+        for section in doc.sections:
+            # Извлечение заголовка
+            if section.header:
+                header_text = self._extract_section_text(section.header.paragraphs)
+                if header_text:
+                    text_parts.append(
+                        f"[Колонтитул - Заголовок]\n{' '.join(header_text)}"
+                    )
+
+            # Извлечение подвала
+            if section.footer:
+                footer_text = self._extract_section_text(section.footer.paragraphs)
+                if footer_text:
+                    text_parts.append(f"[Колонтитул - Подвал]\n{' '.join(footer_text)}")
+        return text_parts
+
+    def _extract_section_text(self, paragraphs) -> list:
+        """Извлечение текста из параграфов секции."""
+        text_parts = []
+        for paragraph in paragraphs:
+            if paragraph.text.strip():
+                text_parts.append(paragraph.text)
+        return text_parts
+
+    def _extract_docx_footnotes(self, doc) -> list:
+        """Извлечение сносок из DOCX."""
+        text_parts = []
+        try:
+            if hasattr(doc, "footnotes") and doc.footnotes:
+                footnotes_text = []
+                for footnote in doc.footnotes:
+                    if hasattr(footnote, "paragraphs"):
+                        footnote_text = self._extract_section_text(footnote.paragraphs)
+                        footnotes_text.extend(footnote_text)
+                if footnotes_text:
+                    text_parts.append(f"[Сноски]\n{' '.join(footnotes_text)}")
+        except Exception as e:
+            logger.debug(f"Не удалось извлечь сноски из DOCX: {str(e)}")
+        return text_parts
+
+    def _extract_docx_comments(self, doc) -> list:
+        """Извлечение комментариев из DOCX."""
+        text_parts = []
+        try:
+            if hasattr(doc, "comments") and doc.comments:
+                comments_text = []
+                for comment in doc.comments:
+                    if hasattr(comment, "paragraphs"):
+                        comment_text = self._extract_section_text(comment.paragraphs)
+                        comments_text.extend(comment_text)
+                if comments_text:
+                    text_parts.append(f"[Комментарии]\n{' '.join(comments_text)}")
+        except Exception as e:
+            logger.debug(f"Не удалось извлечь комментарии из DOCX: {str(e)}")
+        return text_parts
 
     def _extract_from_doc_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из DOC через конвертацию в DOCX с помощью LibreOffice."""
@@ -1147,164 +1169,219 @@ class TextExtractor:
     def _extract_from_eml_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из EML."""
         import email
-        from email.header import decode_header
 
         try:
-            # Попытка декодирования в разных кодировках
-            msg_text = None
-            for encoding in ["utf-8", "cp1251", "latin-1"]:
-                try:
-                    msg_text = content.decode(encoding)
-                    break
-                except UnicodeDecodeError:
-                    continue
-
-            if msg_text is None:
-                msg_text = content.decode("utf-8", errors="replace")
-
+            msg_text = self._decode_eml_content(content)
             msg = email.message_from_string(msg_text)
             text_parts = []
 
             # Извлечение заголовков
-            headers = ["From", "To", "Subject", "Date"]
-            for header in headers:
-                value = msg.get(header)
-                if value:
-                    # Декодирование заголовка
-                    decoded_parts = decode_header(value)
-                    decoded_value = ""
-                    for part, encoding in decoded_parts:
-                        if isinstance(part, bytes):
-                            if encoding:
-                                decoded_value += part.decode(encoding)
-                            else:
-                                decoded_value += part.decode("utf-8", errors="replace")
-                        else:
-                            decoded_value += part
-
-                    text_parts.append(f"{header}: {decoded_value}")
-
+            text_parts.extend(self._extract_eml_headers(msg))
             text_parts.append("---")
 
             # Извлечение тела письма
             if msg.is_multipart():
-                for part in msg.walk():
-                    content_type = part.get_content_type()
-                    if content_type in ["text/plain", "text/html"]:
-                        try:
-                            payload = part.get_payload(decode=True)
-                            if payload:
-                                # Определение кодировки
-                                charset = part.get_content_charset() or "utf-8"
-                                try:
-                                    body_text = payload.decode(charset)
-                                except UnicodeDecodeError:
-                                    body_text = payload.decode(
-                                        "utf-8", errors="replace"
-                                    )
-
-                                # Обработка HTML
-                                if content_type == "text/html" and BeautifulSoup:
-                                    soup = BeautifulSoup(body_text, "html.parser")
-                                    body_text = soup.get_text()
-
-                                if body_text.strip():
-                                    text_parts.append(body_text)
-                        except Exception as e:
-                            logger.warning(f"Ошибка при обработке части письма: {e}")
+                text_parts.extend(self._extract_eml_body_multipart(msg))
             else:
-                # Простое письмо
-                try:
-                    payload = msg.get_payload(decode=True)
-                    if payload:
-                        charset = msg.get_content_charset() or "utf-8"
-                        try:
-                            body_text = payload.decode(charset)
-                        except UnicodeDecodeError:
-                            body_text = payload.decode("utf-8", errors="replace")
+                text_parts.extend(self._extract_eml_body_simple(msg))
 
-                        if body_text.strip():
-                            text_parts.append(body_text)
-                except Exception as e:
-                    logger.warning(f"Ошибка при обработке тела письма: {e}")
-
-            if text_parts:
-                return "\n".join(text_parts)
-            else:
-                return "Не удалось извлечь читаемый текст из EML файла"
+            return (
+                "\n".join(text_parts)
+                if text_parts
+                else "Не удалось извлечь читаемый текст из EML файла"
+            )
 
         except Exception as e:
             logger.error(f"Ошибка при обработке EML: {str(e)}")
             raise ValueError(f"Error processing EML: {str(e)}")
 
+    def _decode_eml_content(self, content: bytes) -> str:
+        """Декодирование содержимого EML файла."""
+        for encoding in ["utf-8", "cp1251", "latin-1"]:
+            try:
+                return content.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+        return content.decode("utf-8", errors="replace")
+
+    def _extract_eml_headers(self, msg) -> list:
+        """Извлечение заголовков из EML."""
+        from email.header import decode_header
+
+        text_parts = []
+        headers = ["From", "To", "Subject", "Date"]
+
+        for header in headers:
+            value = msg.get(header)
+            if value:
+                decoded_value = self._decode_eml_header(value, decode_header)
+                text_parts.append(f"{header}: {decoded_value}")
+
+        return text_parts
+
+    def _decode_eml_header(self, value: str, decode_header_func) -> str:
+        """Декодирование заголовка EML."""
+        decoded_parts = decode_header_func(value)
+        decoded_value = ""
+
+        for part, encoding in decoded_parts:
+            if isinstance(part, bytes):
+                if encoding:
+                    decoded_value += part.decode(encoding)
+                else:
+                    decoded_value += part.decode("utf-8", errors="replace")
+            else:
+                decoded_value += part
+
+        return decoded_value
+
+    def _extract_eml_body_multipart(self, msg) -> list:
+        """Извлечение тела многочастного EML письма."""
+        text_parts = []
+
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            if content_type in ["text/plain", "text/html"]:
+                try:
+                    body_text = self._extract_eml_part_text(part, content_type)
+                    if body_text and body_text.strip():
+                        text_parts.append(body_text)
+                except Exception as e:
+                    logger.warning(f"Ошибка при обработке части письма: {e}")
+
+        return text_parts
+
+    def _extract_eml_body_simple(self, msg) -> list:
+        """Извлечение тела простого EML письма."""
+        text_parts = []
+
+        try:
+            payload = msg.get_payload(decode=True)
+            if payload:
+                charset = msg.get_content_charset() or "utf-8"
+                body_text = self._decode_payload(payload, charset)
+                if body_text.strip():
+                    text_parts.append(body_text)
+        except Exception as e:
+            logger.warning(f"Ошибка при обработке тела письма: {e}")
+
+        return text_parts
+
+    def _extract_eml_part_text(self, part, content_type: str) -> str:
+        """Извлечение текста из части EML."""
+        payload = part.get_payload(decode=True)
+        if not payload:
+            return ""
+
+        charset = part.get_content_charset() or "utf-8"
+        body_text = self._decode_payload(payload, charset)
+
+        # Обработка HTML
+        if content_type == "text/html" and BeautifulSoup:
+            soup = BeautifulSoup(body_text, "html.parser")
+            body_text = soup.get_text()
+
+        return body_text
+
+    def _decode_payload(self, payload: bytes, charset: str) -> str:
+        """Декодирование payload с обработкой ошибок."""
+        try:
+            return payload.decode(charset)
+        except UnicodeDecodeError:
+            return payload.decode("utf-8", errors="replace")
+
     def _extract_from_msg_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из MSG."""
         try:
-            # Простая эвристика для MSG файлов
-            # MSG файлы содержат текст в Unicode и могут содержать различные блоки данных
-
-            # Попытка найти текстовые данные в файле
             text_parts = []
 
-            # Конвертация в строку и поиск читаемых фрагментов
-            try:
-                # Попытка декодирования как UTF-16 (часто используется в MSG)
-                text = content.decode("utf-16le", errors="ignore")
-
-                # Фильтрация и очистка
-                lines = text.split("\n")
-                clean_lines = []
-
-                for line in lines:
-                    # Убираем нулевые байты и управляющие символы
-                    clean_line = "".join(
-                        char for char in line if ord(char) >= 32 or char in "\t\n\r"
-                    )
-                    clean_line = clean_line.strip()
-
-                    # Пропускаем слишком короткие или бессмысленные строки
-                    if len(clean_line) > 3 and not clean_line.startswith(("_", "\x00")):
-                        # Проверяем, что строка содержит буквы
-                        if any(c.isalpha() for c in clean_line):
-                            clean_lines.append(clean_line)
-
-                # Удаление дубликатов и объединение
-                unique_lines = []
-                seen = set()
-                for line in clean_lines:
-                    if line not in seen and len(line) > 5:  # Минимальная длина
-                        unique_lines.append(line)
-                        seen.add(line)
-
-                if unique_lines:
-                    text_parts.extend(unique_lines)
-
-            except Exception as e:
-                logger.warning(f"Ошибка при декодировании UTF-16: {e}")
+            # Извлечение UTF-16 текста
+            text_parts.extend(self._extract_utf16_text_from_msg(content))
 
             # Альтернативный подход - поиск ASCII текста
-            try:
-                # Извлечение ASCII текста
-                ascii_text = content.decode("ascii", errors="ignore")
-                lines = ascii_text.split("\n")
+            text_parts.extend(self._extract_ascii_text_from_msg(content, text_parts))
 
-                for line in lines:
-                    clean_line = line.strip()
-                    if len(clean_line) > 10 and any(c.isalpha() for c in clean_line):
-                        if clean_line not in text_parts:
-                            text_parts.append(clean_line)
-
-            except Exception as e:
-                logger.warning(f"Ошибка при извлечении ASCII: {e}")
-
-            if text_parts:
-                return "\n".join(text_parts)
-            else:
-                return "Не удалось извлечь читаемый текст из MSG файла"
+            return (
+                "\n".join(text_parts)
+                if text_parts
+                else "Не удалось извлечь читаемый текст из MSG файла"
+            )
 
         except Exception as e:
             logger.error(f"Ошибка при обработке MSG: {str(e)}")
             raise ValueError(f"Error processing MSG: {str(e)}")
+
+    def _extract_utf16_text_from_msg(self, content: bytes) -> list:
+        """Извлечение UTF-16 текста из MSG файла."""
+        text_parts = []
+        try:
+            text = content.decode("utf-16le", errors="ignore")
+            lines = text.split("\n")
+            clean_lines = self._clean_msg_lines(lines)
+            unique_lines = self._filter_unique_lines(clean_lines, min_length=5)
+            text_parts.extend(unique_lines)
+        except Exception as e:
+            logger.warning(f"Ошибка при декодировании UTF-16: {e}")
+        return text_parts
+
+    def _clean_msg_lines(self, lines: list) -> list:
+        """Очистка строк MSG от управляющих символов."""
+        clean_lines = []
+        for line in lines:
+            # Убираем нулевые байты и управляющие символы
+            clean_line = "".join(
+                char for char in line if ord(char) >= 32 or char in "\t\n\r"
+            )
+            clean_line = clean_line.strip()
+
+            # Пропускаем слишком короткие или бессмысленные строки
+            if self._is_valid_msg_line(clean_line):
+                clean_lines.append(clean_line)
+
+        return clean_lines
+
+    def _is_valid_msg_line(self, line: str) -> bool:
+        """Проверка валидности строки MSG."""
+        return (
+            len(line) > 3
+            and not line.startswith(("_", "\x00"))
+            and any(c.isalpha() for c in line)
+        )
+
+    def _filter_unique_lines(self, lines: list, min_length: int = 5) -> list:
+        """Фильтрация уникальных строк с минимальной длиной."""
+        unique_lines = []
+        seen = set()
+        for line in lines:
+            if line not in seen and len(line) > min_length:
+                unique_lines.append(line)
+                seen.add(line)
+        return unique_lines
+
+    def _extract_ascii_text_from_msg(
+        self, content: bytes, existing_text_parts: list
+    ) -> list:
+        """Извлечение ASCII текста из MSG файла."""
+        text_parts = []
+        try:
+            ascii_text = content.decode("ascii", errors="ignore")
+            lines = ascii_text.split("\n")
+
+            for line in lines:
+                clean_line = line.strip()
+                if self._is_valid_ascii_line(clean_line, existing_text_parts):
+                    text_parts.append(clean_line)
+        except Exception as e:
+            logger.warning(f"Ошибка при извлечении ASCII: {e}")
+        return text_parts
+
+    def _is_valid_ascii_line(self, line: str, existing_parts: list) -> bool:
+        """Проверка валидности ASCII строки."""
+        return (
+            len(line) > 10
+            and any(c.isalpha() for c in line)
+            and line not in existing_parts
+        )
 
     def _safe_tesseract_ocr(self, image, temp_image_path: str = None) -> str:
         """
@@ -2730,9 +2807,8 @@ class TextExtractor:
         try:
             parsed_url = urlparse(url)
 
-            # Проверяем схему
-            if parsed_url.scheme not in ["http", "https"]:
-                logger.warning(f"Unsupported URL scheme: {parsed_url.scheme}")
+            # Проверяем схему URL
+            if not self._check_url_scheme(parsed_url.scheme):
                 return False
 
             hostname = parsed_url.hostname
@@ -2740,90 +2816,138 @@ class TextExtractor:
                 logger.warning(f"No hostname in URL: {url}")
                 return False
 
-            # Проверяем заблокированные хосты (hostname проверка)
-            blocked_hostnames = settings.BLOCKED_HOSTNAMES.split(",")
-            hostname_lower = hostname.lower()
-            for blocked_hostname in blocked_hostnames:
-                blocked_hostname = blocked_hostname.strip().lower()
-                if not blocked_hostname:
-                    continue
-                if hostname_lower == blocked_hostname:
-                    logger.warning(f"Blocked hostname {hostname} for URL {url}")
-                    return False
-
-            # Получаем все IP-адреса хоста (включая IPv4 и IPv6)
-            import socket
-
-            try:
-                # Получаем все IP адреса для хоста
-                addr_info = socket.getaddrinfo(
-                    hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
-                )
-                ips = [info[4][0] for info in addr_info]
-            except socket.gaierror as e:
-                logger.warning(f"DNS resolution failed for {hostname}: {str(e)}")
+            # Проверяем заблокированные хосты
+            if not self._check_hostname_not_blocked(hostname, url):
                 return False
 
-            # Проверяем все полученные IP-адреса
-            blocked_ranges = settings.BLOCKED_IP_RANGES.split(",")
-            for ip_str in ips:
-                try:
-                    ip_obj = ipaddress.ip_address(ip_str)
+            # Получаем IP-адреса хоста
+            ips = self._resolve_hostname_ips(hostname)
+            if not ips:
+                return False
 
-                    # Дополнительная проверка на специальные адреса
-                    if ip_obj.is_loopback or ip_obj.is_private or ip_obj.is_link_local:
-                        logger.warning(
-                            f"Blocked special IP {ip_str} (loopback/private/link-local) for URL {url}"
-                        )
-                        return False
-
-                    # Проверяем заблокированные диапазоны из конфига
-                    for range_str in blocked_ranges:
-                        range_str = range_str.strip()
-                        if not range_str:
-                            continue
-
-                        try:
-                            network = ipaddress.ip_network(range_str, strict=False)
-                            if ip_obj in network:
-                                logger.warning(
-                                    f"Blocked IP {ip_str} in range {range_str} for URL {url}"
-                                )
-                                return False
-                        except ValueError:
-                            continue
-
-                    # Специальная проверка на metadata service (AWS/GCP)
-                    if str(ip_obj) == "169.254.169.254":
-                        logger.warning(
-                            f"Blocked metadata service IP {ip_str} for URL {url}"
-                        )
-                        return False
-
-                    # Проверка на Docker bridge gateway (172.17.0.1 и другие 172.x.0.1)
-                    if ip_obj.version == 4:
-                        octets = str(ip_obj).split(".")
-                        if (
-                            octets[0] == "172"
-                            and 16 <= int(octets[1]) <= 31
-                            and octets[2] == "0"
-                            and octets[3] == "1"
-                        ):
-                            logger.warning(
-                                f"Blocked Docker bridge gateway {ip_str} for URL {url}"
-                            )
-                            return False
-
-                except ValueError as e:
-                    logger.warning(f"Invalid IP address {ip_str}: {str(e)}")
-                    continue
-
-            return True
+            # Проверяем безопасность всех IP-адресов
+            return self._check_all_ips_safe(ips, url)
 
         except Exception as e:
             logger.warning(f"Error checking URL safety: {str(e)}")
             # Fail-closed: в случае ошибки блокируем доступ
             return False
+
+    def _check_url_scheme(self, scheme: str) -> bool:
+        """Проверка схемы URL."""
+        if scheme not in ["http", "https"]:
+            logger.warning(f"Unsupported URL scheme: {scheme}")
+            return False
+        return True
+
+    def _check_hostname_not_blocked(self, hostname: str, url: str) -> bool:
+        """Проверка, что hostname не заблокирован."""
+        blocked_hostnames = settings.BLOCKED_HOSTNAMES.split(",")
+        hostname_lower = hostname.lower()
+
+        for blocked_hostname in blocked_hostnames:
+            blocked_hostname = blocked_hostname.strip().lower()
+            if blocked_hostname and hostname_lower == blocked_hostname:
+                logger.warning(f"Blocked hostname {hostname} for URL {url}")
+                return False
+        return True
+
+    def _resolve_hostname_ips(self, hostname: str) -> list:
+        """Разрешение IP-адресов для hostname."""
+        import socket
+
+        try:
+            addr_info = socket.getaddrinfo(
+                hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+            )
+            return [info[4][0] for info in addr_info]
+        except socket.gaierror as e:
+            logger.warning(f"DNS resolution failed for {hostname}: {str(e)}")
+            return []
+
+    def _check_all_ips_safe(self, ips: list, url: str) -> bool:
+        """Проверка безопасности всех IP-адресов."""
+        for ip_str in ips:
+            if not self._check_single_ip_safe(ip_str, url):
+                return False
+        return True
+
+    def _check_single_ip_safe(self, ip_str: str, url: str) -> bool:
+        """Проверка безопасности одного IP-адреса."""
+        try:
+            ip_obj = ipaddress.ip_address(ip_str)
+
+            # Проверяем специальные адреса
+            if self._is_special_ip_unsafe(ip_obj, ip_str, url):
+                return False
+
+            # Проверяем заблокированные диапазоны
+            if self._is_ip_in_blocked_ranges(ip_obj, ip_str, url):
+                return False
+
+            # Проверяем metadata service
+            if self._is_metadata_service_ip(ip_obj, ip_str, url):
+                return False
+
+            # Проверяем Docker bridge
+            if self._is_docker_bridge_ip(ip_obj, ip_str, url):
+                return False
+
+            return True
+
+        except ValueError as e:
+            logger.warning(f"Invalid IP address {ip_str}: {str(e)}")
+            return True  # Невалидный IP не блокируем
+
+    def _is_special_ip_unsafe(self, ip_obj, ip_str: str, url: str) -> bool:
+        """Проверка на специальные небезопасные IP."""
+        if ip_obj.is_loopback or ip_obj.is_private or ip_obj.is_link_local:
+            logger.warning(
+                f"Blocked special IP {ip_str} (loopback/private/link-local) for URL {url}"
+            )
+            return True
+        return False
+
+    def _is_ip_in_blocked_ranges(self, ip_obj, ip_str: str, url: str) -> bool:
+        """Проверка IP на принадлежность заблокированным диапазонам."""
+        blocked_ranges = settings.BLOCKED_IP_RANGES.split(",")
+
+        for range_str in blocked_ranges:
+            range_str = range_str.strip()
+            if not range_str:
+                continue
+
+            try:
+                network = ipaddress.ip_network(range_str, strict=False)
+                if ip_obj in network:
+                    logger.warning(
+                        f"Blocked IP {ip_str} in range {range_str} for URL {url}"
+                    )
+                    return True
+            except ValueError:
+                continue
+        return False
+
+    def _is_metadata_service_ip(self, ip_obj, ip_str: str, url: str) -> bool:
+        """Проверка на metadata service IP."""
+        if str(ip_obj) == "169.254.169.254":
+            logger.warning(f"Blocked metadata service IP {ip_str} for URL {url}")
+            return True
+        return False
+
+    def _is_docker_bridge_ip(self, ip_obj, ip_str: str, url: str) -> bool:
+        """Проверка на Docker bridge gateway IP."""
+        if ip_obj.version == 4:
+            octets = str(ip_obj).split(".")
+            if (
+                octets[0] == "172"
+                and 16 <= int(octets[1]) <= 31
+                and octets[2] == "0"
+                and octets[3] == "1"
+            ):
+                logger.warning(f"Blocked Docker bridge gateway {ip_str} for URL {url}")
+                return True
+        return False
 
     def _extract_text_from_html(self, html_content: str) -> str:
         """Извлечение текста из HTML контента."""
@@ -2860,110 +2984,156 @@ class TextExtractor:
         if not BeautifulSoup or not Image:
             return []
 
-        # Определяем настройки с учетом переданных параметров или значений по умолчанию
-        process_images = (
-            extraction_options.process_images
-            if extraction_options and extraction_options.process_images is not None
-            else True
-        )  # По умолчанию обрабатываем изображения
-
-        if not process_images:
+        # Настройка параметров извлечения
+        options = self._setup_image_extraction_options(extraction_options)
+        if not options["process_images"]:
             logger.info("Обработка изображений отключена в настройках извлечения")
             return []
 
-        max_images_per_page = (
-            extraction_options.max_images_per_page
-            if extraction_options and extraction_options.max_images_per_page is not None
-            else settings.MAX_IMAGES_PER_PAGE
-        )
-
-        enable_base64_images = (
-            extraction_options.enable_base64_images
-            if extraction_options
-            and extraction_options.enable_base64_images is not None
-            else settings.ENABLE_BASE64_IMAGES
-        )
-
         try:
-            soup = BeautifulSoup(html_content, "lxml")
-            img_tags = soup.find_all("img", src=True)
-
+            # Парсинг изображений из HTML
+            img_tags = self._parse_images_from_html(
+                html_content, options["max_images_per_page"]
+            )
             if not img_tags:
                 return []
 
-            # Ограничиваем количество изображений
-            img_tags = img_tags[:max_images_per_page]
-
-            # Разделяем изображения на base64 и URL
-            base64_images = []
-            url_images = []
-
-            for img_tag in img_tags:
-                img_src = img_tag.get("src", "")
-                if img_src.startswith("data:image/") and enable_base64_images:
-                    base64_images.append(img_tag)
-                else:
-                    url_images.append(img_tag)
-
+            # Категоризация изображений
+            base64_images, url_images = self._categorize_images(
+                img_tags, options["enable_base64_images"]
+            )
             logger.info(
                 f"Найдено изображений: {len(url_images)} URL, {len(base64_images)} base64"
             )
 
             results = []
-
-            # Обработка base64 изображений (синхронно, так как нет сетевых запросов)
-            if base64_images:
-                for img_tag in base64_images:
-                    try:
-                        result = self._process_base64_image(img_tag, extraction_options)
-                        if result:
-                            results.append(result)
-                    except Exception as e:
-                        logger.warning(f"Error processing base64 image: {str(e)}")
-
-            # Обработка URL изображений (параллельно, группами по 2)
-            if url_images:
-                image_download_timeout = (
-                    extraction_options.image_download_timeout
-                    if extraction_options
-                    and extraction_options.image_download_timeout is not None
-                    else settings.IMAGE_DOWNLOAD_TIMEOUT
-                )
-
-                for i in range(0, len(url_images), 2):
-                    batch = url_images[i : i + 2]
-                    batch_results = []
-
-                    with concurrent.futures.ThreadPoolExecutor(
-                        max_workers=2
-                    ) as executor:
-                        futures = []
-                        for img_tag in batch:
-                            future = executor.submit(
-                                self._process_single_image,
-                                img_tag,
-                                base_url,
-                                extraction_options,
-                            )
-                            futures.append(future)
-
-                        for future in concurrent.futures.as_completed(futures):
-                            try:
-                                result = future.result(
-                                    timeout=image_download_timeout + 5
-                                )
-                                if result:
-                                    batch_results.append(result)
-                            except Exception as e:
-                                logger.warning(f"Error processing image: {str(e)}")
-
-                    results.extend(batch_results)
+            # Обработка изображений
+            results.extend(
+                self._process_base64_images(base64_images, extraction_options)
+            )
+            results.extend(
+                self._process_url_images(url_images, base_url, extraction_options)
+            )
 
             return results
 
         except Exception as e:
             logger.warning(f"Error extracting images from HTML: {str(e)}")
             return []
+
+    def _setup_image_extraction_options(
+        self, extraction_options: Optional[Any]
+    ) -> dict:
+        """Настройка параметров извлечения изображений."""
+        return {
+            "process_images": (
+                extraction_options.process_images
+                if extraction_options and extraction_options.process_images is not None
+                else True
+            ),
+            "max_images_per_page": (
+                extraction_options.max_images_per_page
+                if extraction_options
+                and extraction_options.max_images_per_page is not None
+                else settings.MAX_IMAGES_PER_PAGE
+            ),
+            "enable_base64_images": (
+                extraction_options.enable_base64_images
+                if extraction_options
+                and extraction_options.enable_base64_images is not None
+                else settings.ENABLE_BASE64_IMAGES
+            ),
+        }
+
+    def _parse_images_from_html(self, html_content: str, max_images: int) -> list:
+        """Парсинг изображений из HTML контента."""
+        soup = BeautifulSoup(html_content, "lxml")
+        img_tags = soup.find_all("img", src=True)
+        return img_tags[:max_images]
+
+    def _categorize_images(self, img_tags: list, enable_base64: bool) -> tuple:
+        """Категоризация изображений на base64 и URL."""
+        base64_images = []
+        url_images = []
+
+        for img_tag in img_tags:
+            img_src = img_tag.get("src", "")
+            if img_src.startswith("data:image/") and enable_base64:
+                base64_images.append(img_tag)
+            else:
+                url_images.append(img_tag)
+
+        return base64_images, url_images
+
+    def _process_base64_images(
+        self, base64_images: list, extraction_options: Optional[Any]
+    ) -> list:
+        """Обработка base64 изображений."""
+        results = []
+        for img_tag in base64_images:
+            try:
+                result = self._process_base64_image(img_tag, extraction_options)
+                if result:
+                    results.append(result)
+            except Exception as e:
+                logger.warning(f"Error processing base64 image: {str(e)}")
+        return results
+
+    def _process_url_images(
+        self, url_images: list, base_url: str, extraction_options: Optional[Any]
+    ) -> list:
+        """Обработка URL изображений."""
+        if not url_images:
+            return []
+
+        results = []
+        image_download_timeout = (
+            extraction_options.image_download_timeout
+            if extraction_options
+            and extraction_options.image_download_timeout is not None
+            else settings.IMAGE_DOWNLOAD_TIMEOUT
+        )
+
+        # Обработка изображений группами по 2
+        for i in range(0, len(url_images), 2):
+            batch = url_images[i : i + 2]
+            batch_results = self._process_images_batch(
+                batch, base_url, extraction_options, image_download_timeout
+            )
+            results.extend(batch_results)
+
+        return results
+
+    def _process_images_batch(
+        self,
+        batch: list,
+        base_url: str,
+        extraction_options: Optional[Any],
+        timeout: int,
+    ) -> list:
+        """Обработка группы изображений параллельно."""
+        batch_results = []
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            futures = []
+            for img_tag in batch:
+                future = executor.submit(
+                    self._process_single_image,
+                    img_tag,
+                    base_url,
+                    extraction_options,
+                )
+                futures.append(future)
+
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result = future.result(timeout=timeout + 5)
+                    if result:
+                        batch_results.append(result)
+                except Exception as e:
+                    logger.warning(f"Error processing image: {str(e)}")
+
+        return batch_results
 
     def _process_single_image(
         self, img_tag, base_url: str, extraction_options: Optional[Any] = None
