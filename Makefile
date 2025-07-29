@@ -4,7 +4,7 @@ IMAGE_NAME := text-extraction-api
 TAG := latest
 
 
-.PHONY: help build up prod-up down logs test test-unit test-integration test-coverage test-legacy clean status lint format lint-check install-linters
+.PHONY: help build up prod-up down stop logs test test-unit test-integration test-coverage test-legacy clean status lint format lint-check install-linters
 
 help: ## 📋 Показать список доступных команд
 	@echo "================================================"
@@ -18,6 +18,7 @@ help: ## 📋 Показать список доступных команд
 	@echo ""
 	@echo "🔧 Управление сервисом:"
 	@echo "  make down    - Остановить все контейнеры"
+	@echo "  make stop    - Остановить все контейнеры (алиас для down)"
 	@echo "  make logs    - Показать логи приложения в реальном времени"
 	@echo "  make status  - Показать статус контейнеров"
 	@echo ""
@@ -85,6 +86,8 @@ down: ## 🛑 Остановить все контейнеры
 	@echo "🛑 Остановка всех контейнеров..."
 	@docker-compose -f docker-compose.yml -f docker-compose.prod.yml down
 	@echo "✅ Все контейнеры остановлены!"
+
+stop: down ## 🛑 Остановить все контейнеры (алиас для down)
 
 logs: ## 📋 Показать логи приложения
 	@echo "📋 Показ логов приложения..."
