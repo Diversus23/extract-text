@@ -24,21 +24,13 @@ RUN chown -R appuser:appuser /code
 
 # Копируем файл зависимостей
 COPY requirements.txt .
-RUN chown appuser:appuser requirements.txt
 
-# Переключаемся на пользователя для безопасной установки зависимостей
-USER appuser
+# Устанавливаем Python зависимости от root (стандартная практика в Docker)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Устанавливаем Python зависимости от непривилегированного пользователя
-RUN pip install --no-cache-dir --upgrade --user pip && \
-    pip install --no-cache-dir --user -r requirements.txt
-
-# Переключаемся обратно на root для системных зависимостей Playwright
-USER root
-
-# Настраиваем PATH и устанавливаем системные зависимости для Playwright
-ENV PATH=/home/appuser/.local/bin:$PATH
-RUN PATH=/home/appuser/.local/bin:$PATH playwright install-deps chromium
+# Устанавливаем системные зависимости для Playwright
+RUN playwright install-deps chromium
 
 # Копируем код приложения
 COPY ./app /code/app
@@ -48,8 +40,10 @@ RUN chown -R appuser:appuser /code && \
     mkdir -p /home/appuser/.cache && \
     chown -R appuser:appuser /home/appuser
 
-# Переключаемся на пользователя и устанавливаем Playwright браузер
+# Переключаемся на пользователя для безопасного запуска приложения
 USER appuser
+
+# Устанавливаем Playwright браузер от пользователя
 RUN playwright install chromium
 
 # Переменные окружения
