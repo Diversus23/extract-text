@@ -33,11 +33,12 @@ USER appuser
 RUN pip install --no-cache-dir --upgrade --user pip && \
     pip install --no-cache-dir --user -r requirements.txt
 
-# Переключаемся обратно на root для системных зависимостей
+# Переключаемся обратно на root для системных зависимостей Playwright
 USER root
 
-# Устанавливаем системные зависимости для Playwright
-RUN playwright install-deps chromium
+# Настраиваем PATH и устанавливаем системные зависимости для Playwright
+ENV PATH=/home/appuser/.local/bin:$PATH
+RUN PATH=/home/appuser/.local/bin:$PATH playwright install-deps chromium
 
 # Копируем код приложения
 COPY ./app /code/app
@@ -54,7 +55,6 @@ RUN playwright install chromium
 # Переменные окружения
 ENV PYTHONPATH=/code
 ENV PYTHONUNBUFFERED=1
-ENV PATH=/home/appuser/.local/bin:$PATH
 
 # Открываем порт
 EXPOSE 7555
