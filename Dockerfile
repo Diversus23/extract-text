@@ -13,25 +13,37 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
+# Создаем пользователя для безопасности раньше
+RUN groupadd -r appuser && useradd -r -g appuser -m appuser
+
 # Устанавливаем рабочую директорию
 WORKDIR /code
 
+# Изменяем владельца рабочей директории
+RUN chown -R appuser:appuser /code
+
 # Копируем файл зависимостей
 COPY requirements.txt .
+RUN chown appuser:appuser requirements.txt
 
-# Устанавливаем Python зависимости
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Переключаемся на пользователя для безопасной установки зависимостей
+USER appuser
 
-# Устанавливаем системные зависимости для Playwright от root
+# Устанавливаем Python зависимости от непривилегированного пользователя
+RUN pip install --no-cache-dir --upgrade --user pip && \
+    pip install --no-cache-dir --user -r requirements.txt
+
+# Переключаемся обратно на root для системных зависимостей
+USER root
+
+# Устанавливаем системные зависимости для Playwright
 RUN playwright install-deps chromium
 
 # Копируем код приложения
 COPY ./app /code/app
 
-# Создаем пользователя для безопасности
-RUN groupadd -r appuser && useradd -r -g appuser -m appuser && \
-    chown -R appuser:appuser /code && \
+# Настраиваем права доступа
+RUN chown -R appuser:appuser /code && \
     mkdir -p /home/appuser/.cache && \
     chown -R appuser:appuser /home/appuser
 
@@ -42,6 +54,7 @@ RUN playwright install chromium
 # Переменные окружения
 ENV PYTHONPATH=/code
 ENV PYTHONUNBUFFERED=1
+ENV PATH=/home/appuser/.local/bin:$PATH
 
 # Открываем порт
 EXPOSE 7555

@@ -2168,18 +2168,32 @@ class TextExtractor:
             )
 
             try:
+                # Определяем, включать ли JavaScript
+                enable_javascript = (
+                    extraction_options.enable_javascript
+                    if extraction_options
+                    and extraction_options.enable_javascript is not None
+                    else settings.ENABLE_JAVASCRIPT
+                )
+
                 context = browser.new_context(
                     user_agent=user_agent or settings.DEFAULT_USER_AGENT,
                     viewport={"width": 1280, "height": 720},
+                    java_script_enabled=enable_javascript,  # Правильная настройка отключения JS
                 )
 
                 page = context.new_page()
 
-                # Устанавливаем таймауты
+                # Устанавливаем таймауты для защиты от DoS-атак
                 page.set_default_timeout(web_page_timeout * 1000)  # в миллисекундах
 
+                # Дополнительная защита от DoS: ограничиваем время выполнения JavaScript
+                page.set_default_navigation_timeout(web_page_timeout * 1000)
+
                 # Переходим на страницу
-                logger.info(f"Загрузка страницы с Playwright: {url}")
+                logger.info(
+                    f"Загрузка страницы с Playwright: {url} (JS: {'включен' if enable_javascript else 'отключен'})"
+                )
                 response = page.goto(url, wait_until="domcontentloaded")
 
                 if not response.ok:
@@ -2188,23 +2202,22 @@ class TextExtractor:
                 final_url = page.url
 
                 # Ждем дополнительной загрузки JS (если включено)
-                enable_javascript = (
-                    extraction_options.enable_javascript
-                    if extraction_options
-                    and extraction_options.enable_javascript is not None
-                    else settings.ENABLE_JAVASCRIPT
-                )
-
                 if enable_javascript:
                     logger.info(f"Ожидание JS-рендеринга ({js_render_timeout}s)...")
 
-                    # Ждем загрузки сети
+                    # Ждем загрузки сети с защитой от DoS атак
                     try:
+                        # Ограничиваем время выполнения для защиты от ресурсоемких скриптов
                         page.wait_for_load_state(
-                            "networkidle", timeout=js_render_timeout * 1000
+                            "networkidle",
+                            timeout=min(
+                                js_render_timeout * 1000, 15000
+                            ),  # не более 15 сек
                         )
                     except Exception as e:
-                        logger.warning(f"Таймаут ожидания сети: {str(e)}")
+                        logger.warning(
+                            f"Таймаут ожидания сети (защита от DoS): {str(e)}"
+                        )
 
                     # Обработка lazy loading с защитой от бесконечности
                     if enable_lazy_loading_wait:

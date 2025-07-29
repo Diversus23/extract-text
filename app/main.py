@@ -129,7 +129,22 @@ async def lifespan(app: FastAPI):
     cleanup_temp_files()
 
     yield
+
+    # Graceful shutdown: корректно закрываем пул потоков
     logger.info("Завершение работы Text Extraction API")
+    try:
+        if hasattr(text_extractor, "_thread_pool"):
+            logger.info("Закрытие пула потоков...")
+            text_extractor._thread_pool.shutdown(wait=True)
+            logger.info("Пул потоков успешно закрыт")
+    except Exception as e:
+        logger.warning(f"Ошибка при закрытии пула потоков: {str(e)}")
+
+    # Финальная очистка временных файлов
+    try:
+        cleanup_temp_files()
+    except Exception as e:
+        logger.warning(f"Ошибка при финальной очистке: {str(e)}")
 
 
 # Создание FastAPI приложения
