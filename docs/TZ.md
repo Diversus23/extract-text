@@ -1,7 +1,7 @@
 # Техническое задание: API для извлечения текста для RAG
 
-**Версия:** 1.10.3
-**Дата:** 25.07.2025
+**Версия:** 1.10.4
+**Дата:** 29.07.2025
 
 ---
 
@@ -858,7 +858,8 @@
     * `API_PORT` (по умолчанию: 7555)
     * `OCR_LANGUAGES` (по умолчанию: rus+eng)
     * `PROCESSING_TIMEOUT_SECONDS` (по умолчанию: 300)
-    * `WORKERS` (по умолчанию: 1 для разработки, рекомендуется 2 * (количество ядер CPU) + 1 для продакшена)
+    * `CPU_CORES` (по умолчанию: 4, используется для автоматического расчета количества воркеров в продакшене)
+    * `WORKERS` (по умолчанию: 1 для разработки, для продакшена автоматически вычисляется как 2 * CPU_CORES + 1)
     * `MAX_ARCHIVE_SIZE` (по умолчанию: 20971520 - 20 МБ)
     * `MAX_EXTRACTED_SIZE` (по умолчанию: 104857600 - 100 МБ)
     * `MAX_ARCHIVE_NESTING` (по умолчанию: 3)
@@ -948,7 +949,11 @@ version: '3.8'
 services:
   api:
     volumes: []
-    command: uvicorn app.main:app --host 0.0.0.0 --port ${API_PORT:-7555} --workers ${WORKERS:-9}
+    command: >
+      sh -c "
+        CALCULATED_WORKERS=$$(expr 2 \* $${CPU_CORES:-4} + 1);
+        exec uvicorn app.main:app --host 0.0.0.0 --port $${API_PORT:-7555} --workers $${WORKERS:-$$CALCULATED_WORKERS}
+      "
     restart: always
     env_file:
       - .env
