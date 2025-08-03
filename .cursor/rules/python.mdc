@@ -52,6 +52,7 @@ Sources structure and main files:
 - `CHANGELOG.md` - changelog file. Always add all completed tasks in this file (use current day and sh command don't forget it). Version for changelog in files `config.py` variable `VERSION` (use this variable to head the list of changes).
   - For example: VERSION: str = "1.8.0", current day `2025-07-06` -> Heading in CHANGELOG.md `## [1.8.0] - 2025-07-06`.
 - `README.md` - readme file. Always update this file if necessary.
+- `docs/TODO.md` - todo task list
 
 ## Commands
 
