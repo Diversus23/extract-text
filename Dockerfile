@@ -29,8 +29,30 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Устанавливаем системные зависимости для Playwright
-RUN playwright install-deps chromium
+# Устанавливаем замещающие пакеты для зависимостей Playwright
+RUN apt-get update && apt-get install -y \
+    fonts-unifont \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/*
+
+# Устанавливаем системные зависимости для Playwright (без проблемных пакетов)
+RUN playwright install-deps chromium || true && \
+    apt-get update && apt-get install -y \
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Копируем код приложения
 COPY ./app /code/app
