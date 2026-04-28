@@ -13,12 +13,13 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app.auth import verify_api_key
 from app.config import settings
 from app.extractors import TextExtractor
 from app.utils import (
@@ -97,10 +98,15 @@ class ExtractionOptions(BaseModel):
 
     # Сетевые настройки
     follow_redirects: Optional[bool] = Field(
-        True, description="Следовать ли редиректам"
+        False,
+        description=(
+            "Следовать ли редиректам. По умолчанию False (защита от SSRF "
+            "через цепочку редиректов). При True каждый final_url повторно "
+            "проверяется через _is_safe_url."
+        ),
     )
     max_redirects: Optional[int] = Field(
-        5, description="Максимальное количество редиректов"
+        5, description="Максимальное количество редиректов (hard cap = 10)"
     )
 
 
@@ -124,6 +130,18 @@ class URLRequest(BaseModel):
 async def lifespan(app: FastAPI):
     """Lifecycle manager для FastAPI приложения."""
     logger.info(f"Запуск Text Extraction API v{settings.VERSION}")
+
+    # Fail-fast: режим apikey без ключей бессмыслен и может молча пропустить запросы.
+    if settings.AUTH_MODE == "apikey" and not settings.API_KEYS:
+        raise RuntimeError(
+            "AUTH_MODE=apikey требует непустой API_KEYS. "
+            "Укажите ключи через запятую в переменной окружения API_KEYS."
+        )
+    if settings.AUTH_MODE not in ("none", "apikey"):
+        raise RuntimeError(
+            f"Неизвестный AUTH_MODE={settings.AUTH_MODE!r}. Допустимо: none | apikey."
+        )
+    logger.info(f"Режим аутентификации: {settings.AUTH_MODE}")
 
     # Очистка временных файлов при старте
     cleanup_temp_files()
@@ -161,11 +179,14 @@ app = FastAPI(
     },
 )
 
-# Добавление CORS middleware
+# Добавление CORS middleware. allow_credentials=True не совместим с allow_origins=["*"]
+# по спецификации CORS — браузер просто проигнорирует ответ. Поэтому при wildcard
+# выставляем credentials=False.
+_cors_wildcard = settings.ALLOWED_ORIGINS == ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=not _cors_wildcard,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -212,13 +233,18 @@ async def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/v1/supported-formats")
+# Роутер для всех /v1/* — единое место подключения auth-dependency.
+# При добавлении нового /v1-эндпоинта auth применяется автоматически.
+v1_router = APIRouter(prefix="/v1", dependencies=[Depends(verify_api_key)])
+
+
+@v1_router.get("/supported-formats")
 async def supported_formats() -> Dict[str, list]:
     """Поддерживаемые форматы файлов."""
     return settings.SUPPORTED_FORMATS
 
 
-@app.post("/v1/extract/file")
+@v1_router.post("/extract/file")
 async def extract_text(file: UploadFile = FILE_UPLOAD):
     """Извлечение текста из файла."""
     try:
@@ -366,7 +392,7 @@ async def extract_text(file: UploadFile = FILE_UPLOAD):
         )
 
 
-@app.post("/v1/extract/base64")
+@v1_router.post("/extract/base64")
 async def extract_text_base64(request: Base64FileRequest):
     """Извлечение текста из base64-файла."""
     try:
@@ -513,7 +539,7 @@ async def extract_text_base64(request: Base64FileRequest):
         )
 
 
-@app.post("/v1/extract/url")
+@v1_router.post("/extract/url")
 async def extract_text_from_url(request: URLRequest):
     """Извлечение текста с веб-страницы (обновлено в v1.10.2)."""
     url = request.url.strip()
@@ -614,7 +640,17 @@ async def extract_text_from_url(request: URLRequest):
                 content={
                     "status": "error",
                     "url": url,
-                    "message": f"Не удалось загрузить страницу: {error_msg}",
+                    "message": "Не удалось загрузить страницу: ошибка соединения.",
+                },
+            )
+        elif "blocked" in error_msg.lower() or "redirected to blocked" in error_msg.lower():
+            logger.warning(f"Запрос к заблокированному URL после редиректа {url}: {error_msg}")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "url": url,
+                    "message": "Доступ к внутренним IP-адресам запрещён из соображений безопасности.",
                 },
             )
         else:
@@ -624,7 +660,7 @@ async def extract_text_from_url(request: URLRequest):
                 content={
                     "status": "error",
                     "url": url,
-                    "message": f"Ошибка парсинга HTML: {error_msg}",
+                    "message": "Ошибка обработки веб-страницы.",
                 },
             )
     except Exception as e:
@@ -634,9 +670,13 @@ async def extract_text_from_url(request: URLRequest):
             content={
                 "status": "error",
                 "url": url,
-                "message": f"Ошибка обработки веб-страницы: {str(e)}",
+                "message": "Внутренняя ошибка обработки.",
             },
         )
+
+
+# Регистрируем v1-роутер с единым auth-dependency.
+app.include_router(v1_router)
 
 
 if __name__ == "__main__":

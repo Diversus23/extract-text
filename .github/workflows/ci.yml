@@ -139,7 +139,7 @@ jobs:
         
     - name: 🧪 Запуск тестов
       run: |
-        python -m pytest -v --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=60
+        python -m pytest -v --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=75
         
     - name: 📊 Загрузка покрытия для Python ${{ matrix.python-version }}
       uses: codecov/codecov-action@v4
@@ -171,7 +171,7 @@ jobs:
         
     - name: 🛡️ Проверка уязвимостей с Safety
       run: |
-        safety check --json || true  # Не блокируем при найденных уязвимостях
+        safety check --json
         
     - name: 🔍 Проверка безопасности кода с Bandit
       run: |

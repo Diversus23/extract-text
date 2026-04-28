@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.11.0] - 2026-04-28
+
+### ⚠️ BREAKING CHANGES
+- **`ExtractionOptions.follow_redirects` default изменён с `True` на `False`** ([app/main.py](app/main.py)). Запросы к `/v1/extract/url`, которые раньше следовали HTTP-редиректам автоматически, теперь по умолчанию останавливаются на первом 3xx и могут вернуть ошибку загрузки. Чтобы сохранить старое поведение, клиент должен явно указать `"extraction_options": {"follow_redirects": true}`. Это сделано для защиты от SSRF через цепочку редиректов: при `follow_redirects=true` каждый final_url повторно проходит проверку `_is_safe_url`.
+
+### Безопасность (security hardening)
+- **SSRF при редиректах**: после `_determine_content_type`, `_extract_page_with_requests`, `_extract_page_with_playwright` и `_download_and_extract_file` итоговый `final_url` повторно валидируется через `_is_safe_url`. По умолчанию `ExtractionOptions.follow_redirects=False` (см. BREAKING выше). Жёсткий верхний предел `max_redirects=10`.
+- **XXE**: импорт `xml.etree.ElementTree` заменён на `defusedxml.ElementTree` в `app/extractors.py`. В `requirements.txt` добавлен `defusedxml==0.7.1`.
+- **Path traversal в архивах (Zip Slip)**: добавлен helper `_is_path_within`, проверка применяется при распаковке zip/tar/rar. В `_extract_7z_files` `extractall` заменён на ручную итерацию через `readall()` с валидацией каждого пути. В `_extract_tar_files` теперь явно блокируются и логируются symlink/hardlink-записи.
+- **PIL decompression bomb**: на уровне модуля `extractors.py` устанавливается `Image.MAX_IMAGE_PIXELS = settings.MAX_OCR_IMAGE_PIXELS`. `Image.open` обёрнут в `with`. Вызовы `validate_image_for_ocr` добавлены в путях обработки изображений со страницы (HTTP и base64 data URI).
+- **Playwright**: удалён аргумент `--disable-web-security` (использовался якобы для local-dev, но включён везде).
+- **CORS**: `allow_origins` теперь читается из `ALLOWED_ORIGINS` (через запятую). Default остаётся `*` для совместимости, при wildcard `allow_credentials=False` (требование спецификации CORS).
+- **Опциональная API-key аутентификация**: новый модуль `app/auth.py` и переменные `AUTH_MODE` (`none|apikey`) и `API_KEYS`. Защищаются `/v1/extract/file`, `/v1/extract/base64`, `/v1/extract/url`, `/v1/supported-formats`. `/health` и `/` остаются открытыми (Docker healthcheck). Сравнение через `secrets.compare_digest`.
+- **Hard cap для max_scroll_attempts**: новая `MAX_SCROLL_ATTEMPTS_CAP` (default 10), пользовательское значение clamp-ится сверху.
+- **Information disclosure**: убран вывод `str(e)` в JSON-ответах URL-эндпоинта; добавлена ветка для редирект-блокировок.
+
+### Надёжность
+- **Явный `verify=True`** во всех вызовах `requests.get/head` и `session.get/head` (защита от случайного отключения SSL-верификации через окружение).
+- **Windows-fallback**: `import resource` обёрнут в try/except. На Windows функционал ограничения памяти/CPU подпроцессов отключается с предупреждением, разработка без Docker становится возможной.
+
+### CI/CD
+- `safety check` больше не маскируется через `|| true` — pipeline падает при найденных CVE.
+- Coverage threshold поднят с 60% до 75% (`pytest.ini` и `ci.yml`).
+- Новый файл `tests/test_security.py` с тестами на SSRF-блокировки, Zip Slip, API-key auth, открытость `/health`.
+
+### Docker (prod-hardening)
+- `docker-compose.prod.yml`: добавлены `build:` (явная пересборка вместо наследования dev-образа), `volumes: []` (перебивает dev-mount `./app:/code/app` — в prod код только из образа), `deploy.resources.limits` (memory 4G, cpus 2.0) и `reservations` (memory 2G, cpus 1.0), `logging.options.max-size=50m / max-file=5`. `restart: always` был и до этого — не менялся.
+
+### Документация
+- `env_example`: добавлены `ALLOWED_ORIGINS`, `AUTH_MODE`, `API_KEYS`, `MAX_SCROLL_ATTEMPTS_CAP`.
+- `errors.md`: пункты CORS и SSL verify помечены как ✅ исправлено в v1.11.0.
+
+### Техническое
+- Версия обновлена до 1.11.0 в `app/config.py`.
+- Новый модуль: `app/auth.py`.
+- Зависимость: `defusedxml==0.7.1`.
+
+---
+
 ## [1.10.8] - 2025-07-29
 
 ### Исправление развертывания

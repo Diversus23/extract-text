@@ -8,11 +8,28 @@ class Settings:
     """Настройки приложения."""
 
     # Основные настройки
-    VERSION: str = "1.10.8"
+    VERSION: str = "1.11.0"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
     # Настройки API
     API_PORT: int = int(os.getenv("API_PORT", "7555"))
+
+    # CORS: список разрешённых Origin'ов через запятую (по умолчанию "*" для совместимости).
+    # Для prod рекомендуется указывать конкретные домены, например:
+    # ALLOWED_ORIGINS=https://app.example.com,https://admin.example.com
+    ALLOWED_ORIGINS: List[str] = [
+        origin.strip()
+        for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")
+        if origin.strip()
+    ] or ["*"]
+
+    # Аутентификация: none (открытый API) | apikey (требуется заголовок X-API-Key).
+    AUTH_MODE: str = os.getenv("AUTH_MODE", "none").strip().lower()
+    # Список API-ключей через запятую. Используется только при AUTH_MODE=apikey.
+    # Несколько ключей позволяют ротацию без даунтайма.
+    API_KEYS: List[str] = [
+        key.strip() for key in os.getenv("API_KEYS", "").split(",") if key.strip()
+    ]
 
     # Настройки обработки файлов
     MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", str(20 * 1024 * 1024)))  # 20 MB
@@ -36,10 +53,13 @@ class Settings:
         os.getenv("MAX_TESSERACT_MEMORY", str(512 * 1024 * 1024))
     )  # 512 MB
 
-    # Максимальное разрешение для OCR изображений (пиксели)
+    # Максимальное разрешение для OCR изображений в ШТУКАХ ПИКСЕЛЕЙ (width * height),
+    # не в байтах. Используется как Pillow Image.MAX_IMAGE_PIXELS — защита от
+    # decompression bomb (PNG с заявленным разрешением 100k×100k и т.п.).
+    # Default 52_428_800 ≈ 50 мегапикселей (например, 7071×7071 или 10000×5243).
     MAX_OCR_IMAGE_PIXELS: int = int(
         os.getenv("MAX_OCR_IMAGE_PIXELS", str(50 * 1024 * 1024))
-    )  # 50 MP
+    )  # 50 МП (МЕГАПИКСЕЛЕЙ, не мегабайт)
 
     # Включить/выключить ограничения ресурсов
     ENABLE_RESOURCE_LIMITS: bool = (
@@ -95,6 +115,9 @@ class Settings:
     MAX_SCROLL_ATTEMPTS: int = int(
         os.getenv("MAX_SCROLL_ATTEMPTS", "3")
     )  # защита от бесконечного скролла
+    MAX_SCROLL_ATTEMPTS_CAP: int = int(
+        os.getenv("MAX_SCROLL_ATTEMPTS_CAP", "10")
+    )  # жёсткий верхний предел, выше которого пользовательское значение игнорируется
 
     # Заблокированные IP-диапазоны для защиты от SSRF
     BLOCKED_IP_RANGES: str = os.getenv(

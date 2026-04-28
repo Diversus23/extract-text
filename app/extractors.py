@@ -11,7 +11,7 @@ import tarfile
 import tempfile
 import threading
 import time
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -110,6 +110,13 @@ from app.config import settings
 from app.utils import get_file_extension, is_archive_format, is_supported_format
 
 logger = logging.getLogger(__name__)
+
+# Защита от PIL decompression bomb: PIL бросит DecompressionBombError
+# при попытке открыть изображение с заявленным разрешением выше лимита.
+# settings.MAX_OCR_IMAGE_PIXELS — это количество пикселей (width × height),
+# не байты. Pillow ожидает именно pixel-count.
+if Image is not None:
+    Image.MAX_IMAGE_PIXELS = settings.MAX_OCR_IMAGE_PIXELS
 
 
 class TextExtractor:
@@ -1500,12 +1507,14 @@ class TextExtractor:
                 logger.warning(f"Изображение не прошло валидацию: {error_message}")
                 raise ValueError(f"Image validation failed: {error_message}")
 
-            image = Image.open(io.BytesIO(content))
+            with Image.open(io.BytesIO(content)) as image:
+                # Безопасный OCR с ограничениями ресурсов
+                text = self._safe_tesseract_ocr(image)
+                return text
 
-            # Безопасный OCR с ограничениями ресурсов
-            text = self._safe_tesseract_ocr(image)
-            return text
-
+        except Image.DecompressionBombError as e:
+            logger.warning(f"Заблокирована PIL decompression bomb: {str(e)}")
+            raise ValueError("Image validation failed: image too large")
         except Exception as e:
             logger.error(f"Ошибка при OCR изображения: {str(e)}")
             raise ValueError(f"Error processing image: {str(e)}")
@@ -1701,6 +1710,11 @@ class TextExtractor:
 
         # Создаем безопасный путь для извлечения
         safe_path = extract_dir / safe_filename
+        if not self._is_path_within(safe_path, extract_dir):
+            logger.warning(
+                f"Заблокирована попытка path traversal в ZIP: {info.filename}"
+            )
+            return []
         safe_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -1752,6 +1766,11 @@ class TextExtractor:
 
                 # Извлекаем файлы
                 for member in tar_ref.getmembers():
+                    if member.issym() or member.islnk():
+                        logger.warning(
+                            f"Заблокирована symlink/hardlink запись в TAR: {member.name}"
+                        )
+                        continue
                     if not member.isfile():
                         continue
 
@@ -1766,6 +1785,11 @@ class TextExtractor:
 
                     # Создаем безопасный путь для извлечения
                     safe_path = extract_dir / safe_filename
+                    if not self._is_path_within(safe_path, extract_dir):
+                        logger.warning(
+                            f"Заблокирована попытка path traversal в TAR: {member.name}"
+                        )
+                        continue
                     safe_path.parent.mkdir(parents=True, exist_ok=True)
 
                     try:
@@ -1844,6 +1868,11 @@ class TextExtractor:
 
                     # Создаем безопасный путь для извлечения
                     safe_path = extract_dir / safe_filename
+                    if not self._is_path_within(safe_path, extract_dir):
+                        logger.warning(
+                            f"Заблокирована попытка path traversal в RAR: {info.filename}"
+                        )
+                        continue
                     safe_path.parent.mkdir(parents=True, exist_ok=True)
 
                     try:
@@ -1905,45 +1934,63 @@ class TextExtractor:
                             "Extracted files size exceeds maximum allowed size (7z bomb protection)"
                         )
 
-                # Извлекаем файлы
-                sz_ref.extractall(extract_dir)
+                # Безопасная распаковка: читаем содержимое в память (Dict[name, BytesIO])
+                # и сами записываем на диск с валидацией пути — защита от Zip Slip.
+                extracted_data = sz_ref.readall() or {}
 
-                # Обрабатываем извлеченные файлы
-                for root, _dirs, files in os.walk(extract_dir):
-                    for file in files:
-                        file_path = Path(root) / file
-                        relative_path = file_path.relative_to(extract_dir)
+                # Per-file size cap: один файл не может занимать больше суммарного
+                # лимита распакованного содержимого. Защита от того, что
+                # злоумышленник кладёт один огромный файл в архив.
+                per_file_size_limit = settings.MAX_EXTRACTED_SIZE
 
-                        # Санитизируем имя файла
-                        safe_filename = self._sanitize_archive_filename(
-                            str(relative_path)
+                for member_name, bio in extracted_data.items():
+                    # Санитизируем имя файла
+                    safe_filename = self._sanitize_archive_filename(member_name)
+                    if not safe_filename:
+                        continue
+
+                    # Фильтруем системные файлы
+                    if self._is_system_file(safe_filename):
+                        continue
+
+                    # Создаём безопасный путь для извлечения
+                    safe_path = extract_dir / safe_filename
+                    if not self._is_path_within(safe_path, extract_dir):
+                        logger.warning(
+                            f"Заблокирована попытка path traversal в 7Z: {member_name}"
                         )
-                        if not safe_filename:
-                            continue
+                        continue
+                    safe_path.parent.mkdir(parents=True, exist_ok=True)
 
-                        # Фильтруем системные файлы
-                        if self._is_system_file(safe_filename):
-                            continue
-
-                        try:
-                            # Обрабатываем файл
-                            file_content = file_path.read_bytes()
-                            file_result = self._process_extracted_file(
-                                file_content,
-                                safe_filename,
-                                file_path.name,
-                                archive_name,
-                                nesting_level,
-                            )
-
-                            if file_result:
-                                extracted_files.extend(file_result)
-
-                        except Exception as e:
+                    try:
+                        bio.seek(0, io.SEEK_END)
+                        member_size = bio.tell()
+                        bio.seek(0)
+                        if member_size > per_file_size_limit:
                             logger.warning(
-                                f"Ошибка при обработке файла {safe_filename} из архива {archive_name}: {str(e)}"
+                                f"Файл {safe_filename} в 7Z превышает per-file лимит: "
+                                f"{member_size} > {per_file_size_limit}"
                             )
                             continue
+                        file_content = bio.read()
+                        safe_path.write_bytes(file_content)
+
+                        file_result = self._process_extracted_file(
+                            file_content,
+                            safe_filename,
+                            safe_path.name,
+                            archive_name,
+                            nesting_level,
+                        )
+
+                        if file_result:
+                            extracted_files.extend(file_result)
+
+                    except Exception as e:
+                        logger.warning(
+                            f"Ошибка при обработке файла {safe_filename} из архива {archive_name}: {str(e)}"
+                        )
+                        continue
 
         except py7zr.Bad7zFile:
             raise ValueError("Invalid 7Z file")
@@ -2004,6 +2051,32 @@ class TextExtractor:
             return ""
 
         return "/".join(parts)
+
+    def _is_path_within(self, child: Path, parent: Path) -> bool:
+        """Проверка: child не выходит за пределы parent (защита от Zip Slip)."""
+        try:
+            return child.resolve().is_relative_to(parent.resolve())
+        except (ValueError, OSError):
+            return False
+
+    @staticmethod
+    def _redact_url(url: str) -> str:
+        """
+        Маскирует URL для безопасного логирования: оставляет схему, хост и путь,
+        вырезает query-string и user-info (там могут быть API-ключи / токены).
+        """
+        try:
+            parsed = urlparse(url)
+            netloc = parsed.hostname or ""
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            path = parsed.path or ""
+            redacted = f"{parsed.scheme}://{netloc}{path}"
+            if parsed.query:
+                redacted += "?[redacted]"
+            return redacted
+        except Exception:
+            return "[unparseable-url]"
 
     def _is_system_file(self, filename: str) -> bool:
         """Проверка, является ли файл системным."""
@@ -2163,7 +2236,6 @@ class TextExtractor:
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
                     "--disable-extensions",
-                    "--disable-web-security",  # для обхода CORS при локальной разработке
                 ],
             )
 
@@ -2200,6 +2272,10 @@ class TextExtractor:
                     raise ValueError(f"HTTP {response.status}: {response.status_text}")
 
                 final_url = page.url
+
+                # Повторная SSRF-проверка после редиректов в Playwright.
+                if final_url != url and not self._is_safe_url(final_url):
+                    raise ValueError(f"Redirected to blocked URL: {self._redact_url(final_url)}")
 
                 # Ждем дополнительной загрузки JS (если включено)
                 if enable_javascript:
@@ -2250,12 +2326,16 @@ class TextExtractor:
         try:
             logger.info("Начинаем безопасный скролл для активации lazy loading...")
 
-            # Определяем максимальное количество попыток скролла
-            max_scroll_attempts = (
+            # Определяем максимальное количество попыток скролла,
+            # с жёстким верхним пределом (защита от DoS через большое значение в API).
+            user_max_scroll = (
                 extraction_options.max_scroll_attempts
                 if extraction_options
                 and extraction_options.max_scroll_attempts is not None
                 else settings.MAX_SCROLL_ATTEMPTS
+            )
+            max_scroll_attempts = min(
+                max(user_max_scroll, 0), settings.MAX_SCROLL_ATTEMPTS_CAP
             )
 
             # Получаем начальную высоту страницы
@@ -2341,17 +2421,20 @@ class TextExtractor:
             else settings.HEAD_REQUEST_TIMEOUT
         )
 
+        # Безопасный default — не следовать редиректам (защита от SSRF при цепочке).
         follow_redirects = (
             extraction_options.follow_redirects
             if extraction_options and extraction_options.follow_redirects is not None
-            else True
+            else False
         )
 
-        max_redirects = (
+        # Hard cap на max_redirects — игнорируем пользовательские значения выше 10.
+        user_max_redirects = (
             extraction_options.max_redirects
             if extraction_options and extraction_options.max_redirects is not None
             else 5
         )
+        max_redirects = min(max(user_max_redirects, 0), 10)
 
         # Установка User-Agent и заголовков
         headers = {
@@ -2370,12 +2453,17 @@ class TextExtractor:
             logger.info(f"Выполняю HEAD запрос для определения типа контента: {url}")
 
             response = session.head(
-                url, timeout=head_timeout, allow_redirects=follow_redirects, stream=True
+                url,
+                timeout=head_timeout,
+                allow_redirects=follow_redirects,
+                stream=True,
+                verify=True,
             )
 
             if follow_redirects and len(response.history) > max_redirects:
-                logger.warning(
-                    f"Превышено максимальное количество редиректов ({max_redirects})"
+                response.close()
+                raise ValueError(
+                    f"Too many redirects: {len(response.history)} > {max_redirects}"
                 )
 
             response.raise_for_status()
@@ -2383,10 +2471,19 @@ class TextExtractor:
             content_type = response.headers.get("content-type", "").lower()
             final_url = response.url
 
+            # Защита от SSRF через цепочку редиректов: если url изменился,
+            # повторно проверяем безопасность final_url.
+            if final_url != url and not self._is_safe_url(final_url):
+                response.close()
+                raise ValueError(f"Redirected to blocked URL: {self._redact_url(final_url)}")
+
             logger.info(f"Определен Content-Type: {content_type} для URL: {final_url}")
 
             return content_type, final_url
 
+        except ValueError:
+            # SSRF-блок и too-many-redirects пробрасываем без fallback на GET.
+            raise
         except Exception as e:
             logger.warning(f"Ошибка HEAD запроса: {str(e)}, попробуем GET запрос")
             # Fallback: делаем GET запрос но читаем только заголовки
@@ -2396,7 +2493,15 @@ class TextExtractor:
                     timeout=head_timeout,
                     allow_redirects=follow_redirects,
                     stream=True,
+                    verify=True,
                 )
+
+                if follow_redirects and len(response.history) > max_redirects:
+                    response.close()
+                    raise ValueError(
+                        f"Too many redirects: {len(response.history)} > {max_redirects}"
+                    )
+
                 response.raise_for_status()
 
                 content_type = response.headers.get("content-type", "").lower()
@@ -2404,6 +2509,10 @@ class TextExtractor:
 
                 # Закрываем соединение, не читая тело
                 response.close()
+
+                # Повторная SSRF-проверка после редиректов.
+                if final_url != url and not self._is_safe_url(final_url):
+                    raise ValueError(f"Redirected to blocked URL: {self._redact_url(final_url)}")
 
                 logger.info(
                     f"Определен Content-Type через GET: {content_type} для URL: {final_url}"
@@ -2504,8 +2613,16 @@ class TextExtractor:
                 timeout=download_timeout,
                 allow_redirects=follow_redirects,
                 stream=True,
+                verify=True,
             )
             response.raise_for_status()
+
+            # Повторная SSRF-проверка после редиректов при скачивании файла.
+            if response.url != url and not self._is_safe_url(response.url):
+                response.close()
+                raise ValueError(
+                    f"Redirected to blocked URL: {self._redact_url(response.url)}"
+                )
 
             # Проверяем размер файла
             content_length = response.headers.get("content-length")
@@ -2771,10 +2888,11 @@ class TextExtractor:
             else settings.WEB_PAGE_TIMEOUT
         )
 
+        # Безопасный default — не следовать редиректам.
         follow_redirects = (
             extraction_options.follow_redirects
             if extraction_options and extraction_options.follow_redirects is not None
-            else True
+            else False
         )
 
         # Установка User-Agent
@@ -2794,6 +2912,7 @@ class TextExtractor:
                 timeout=web_page_timeout,
                 allow_redirects=follow_redirects,
                 stream=False,
+                verify=True,
             )
             response.raise_for_status()
 
@@ -2801,6 +2920,10 @@ class TextExtractor:
             response.encoding = response.apparent_encoding or "utf-8"
             html_content = response.text
             final_url = response.url
+
+            # Повторная SSRF-проверка после редиректов.
+            if final_url != url and not self._is_safe_url(final_url):
+                raise ValueError(f"Redirected to blocked URL: {self._redact_url(final_url)}")
 
             logger.info(
                 f"HTML получен через requests, размер: {len(html_content)} символов"
@@ -3187,7 +3310,11 @@ class TextExtractor:
             headers = {"User-Agent": settings.DEFAULT_USER_AGENT, "Referer": base_url}
 
             response = requests.get(
-                img_url, headers=headers, timeout=image_download_timeout, stream=True
+                img_url,
+                headers=headers,
+                timeout=image_download_timeout,
+                stream=True,
+                verify=True,
             )
             response.raise_for_status()
 
@@ -3196,6 +3323,16 @@ class TextExtractor:
             logger.info(f"Image content size: {len(img_content)} bytes")
             if len(img_content) == 0:
                 logger.warning("Image content is empty")
+                return None
+
+            # Валидация (защита от decompression bomb до Image.open)
+            from .utils import validate_image_for_ocr
+
+            is_valid, error_message = validate_image_for_ocr(img_content)
+            if not is_valid:
+                logger.warning(
+                    f"Изображение со страницы не прошло валидацию: {error_message}"
+                )
                 return None
 
             # Открываем изображение для проверки размеров
@@ -3296,6 +3433,16 @@ class TextExtractor:
                 return None
 
             logger.info(f"Base64 image decoded, size: {len(img_content)} bytes")
+
+            # Валидация (защита от decompression bomb до Image.open)
+            from .utils import validate_image_for_ocr
+
+            is_valid, error_message = validate_image_for_ocr(img_content)
+            if not is_valid:
+                logger.warning(
+                    f"Base64-изображение не прошло валидацию: {error_message}"
+                )
+                return None
 
             # Открываем изображение для проверки размеров
             with Image.open(io.BytesIO(img_content)) as img:

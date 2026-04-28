@@ -3,7 +3,6 @@
 import glob
 import logging
 import os
-import resource
 import shutil
 import signal
 import subprocess
@@ -18,7 +17,24 @@ from werkzeug.utils import secure_filename
 
 from .config import settings
 
+# Модуль resource доступен только на POSIX-системах. На Windows
+# используется заглушка — функционал ограничения памяти/CPU подпроцессов
+# отключается с предупреждением в логах.
+try:
+    import resource
+
+    HAS_RESOURCE = True
+except ImportError:
+    resource = None
+    HAS_RESOURCE = False
+
 logger = logging.getLogger(__name__)
+
+if not HAS_RESOURCE:
+    logger.warning(
+        "Модуль resource недоступен (вероятно, Windows). "
+        "Ограничения ресурсов для подпроцессов будут отключены."
+    )
 
 
 def setup_logging() -> None:
@@ -569,8 +585,9 @@ def run_subprocess_with_limits(
         subprocess.CalledProcessError: При ошибке выполнения
         MemoryError: При превышении лимита памяти
     """
-    if not settings.ENABLE_RESOURCE_LIMITS:
-        # Если ограничения отключены, используем стандартный запуск
+    if not settings.ENABLE_RESOURCE_LIMITS or not HAS_RESOURCE:
+        # Если ограничения отключены или модуль resource недоступен (Windows) —
+        # используем стандартный запуск без preexec_fn.
         return subprocess.run(
             command, timeout=timeout, capture_output=capture_output, text=text, **kwargs
         )

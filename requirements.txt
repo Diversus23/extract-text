@@ -38,6 +38,7 @@ playwright==1.54.0
 
 # YAML и XML
 PyYAML==6.0.2
+defusedxml==0.7.1
 
 # ODT файлы
 odfpy==1.4.1

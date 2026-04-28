@@ -1,6 +1,9 @@
 services:
   api:
     container_name: extract-text-prod
+    build: .
+    # Перебиваем dev-volume ./app:/code/app — в prod код используется только из образа.
+    volumes: []
     command: >
       sh -c "
         CALCULATED_WORKERS=$$(expr 2 \* $${CPU_CORES:-4} + 1);
@@ -8,4 +11,17 @@ services:
       "
     restart: always
     env_file:
-      - .env 
+      - .env
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
