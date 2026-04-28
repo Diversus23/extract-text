@@ -244,8 +244,11 @@ if __name__ == "__main__":
     @patch("app.extractors.Image")
     def test_extract_from_image_sync(self, mock_image_class, text_extractor):
         """Тест синхронного извлечения из изображения."""
+        # Image.open() используется как context manager (with-блок).
+        # Используем MagicMock + __enter__/__exit__ для поддержки протокола.
         mock_image = Mock()
-        mock_image_class.open.return_value = mock_image
+        mock_image_class.open.return_value.__enter__.return_value = mock_image
+        mock_image_class.open.return_value.__exit__.return_value = False
 
         content_bytes = b"fake image content"
 
@@ -261,7 +264,8 @@ if __name__ == "__main__":
     def test_extract_from_image_sync_no_text(self, mock_image_class, text_extractor):
         """Тест извлечения из изображения без текста."""
         mock_image = Mock()
-        mock_image_class.open.return_value = mock_image
+        mock_image_class.open.return_value.__enter__.return_value = mock_image
+        mock_image_class.open.return_value.__exit__.return_value = False
 
         content_bytes = b"fake image content"
 

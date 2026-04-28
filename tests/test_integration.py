@@ -448,8 +448,10 @@ class TestRealFiles:
         """Тест извлечения из реального изображения."""
         # Мокаем OCR для стабильности тестов
         mock_tesseract.image_to_string.return_value = "Распознанный текст с изображения"
+        # Image.open() используется как context manager в _extract_from_image_sync.
         mock_image = Mock()
-        mock_image_class.open.return_value = mock_image
+        mock_image_class.open.return_value.__enter__.return_value = mock_image
+        mock_image_class.open.return_value.__exit__.return_value = False
 
         jpg_file = real_test_files_dir / "test.jpg"
 
