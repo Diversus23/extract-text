@@ -32,10 +32,17 @@
 - `env_example`: добавлены `ALLOWED_ORIGINS`, `AUTH_MODE`, `API_KEYS`, `MAX_SCROLL_ATTEMPTS_CAP`.
 - `errors.md`: пункты CORS и SSL verify помечены как ✅ исправлено в v1.11.0.
 
+### Зависимости (полное обновление до последних совместимых версий)
+- **CVE-fixes**: `python-multipart 0.0.20→0.0.27`, `Pillow 11.3.0→12.2.0`, `lxml 6.0.0→6.1.0`, `requests 2.32.4→2.33.1`, `python-dotenv 1.1.1→1.2.2`, `werkzeug 3.1.3→3.1.8`, `pytest 8.4.1→9.0.3`. Транзитивно — `pdfminer-six` (через `pdfplumber`) и `starlette` (через `fastapi`).
+- **Прочее**: `fastapi 0.116.1→0.136.1`, `uvicorn 0.35.0→0.46.0`, `pdfplumber 0.11.7→0.11.9`, `striprtf 0.0.29→0.0.32`, `pandas 2.3.1→3.0.2` (major), `beautifulsoup4 4.13.4→4.13.5` (4.14 несовместим с extract-msg<0.56), `markdown 3.8.2→3.10.2`, `playwright 1.54.0→1.58.0`, `PyYAML 6.0.2→6.0.3`, `py7zr 1.0.0→1.1.0`, `extract-msg 0.54.1→0.55.0`, `structlog 25.4.0→25.5.0`, `pytest-asyncio 1.1.0→1.3.0`, `pytest-cov 6.2.1→7.1.0`, `pytest-mock 3.14.1→3.15.1`.
+- Новая зависимость: `defusedxml==0.7.1`.
+- **`requirements-lint.txt`** обновлён: `black 25.1.0→26.3.1`, `isort 5.13.2→8.0.1`, `flake8 7.1.1→7.3.0`, `flake8-import-order 0.18.2→0.19.2`, `flake8-bugbear 24.2.6→25.11.29`, `mypy 1.13.0→1.20.2`, `types-requests`/`types-PyYAML` → последние, `bandit 1.8.0→1.9.4`, `safety 3.4.0→3.7.0`.
+- **`requirements-test.txt`** переведён с `>=` на pinned `==`, рантайм-версии синхронизированы с `requirements.txt` (устранён risk drift между prod и тестами): `pytest 7.4.4→9.0.3`, `pytest-asyncio 0.23.2→1.3.0`, `pytest-cov 4.1.0→7.1.0`, `httpx 0.25.2→0.28.1`, `pytest-mock 3.12.0→3.15.1`, рантайм идентично основному файлу.
+- `pip-audit --strict` после обновления всех трёх файлов: **0 known vulnerabilities**. `uv pip compile` резолвит совместно все три файла без конфликтов (422 транзитивных пакета).
+
 ### Техническое
 - Версия обновлена до 1.11.0 в `app/config.py`.
 - Новый модуль: `app/auth.py`.
-- Зависимость: `defusedxml==0.7.1`.
 
 ---
 
