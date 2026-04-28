@@ -31,12 +31,18 @@ exclude =
     tests/test_*.err.txt
 
 per-file-ignores =
-    # Игнорируем некоторые правила в тестах
-    tests/*:F401,F811,S101
+    # Тесты: имена методов уже описательные, docstring-required правила тут не нужны.
+    # D100-D107 покрывают отсутствующие docstring у модуля/класса/метода/функции.
+    # D200/D205/D400/D401 — стилистические правила для оформления docstring.
+    tests/*:F401,F811,S101,D100,D101,D102,D103,D104,D107,D200,D205,D400,D401
     # __init__.py файлы могут содержать неиспользуемые импорты
     __init__.py:F401
     # Конфигурационные файлы
     app/config.py:E501
+    # FastAPI требует Depends()/Security()/Header() в default-аргументах —
+    # B008 здесь является ложным срабатыванием.
+    app/auth.py:B008
+    app/main.py:B008
 
 max-complexity = 20
 count = True

@@ -2062,9 +2062,10 @@ class TextExtractor:
 
     @staticmethod
     def _redact_url(url: str) -> str:
-        """
-        Маскирует URL для безопасного логирования: оставляет схему, хост и путь,
-        вырезает query-string и user-info (там могут быть API-ключи / токены).
+        """Маскирует URL для безопасного логирования.
+
+        Оставляет схему, хост и путь, вырезает query-string и user-info
+        (там могут быть API-ключи / токены).
         """
         try:
             parsed = urlparse(url)
