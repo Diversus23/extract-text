@@ -56,7 +56,7 @@ except ImportError:
 
     # Заглушка-исключение, чтобы except DecompressionBombError работал
     # даже если Pillow не установлен и в тестах, где Image мокается.
-    class DecompressionBombError(Exception):
+    class DecompressionBombError(Exception):  # type: ignore[no-redef]
         """Fallback при отсутствии Pillow."""
 
 
@@ -194,12 +194,12 @@ class TextExtractor:
         # Ищем подходящий метод извлечения
         extractor_method = extraction_methods.get(extension)
         if extractor_method:
-            return extractor_method(content)
+            return str(extractor_method(content))
 
         # Проверяем группы расширений
         for extensions_group, method in self._get_group_extraction_methods():
             if extension in extensions_group:
-                return method(content)
+                return str(method(content))
 
         raise ValueError(f"Unsupported file format: {extension}")
 
@@ -513,7 +513,7 @@ class TextExtractor:
 
         try:
             df = pd.read_csv(io.BytesIO(content))
-            return df.to_csv(index=False)
+            return str(df.to_csv(index=False))
 
         except Exception as e:
             logger.error(f"Ошибка при обработке CSV: {str(e)}")
@@ -775,7 +775,7 @@ class TextExtractor:
     def _get_programming_language(self, extension: str) -> str:
         """Определение языка программирования по расширению файла."""
         language_map = self._get_language_map()
-        return language_map.get(extension.lower(), "Source Code")
+        return str(language_map.get(extension.lower(), "Source Code"))
 
     def _get_language_map(self) -> dict:
         """Получение словаря соответствия расширений языкам программирования."""
@@ -952,7 +952,7 @@ class TextExtractor:
                 html = markdown.markdown(text)
                 if BeautifulSoup:
                     soup = BeautifulSoup(html, "html.parser")
-                    return soup.get_text()
+                    return str(soup.get_text())
 
             # Если markdown не установлен, возвращаем как есть
             return text
@@ -1000,7 +1000,7 @@ class TextExtractor:
         try:
             text = content.decode("utf-8", errors="replace")
             plain_text = rtf_to_text(text)
-            return plain_text
+            return str(plain_text)
 
         except Exception as e:
             logger.error(f"Ошибка при обработке RTF: {str(e)}")
@@ -3222,7 +3222,7 @@ class TextExtractor:
         """Парсинг изображений из HTML контента."""
         soup = BeautifulSoup(html_content, "lxml")
         img_tags = soup.find_all("img", src=True)
-        return img_tags[:max_images]
+        return list(img_tags[:max_images])
 
     def _categorize_images(self, img_tags: list, enable_base64: bool) -> tuple:
         """Категоризация изображений на base64 и URL."""
