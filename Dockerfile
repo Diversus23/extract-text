@@ -1,5 +1,5 @@
-# Используем официальный Python образ
-FROM python:3.11-slim
+# Используем официальный Python образ (минимум 3.12, поднято в v1.11.0)
+FROM python:3.12-slim
 
 # Устанавливаем системные зависимости
 RUN apt-get update && apt-get install -y \

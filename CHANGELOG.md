@@ -3,7 +3,9 @@
 ## [1.11.0] - 2026-04-28
 
 ### ⚠️ BREAKING CHANGES
+- **Минимальная версия Python поднята с 3.10 до 3.12.** Dockerfile переключён на `python:3.12-slim`, CI matrix теперь `3.12 / 3.13`, `mypy.python_version=3.12`, `black.target-version=py312`. Если использовался pinned 3.10/3.11 — пересобрать образ.
 - **`ExtractionOptions.follow_redirects` default изменён с `True` на `False`** ([app/main.py](app/main.py)). Запросы к `/v1/extract/url`, которые раньше следовали HTTP-редиректам автоматически, теперь по умолчанию останавливаются на первом 3xx и могут вернуть ошибку загрузки. Чтобы сохранить старое поведение, клиент должен явно указать `"extraction_options": {"follow_redirects": true}`. Это сделано для защиты от SSRF через цепочку редиректов: при `follow_redirects=true` каждый final_url повторно проходит проверку `_is_safe_url`.
+- **Удалён пакет `PyPDF2==3.0.1`** ([requirements.txt](requirements.txt), [app/extractors.py](app/extractors.py)). Имел неисправляемую CVE-59234 (проект deprecated, последний релиз — 2022). В коде использовался только как dead-import — фактическая работа с PDF идёт через `pdfplumber`. Если внешние интеграции импортировали `PyPDF2` транзитивно — установить `pypdf` (преемник).
 
 ### Безопасность (security hardening)
 - **SSRF при редиректах**: после `_determine_content_type`, `_extract_page_with_requests`, `_extract_page_with_playwright` и `_download_and_extract_file` итоговый `final_url` повторно валидируется через `_is_safe_url`. По умолчанию `ExtractionOptions.follow_redirects=False` (см. BREAKING выше). Жёсткий верхний предел `max_redirects=10`.
@@ -21,9 +23,12 @@
 - **Windows-fallback**: `import resource` обёрнут в try/except. На Windows функционал ограничения памяти/CPU подпроцессов отключается с предупреждением, разработка без Docker становится возможной.
 
 ### CI/CD
-- `safety check` больше не маскируется через `|| true` — pipeline падает при найденных CVE.
-- Coverage threshold поднят с 60% до 75% (`pytest.ini` и `ci.yml`).
+- `safety check` (deprecated с 01.06.2024) **полностью заменён на `pip-audit`** — pipeline падает при найденных CVE через `--strict`. Проверяются все три requirements-файла.
+- Coverage threshold поднят с 60% до 75% (`pytest.ini`, `pyproject.toml` и `ci.yml`).
 - Новый файл `tests/test_security.py` с тестами на SSRF-блокировки, Zip Slip, API-key auth, открытость `/health`.
+- CI matrix python обновлён: `3.10/3.11/3.12` → `3.12/3.13`.
+- `pyproject.toml`: `[tool.black].target-version = ['py312']` (было `py310/311/312`) — фиксит warning «Python 3.11 cannot parse code formatted for Python 3.12» в CI lint.
+- `Makefile.test-docker`: убраны хардкод-версии тестовых пакетов (`pytest==7.4.4` и др.) — теперь используется `pip install -r requirements-test.txt`. Coverage threshold поднят до 75%.
 
 ### Docker (prod-hardening)
 - `docker-compose.prod.yml`: добавлены `build:` (явная пересборка вместо наследования dev-образа), `volumes: []` (перебивает dev-mount `./app:/code/app` — в prod код только из образа), `deploy.resources.limits` (memory 4G, cpus 2.0) и `reservations` (memory 2G, cpus 1.0), `logging.options.max-size=50m / max-file=5`. `restart: always` был и до этого — не менялся.

@@ -7,7 +7,7 @@ on:
     branches: [ main, develop ]
 
 env:
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.12'
   IMAGE_NAME: text-extraction-api
 
 jobs:
@@ -112,7 +112,7 @@ jobs:
     needs: lint
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.12', '3.13']
         
     steps:
     - name: 📥 Checkout код
@@ -167,11 +167,16 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements-lint.txt
-        pip install -r requirements.txt
-        
-    - name: 🛡️ Проверка уязвимостей с Safety
+        pip install pip-audit
+
+    - name: 🛡️ Проверка уязвимостей с pip-audit
+      # safety check (deprecated с 01.06.2024) заменён на pip-audit — современный
+      # инструмент от PyPA, использующий osv.dev и PyPI advisory database.
+      # --strict: ненулевой exit при любой найденной CVE.
       run: |
-        safety check --json
+        pip-audit --requirement requirements.txt --strict --vulnerability-service pypi
+        pip-audit --requirement requirements-lint.txt --strict --vulnerability-service pypi
+        pip-audit --requirement requirements-test.txt --strict --vulnerability-service pypi
         
     - name: 🔍 Проверка безопасности кода с Bandit
       run: |

@@ -82,8 +82,7 @@ def sample_python_file(temp_dir):
     """Создает временный Python файл для тестов."""
     file_path = temp_dir / "test.py"
     with open(file_path, "w", encoding="utf-8") as f:
-        f.write(
-            """#!/usr/bin/env python3
+        f.write("""#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 \"\"\"
 Тестовый Python файл
@@ -95,8 +94,7 @@ def hello_world():
 
 if __name__ == "__main__":
     hello_world()
-"""
-        )
+""")
     return file_path
 
 
@@ -105,8 +103,7 @@ def sample_html_file(temp_dir):
     """Создает временный HTML файл для тестов."""
     file_path = temp_dir / "test.html"
     with open(file_path, "w", encoding="utf-8") as f:
-        f.write(
-            """<!DOCTYPE html>
+        f.write("""<!DOCTYPE html>
 <html>
 <head>
     <title>Тестовая страница</title>
@@ -119,8 +116,7 @@ def sample_html_file(temp_dir):
         <li>Элемент списка 2</li>
     </ul>
 </body>
-</html>"""
-        )
+</html>""")
     return file_path
 
 
@@ -129,8 +125,7 @@ def sample_xml_file(temp_dir):
     """Создает временный XML файл для тестов."""
     file_path = temp_dir / "test.xml"
     with open(file_path, "w", encoding="utf-8") as f:
-        f.write(
-            """<?xml version="1.0" encoding="UTF-8"?>
+        f.write("""<?xml version="1.0" encoding="UTF-8"?>
 <root>
     <item id="1">
         <name>Товар 1</name>
@@ -140,8 +135,7 @@ def sample_xml_file(temp_dir):
         <name>Товар 2</name>
         <price>200</price>
     </item>
-</root>"""
-        )
+</root>""")
     return file_path
 
 
@@ -150,8 +144,7 @@ def sample_yaml_file(temp_dir):
     """Создает временный YAML файл для тестов."""
     file_path = temp_dir / "test.yaml"
     with open(file_path, "w", encoding="utf-8") as f:
-        f.write(
-            """name: Тестовый проект
+        f.write("""name: Тестовый проект
 version: 1.0.0
 description: Описание тестового проекта
 dependencies:
@@ -160,8 +153,7 @@ dependencies:
 config:
   debug: true
   port: 8000
-"""
-        )
+""")
     return file_path
 
 

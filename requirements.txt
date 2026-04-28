@@ -5,8 +5,7 @@ uvicorn[standard]==0.46.0
 # Обработка файлов
 python-multipart==0.0.27
 
-# PDF обработка
-PyPDF2==3.0.1
+# PDF обработка (PyPDF2 убран в v1.11.0 — deprecated, имел CVE-59234)
 pdfplumber==0.11.9
 
 # Word и Office документы

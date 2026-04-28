@@ -11,10 +11,11 @@ import tarfile
 import tempfile
 import threading
 import time
-from defusedxml import ElementTree as ET
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from defusedxml import ElementTree as ET
 
 # Импорты для архивов
 try:
@@ -27,12 +28,12 @@ try:
 except ImportError:
     py7zr = None
 
-# Импорты для различных форматов
+# Импорты для различных форматов.
+# PyPDF2 убран в v1.11.0 — пакет deprecated, имеет неисправляемую CVE-59234,
+# и в коде не использовался (только pdfplumber).
 try:
     import pdfplumber
-    import PyPDF2
 except ImportError:
-    PyPDF2 = None
     pdfplumber = None
 
 try:
@@ -2275,7 +2276,9 @@ class TextExtractor:
 
                 # Повторная SSRF-проверка после редиректов в Playwright.
                 if final_url != url and not self._is_safe_url(final_url):
-                    raise ValueError(f"Redirected to blocked URL: {self._redact_url(final_url)}")
+                    raise ValueError(
+                        f"Redirected to blocked URL: {self._redact_url(final_url)}"
+                    )
 
                 # Ждем дополнительной загрузки JS (если включено)
                 if enable_javascript:
@@ -2475,7 +2478,9 @@ class TextExtractor:
             # повторно проверяем безопасность final_url.
             if final_url != url and not self._is_safe_url(final_url):
                 response.close()
-                raise ValueError(f"Redirected to blocked URL: {self._redact_url(final_url)}")
+                raise ValueError(
+                    f"Redirected to blocked URL: {self._redact_url(final_url)}"
+                )
 
             logger.info(f"Определен Content-Type: {content_type} для URL: {final_url}")
 
@@ -2512,7 +2517,9 @@ class TextExtractor:
 
                 # Повторная SSRF-проверка после редиректов.
                 if final_url != url and not self._is_safe_url(final_url):
-                    raise ValueError(f"Redirected to blocked URL: {self._redact_url(final_url)}")
+                    raise ValueError(
+                        f"Redirected to blocked URL: {self._redact_url(final_url)}"
+                    )
 
                 logger.info(
                     f"Определен Content-Type через GET: {content_type} для URL: {final_url}"
@@ -2923,7 +2930,9 @@ class TextExtractor:
 
             # Повторная SSRF-проверка после редиректов.
             if final_url != url and not self._is_safe_url(final_url):
-                raise ValueError(f"Redirected to blocked URL: {self._redact_url(final_url)}")
+                raise ValueError(
+                    f"Redirected to blocked URL: {self._redact_url(final_url)}"
+                )
 
             logger.info(
                 f"HTML получен через requests, размер: {len(html_content)} символов"

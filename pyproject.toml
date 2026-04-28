@@ -1,6 +1,7 @@
 [tool.black]
 line-length = 88
-target-version = ['py310', 'py311', 'py312']
+# Минимальная поддерживаемая версия — Python 3.12 (поднята с 3.10 в v1.11.0).
+target-version = ['py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -32,7 +33,7 @@ known_third_party = ["fastapi", "uvicorn", "pytest", "requests"]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false  # Отключено для постепенного внедрения
@@ -81,7 +82,7 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=html:coverage_html",
     "--cov-report=xml:coverage.xml",
-    "--cov-fail-under=60",
+    "--cov-fail-under=75",
     "--strict-markers",
     "--disable-warnings",
     "-v"

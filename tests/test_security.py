@@ -21,7 +21,6 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.extractors import TextExtractor
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -213,7 +212,9 @@ class TestScrollCap:
         user_value = 999
         effective = min(max(user_value, 0), cap)
 
-        assert effective == cap, f"999 должен clamp-иться до {cap}, получили {effective}"
+        assert (
+            effective == cap
+        ), f"999 должен clamp-иться до {cap}, получили {effective}"
         assert effective <= cap
 
     def test_negative_user_value_clamped_to_zero(self):

@@ -13,7 +13,15 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
 import uvicorn
-from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -643,8 +651,13 @@ async def extract_text_from_url(request: URLRequest):
                     "message": "Не удалось загрузить страницу: ошибка соединения.",
                 },
             )
-        elif "blocked" in error_msg.lower() or "redirected to blocked" in error_msg.lower():
-            logger.warning(f"Запрос к заблокированному URL после редиректа {url}: {error_msg}")
+        elif (
+            "blocked" in error_msg.lower()
+            or "redirected to blocked" in error_msg.lower()
+        ):
+            logger.warning(
+                f"Запрос к заблокированному URL после редиректа {url}: {error_msg}"
+            )
             return JSONResponse(
                 status_code=400,
                 content={
