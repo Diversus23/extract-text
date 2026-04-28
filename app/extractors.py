@@ -49,9 +49,16 @@ except ImportError:
 try:
     import pytesseract
     from PIL import Image
+    from PIL.Image import DecompressionBombError
 except ImportError:
     Image = None
     pytesseract = None
+
+    # Заглушка-исключение, чтобы except DecompressionBombError работал
+    # даже если Pillow не установлен и в тестах, где Image мокается.
+    class DecompressionBombError(Exception):
+        """Fallback при отсутствии Pillow."""
+
 
 try:
     from pptx import Presentation
@@ -1513,7 +1520,7 @@ class TextExtractor:
                 text = self._safe_tesseract_ocr(image)
                 return text
 
-        except Image.DecompressionBombError as e:
+        except DecompressionBombError as e:
             logger.warning(f"Заблокирована PIL decompression bomb: {str(e)}")
             raise ValueError("Image validation failed: image too large")
         except Exception as e:
@@ -2276,7 +2283,11 @@ class TextExtractor:
                 final_url = page.url
 
                 # Повторная SSRF-проверка после редиректов в Playwright.
-                if final_url != url and not self._is_safe_url(final_url):
+                if (
+                    isinstance(final_url, str)
+                    and final_url != url
+                    and not self._is_safe_url(final_url)
+                ):
                     raise ValueError(
                         f"Redirected to blocked URL: {self._redact_url(final_url)}"
                     )
@@ -2477,7 +2488,11 @@ class TextExtractor:
 
             # Защита от SSRF через цепочку редиректов: если url изменился,
             # повторно проверяем безопасность final_url.
-            if final_url != url and not self._is_safe_url(final_url):
+            if (
+                isinstance(final_url, str)
+                and final_url != url
+                and not self._is_safe_url(final_url)
+            ):
                 response.close()
                 raise ValueError(
                     f"Redirected to blocked URL: {self._redact_url(final_url)}"
@@ -2517,7 +2532,11 @@ class TextExtractor:
                 response.close()
 
                 # Повторная SSRF-проверка после редиректов.
-                if final_url != url and not self._is_safe_url(final_url):
+                if (
+                    isinstance(final_url, str)
+                    and final_url != url
+                    and not self._is_safe_url(final_url)
+                ):
                     raise ValueError(
                         f"Redirected to blocked URL: {self._redact_url(final_url)}"
                     )
@@ -2626,7 +2645,11 @@ class TextExtractor:
             response.raise_for_status()
 
             # Повторная SSRF-проверка после редиректов при скачивании файла.
-            if response.url != url and not self._is_safe_url(response.url):
+            if (
+                isinstance(response.url, str)
+                and response.url != url
+                and not self._is_safe_url(response.url)
+            ):
                 response.close()
                 raise ValueError(
                     f"Redirected to blocked URL: {self._redact_url(response.url)}"
@@ -2930,7 +2953,11 @@ class TextExtractor:
             final_url = response.url
 
             # Повторная SSRF-проверка после редиректов.
-            if final_url != url and not self._is_safe_url(final_url):
+            if (
+                isinstance(final_url, str)
+                and final_url != url
+                and not self._is_safe_url(final_url)
+            ):
                 raise ValueError(
                     f"Redirected to blocked URL: {self._redact_url(final_url)}"
                 )

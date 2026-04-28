@@ -5,7 +5,7 @@ import mimetypes
 import os
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import requests
@@ -468,17 +468,20 @@ class TestRealFiles:
                 # Текст может быть пустым если OCR не распознал ничего
                 assert "text" in data["files"][0]
 
-    @patch("app.extractors.PyPDF2.PdfReader")
+    @patch("app.extractors.pdfplumber.open")
     def test_extract_real_pdf_file(
-        self, mock_pdf_reader, test_client, real_test_files_dir
+        self, mock_pdf_open, test_client, real_test_files_dir
     ):
         """Тест извлечения из реального PDF файла."""
-        # Мокаем PyPDF2 для стабильности тестов
-        mock_reader = Mock()
+        # Мокаем pdfplumber для стабильности тестов (PyPDF2 убран в v1.11.0)
+        mock_pdf = MagicMock()
         mock_page = Mock()
         mock_page.extract_text.return_value = "Текст из PDF документа"
-        mock_reader.pages = [mock_page]
-        mock_pdf_reader.return_value = mock_reader
+        mock_page.extract_tables.return_value = []
+        mock_page.images = []
+        mock_pdf.pages = [mock_page]
+        mock_pdf_open.return_value.__enter__.return_value = mock_pdf
+        mock_pdf_open.return_value.__exit__.return_value = False
 
         pdf_file = real_test_files_dir / "test.pdf"
 
