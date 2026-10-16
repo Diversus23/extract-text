@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     libreoffice \
     antiword \
     libmagic1 \
+    ffmpeg \
     curl \
     wget \
     && rm -rf /var/lib/apt/lists/*
@@ -28,6 +29,19 @@ COPY requirements.txt .
 # Устанавливаем Python зависимости от root (стандартная практика в Docker)
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
+
+# Веса модели распознавания речи (GigaAM v3) и silero VAD скачиваются при сборке:
+# в рантайме образ работает без интернета. GIGAAM_QUANTIZATION: пусто = fp32 (~0.9 ГБ),
+# int8 = компактные веса энкодера (~230 МБ). Скрипт копируется до кода приложения,
+# чтобы слой с весами не пересобирался при каждой правке кода.
+ARG GIGAAM_QUANTIZATION=""
+ENV MODELS_DIR=/opt/models \
+    TRANSCRIPTION_QUANTIZATION=${GIGAAM_QUANTIZATION}
+COPY scripts/download_models.py /tmp/download_models.py
+RUN python /tmp/download_models.py && \
+    chmod -R a+rX /opt/models && \
+    rm /tmp/download_models.py
+ENV HF_HUB_OFFLINE=1
 
 # Устанавливаем замещающие пакеты для зависимостей Playwright
 RUN apt-get update && apt-get install -y \

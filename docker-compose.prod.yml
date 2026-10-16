@@ -12,6 +12,10 @@ services:
     restart: always
     env_file:
       - .env
+    environment:
+      # Распознавание речи вынесено в отдельный сервис api-audio: иначе каждый из
+      # воркеров (2*CPU+1) держал бы свою копию модели в памяти.
+      - ENABLE_TRANSCRIPTION=false
     deploy:
       resources:
         limits:
@@ -20,6 +24,41 @@ services:
         reservations:
           memory: 2G
           cpus: '1.0'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Сервис расшифровки аудио (POST /v1/transcribe): тот же образ, один воркер,
+  # модель загружается один раз. Порт 7556.
+  api-audio:
+    container_name: extract-text-audio-prod
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 7556 --workers 1
+    ports:
+      - "7556:7556"
+    restart: always
+    env_file:
+      - .env
+    environment:
+      # os.cpu_count() внутри контейнера видит все ядра хоста, а не лимит cpus
+      - TRANSCRIPTION_THREADS=${AUDIO_CPUS:-4}
+    deploy:
+      resources:
+        limits:
+          # fp32-модель занимает около 1.5 ГБ; значение уточняется замером на целевом сервере
+          memory: 4G
+          cpus: '${AUDIO_CPUS:-4}'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7556/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     logging:
       driver: "json-file"
       options:
