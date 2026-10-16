@@ -52,6 +52,9 @@ werkzeug==3.1.8
 python-magic==0.4.27
 extract-msg==0.55.0
 
+# Распознавание речи (транскрибация аудио, v1.12.0)
+onnx-asr[cpu,hub]==0.12.0
+
 # Логирование
 structlog==25.5.0
 

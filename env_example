@@ -187,3 +187,35 @@ MAX_SCROLL_ATTEMPTS=5
 # ENABLE_JAVASCRIPT=true
 # WEB_PAGE_DELAY=10
 # JS_RENDER_TIMEOUT=20 
+# ===========================================
+# ТРАНСКРИБАЦИЯ АУДИО (v1.12.0, эндпоинт /v1/transcribe)
+# ===========================================
+
+# Включить/выключить эндпоинт. При false отвечает 503, модель не загружается.
+# Для сервиса документов в prod-режиме ставится false (см. docker-compose.prod.yml).
+ENABLE_TRANSCRIPTION=true
+
+# Модель распознавания (onnx-asr). GigaAM v3 e2e RNN-T: русский язык, с пунктуацией.
+TRANSCRIPTION_MODEL=gigaam-v3-e2e-rnnt
+
+# Вариант весов: пусто = fp32 (лучшее качество, ~0.9 GB), int8 = ~230 MB энкодера.
+# Должен совпадать с build-аргументом GIGAAM_QUANTIZATION при сборке образа.
+TRANSCRIPTION_QUANTIZATION=
+
+# Каталог с весами модели и VAD внутри образа (скачиваются при сборке)
+MODELS_DIR=/opt/models
+
+# Максимальная длительность записи в секундах (30 минут)
+MAX_AUDIO_DURATION_SECONDS=1800
+
+# Таймаут распознавания в секундах (отдельно от PROCESSING_TIMEOUT_SECONDS)
+TRANSCRIPTION_TIMEOUT_SECONDS=900
+
+# Сколько распознаваний выполняется одновременно в одном процессе
+TRANSCRIPTION_MAX_CONCURRENCY=1
+
+# Сколько секунд запрос ждёт свободный слот, прежде чем получить 503
+TRANSCRIPTION_QUEUE_WAIT_SECONDS=30
+
+# Число потоков onnxruntime (по умолчанию — число ядер CPU контейнера)
+# TRANSCRIPTION_THREADS=4

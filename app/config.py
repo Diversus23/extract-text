@@ -66,6 +66,43 @@ class Settings:
         os.getenv("ENABLE_RESOURCE_LIMITS", "true").lower() == "true"
     )
 
+    # Настройки транскрибации аудио (эндпоинт /v1/transcribe)
+    # Аудио-расширения держим отдельно от SUPPORTED_FORMATS: /v1/extract/* аудио не принимают.
+    AUDIO_FORMATS: List[str] = [
+        "mp3",
+        "wav",
+        "ogg",
+        "opus",
+        "flac",
+        "m4a",
+        "aac",
+        "wma",
+        "amr",
+    ]
+    ENABLE_TRANSCRIPTION: bool = (
+        os.getenv("ENABLE_TRANSCRIPTION", "true").lower() == "true"
+    )
+    TRANSCRIPTION_MODEL: str = os.getenv("TRANSCRIPTION_MODEL", "gigaam-v3-e2e-rnnt")
+    # Вариант весов: пусто = fp32, "int8" = квантизованная версия
+    TRANSCRIPTION_QUANTIZATION: str = os.getenv("TRANSCRIPTION_QUANTIZATION", "")
+    # Каталог с весами модели и VAD внутри образа (скачиваются на этапе сборки)
+    MODELS_DIR: str = os.getenv("MODELS_DIR", "/opt/models")
+    MAX_AUDIO_DURATION_SECONDS: int = int(
+        os.getenv("MAX_AUDIO_DURATION_SECONDS", "1800")
+    )  # 30 минут
+    TRANSCRIPTION_TIMEOUT_SECONDS: int = int(
+        os.getenv("TRANSCRIPTION_TIMEOUT_SECONDS", "900")
+    )
+    TRANSCRIPTION_MAX_CONCURRENCY: int = int(
+        os.getenv("TRANSCRIPTION_MAX_CONCURRENCY", "1")
+    )
+    TRANSCRIPTION_QUEUE_WAIT_SECONDS: int = int(
+        os.getenv("TRANSCRIPTION_QUEUE_WAIT_SECONDS", "30")
+    )
+    TRANSCRIPTION_THREADS: int = int(
+        os.getenv("TRANSCRIPTION_THREADS", str(os.cpu_count() or 1))
+    )
+
     # Настройки OCR
     OCR_LANGUAGES: str = os.getenv("OCR_LANGUAGES", "rus+eng")
 

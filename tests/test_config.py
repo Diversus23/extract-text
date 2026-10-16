@@ -241,3 +241,69 @@ class TestSettings:
         importlib.reload(config)
         settings = config.Settings()
         assert settings.MIN_IMAGE_SIZE_FOR_OCR == 10000
+
+
+@pytest.mark.unit
+class TestTranscriptionSettings:
+    """Тесты настроек транскрибации аудио."""
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_transcription_defaults(self):
+        """Значения по умолчанию для транскрибации."""
+        import importlib
+
+        from app import config
+
+        importlib.reload(config)
+        settings = config.Settings()
+
+        assert settings.AUDIO_FORMATS == [
+            "mp3",
+            "wav",
+            "ogg",
+            "opus",
+            "flac",
+            "m4a",
+            "aac",
+            "wma",
+            "amr",
+        ]
+        assert settings.ENABLE_TRANSCRIPTION is True
+        assert settings.TRANSCRIPTION_MODEL == "gigaam-v3-e2e-rnnt"
+        assert settings.TRANSCRIPTION_QUANTIZATION == ""
+        assert settings.MODELS_DIR == "/opt/models"
+        assert settings.MAX_AUDIO_DURATION_SECONDS == 1800
+        assert settings.TRANSCRIPTION_TIMEOUT_SECONDS == 900
+        assert settings.TRANSCRIPTION_MAX_CONCURRENCY == 1
+        assert settings.TRANSCRIPTION_QUEUE_WAIT_SECONDS == 30
+        assert settings.TRANSCRIPTION_THREADS == (os.cpu_count() or 1)
+
+    @patch.dict(
+        os.environ,
+        {
+            "MAX_AUDIO_DURATION_SECONDS": "60",
+            "ENABLE_TRANSCRIPTION": "false",
+            "TRANSCRIPTION_MAX_CONCURRENCY": "2",
+            "TRANSCRIPTION_QUANTIZATION": "int8",
+        },
+    )
+    def test_transcription_env_overrides(self):
+        """Переопределение настроек транскрибации через окружение."""
+        import importlib
+
+        from app import config
+
+        importlib.reload(config)
+        settings = config.Settings()
+
+        assert settings.MAX_AUDIO_DURATION_SECONDS == 60
+        assert settings.ENABLE_TRANSCRIPTION is False
+        assert settings.TRANSCRIPTION_MAX_CONCURRENCY == 2
+        assert settings.TRANSCRIPTION_QUANTIZATION == "int8"
+
+    def test_audio_formats_not_in_supported_formats(self):
+        """Аудио-расширения не должны попадать в SUPPORTED_FORMATS."""
+        settings = Settings()
+        supported = set(sum(settings.SUPPORTED_FORMATS.values(), []))
+
+        assert set(settings.AUDIO_FORMATS).isdisjoint(supported)
