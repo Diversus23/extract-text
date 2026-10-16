@@ -47,6 +47,7 @@ app/
 ├── main.py        # FastAPI: 4 эндпоинта, lifespan, middleware, Pydantic-модели
 ├── extractors.py  # TextExtractor: единая точка извлечения по расширению (~3300 строк)
 ├── config.py      # Settings (env-vars), SUPPORTED_FORMATS, MIME_TO_EXTENSION, VERSION
+├── transcription.py  # /v1/transcribe: ffprobe/ffmpeg → GigaAM v3 (onnx-asr) + silero VAD, сегменты, говорящие по каналам
 └── utils.py       # sanitize_filename, validate_file_type, cleanup_temp_files, setup_logging
 ```
 
@@ -70,6 +71,10 @@ app/
 ### Веб-экстракция (`/v1/extract/url`)
 
 Двухрежимная: `requests` + BeautifulSoup для статики; Playwright (Chromium) для JS-рендеринга, lazy loading (защита от бесконечного скролла через `MAX_SCROLL_ATTEMPTS`), base64-изображений. Параметры передаются через Pydantic-модель `ExtractionOptions` (см. `app/main.py:54`) и переопределяют дефолты из `config.py`. Отдельная защита от SSRF: `BLOCKED_IP_RANGES` и `BLOCKED_HOSTNAMES`. Если URL ведёт на файл (определяется HEAD-запросом, `HEAD_REQUEST_TIMEOUT`), он скачивается и обрабатывается как обычный файл.
+
+### Расшифровка аудио (`/v1/transcribe`, v1.12.0)
+
+Отдельный контур в `app/transcription.py`; аудио-расширения живут в `settings.AUDIO_FORMATS`, НЕ в `SUPPORTED_FORMATS` (`/v1/extract/*` аудио отклоняют). Файл пишется в `TemporaryDirectory` как `input.<ext>`, `ffprobe`/`ffmpeg` запускаются без shell с `-protocol_whitelist file` и принудительным демуксером по расширению (`FFMPEG_DEMUXERS`). Слот распознавания (`Transcriber.slot`) занимается до декодирования; модель грузится лениво из `MODELS_DIR` только офлайн; отмена по таймауту — флаг `cancel_event` + `deadline`, проверяются между VAD-сегментами. Стерео распознаётся по каналам, `speaker` = метка из `channel_labels`, для моно `null`. В prod распознавание вынесено в сервис `api-audio` (`WORKERS=1`, порт 7556), основной сервис запускается с `ENABLE_TRANSCRIPTION=false`. Тесты с настоящей моделью (`tests/test_transcription_real.py`) пропускаются, если нет весов в `MODELS_DIR`.
 
 ### Безопасность (обязательно учитывать при правках)
 

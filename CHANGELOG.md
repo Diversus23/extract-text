@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.12.0] - 2026-10-16
+
+### Добавлено
+- **Расшифровка аудио: `POST /v1/transcribe`** ([app/transcription.py](app/transcription.py), [app/main.py](app/main.py)). Аудиофайл принимается по `multipart/form-data`, в ответе — текст, сегменты с тайм-кодами (`start`, `end`), статус `text_status` (`ok` / `no_speech`), `filename` и необязательный `external_id` клиента для сопоставления результата с исходной записью. Режим синхронный.
+- **Разметка говорящих по каналам.** Для стерео-записей (например, звонки МИКО с раздельными каналами) каждый канал распознаётся отдельно, `speaker` берётся из параметра `channel_labels` (`client,operator`) или `channel_0` / `channel_1`; для моно и многоканальных записей `speaker` и `channel` равны `null`.
+- **Модель GigaAM v3 (e2e RNN-T, русский язык, с пунктуацией)** через [onnx-asr](https://github.com/istupakov/onnx-asr) (`onnx-asr[cpu,hub]==0.12.0`) и silero VAD. Веса скачиваются при сборке образа ([scripts/download_models.py](scripts/download_models.py)), в рантайме интернет не нужен (`HF_HUB_OFFLINE=1`). Build-аргумент `GIGAAM_QUANTIZATION=int8` собирает образ с компактными весами.
+- **Форматы аудио:** `mp3, wav, ogg, opus, flac, m4a, aac, wma, amr` (`settings.AUDIO_FORMATS`, отдельно от `SUPPORTED_FORMATS`; `/v1/extract/*` аудио по-прежнему отклоняют с 415). В образ добавлен `ffmpeg`.
+- **Настройки:** `ENABLE_TRANSCRIPTION`, `TRANSCRIPTION_MODEL`, `TRANSCRIPTION_QUANTIZATION`, `MODELS_DIR`, `MAX_AUDIO_DURATION_SECONDS` (1800), `TRANSCRIPTION_TIMEOUT_SECONDS` (900), `TRANSCRIPTION_MAX_CONCURRENCY`, `TRANSCRIPTION_QUEUE_WAIT_SECONDS`, `TRANSCRIPTION_THREADS`, `TRANSCRIPTION_VAD_MIN_SILENCE_MS`, `TRANSCRIPTION_VAD_SPEECH_PAD_MS` (см. [env_example](env_example)).
+- **`docker-compose.prod.yml`:** отдельный сервис `api-audio` из того же образа (один воркер, порт 7556), основной сервис запускается с `ENABLE_TRANSCRIPTION=false`, чтобы модель не дублировалась в каждом воркере.
+- Коды ответов `/v1/transcribe`: 400, 401, 413, 415, 422, 500, 503 (с `Retry-After`, если сервис занят), 504 — в формате `{status, filename, message}`.
+
+### Безопасность
+- `ffprobe` и `ffmpeg` запускаются без shell, под ограничениями ресурсов, демуксер выбирается принудительно по расширению, разрешён только протокол `file`: плейлисты и concat-скрипты не разворачиваются (защита от SSRF и чтения локальных файлов). Лимит длительности применяется и после декодирования, если длительность в метаданных неизвестна.
+- Имя файла от клиента не используется для записи на диск; временный каталог удаляется всегда, в том числе при таймауте и отмене.
+- При таймауте рабочий поток останавливается по флагу отмены между сегментами и не продолжает нагружать CPU.
+
+### Изменено
+- Размер образа вырос: `ffmpeg` и веса модели (около 0,9 ГБ в fp32, около 0,25 ГБ энкодера в int8).
+- Сборка образа требует доступа к Hugging Face для скачивания весов.
+- `docs/TZ.md`: добавлен раздел 4.7 с контрактом `/v1/transcribe`, Swagger UI перенесён в 4.8.
+
 ## [1.11.0] - 2026-04-28
 
 ### ⚠️ BREAKING CHANGES
