@@ -3,6 +3,7 @@
 import json
 import logging
 import subprocess
+import tempfile
 import threading
 import time
 from contextlib import contextmanager
@@ -481,3 +482,57 @@ def get_transcriber() -> Transcriber:
             if _transcriber is None:
                 _transcriber = Transcriber()
     return _transcriber
+
+
+@dataclass(frozen=True)
+class TranscriptionResult:
+    """Итог обработки файла: длительность, исходное число каналов, сегменты."""
+
+    duration: float
+    channels: int
+    segments: list[Segment]
+
+
+def transcribe_bytes(
+    content: bytes,
+    *,
+    extension: str,
+    channel_labels: list[str],
+    cancel_event: threading.Event,
+    deadline: float,
+    transcriber: Optional[Transcriber] = None,
+) -> TranscriptionResult:
+    """
+    Расшифровывает аудиофайл целиком: зондирование, декодирование, распознавание.
+
+    Слот распознавания занимается до зондирования и декодирования: декодированный
+    PCM длинной записи занимает десятки мегабайт, и ожидающие запросы не должны его
+    копить. Файл пишется во временный каталог под фиксированным именем
+    input.<расширение>, имя от клиента не используется; каталог удаляется всегда.
+
+    Raises:
+        TranscriberBusyError: нет свободного слота.
+        AudioFormatError, AudioTooLongError: проблемы с файлом.
+        ModelUnavailableError: нет модели или ffmpeg.
+        TranscriptionCancelled: отмена или истёк дедлайн.
+    """
+    transcriber = transcriber or get_transcriber()
+
+    with transcriber.slot(settings.TRANSCRIPTION_QUEUE_WAIT_SECONDS):
+        with tempfile.TemporaryDirectory(prefix="transcribe_") as directory:
+            path = Path(directory) / f"input.{extension}"
+            path.write_bytes(content)
+
+            info = probe_audio(path, extension)
+            pcm = decode_audio(path, extension, info.channels)
+
+        per_channel = [
+            transcriber.recognize(pcm[channel], cancel_event, deadline)
+            for channel in range(pcm.shape[0])
+        ]
+
+    return TranscriptionResult(
+        duration=pcm.shape[1] / SAMPLE_RATE,
+        channels=info.channels,
+        segments=build_segments(per_channel, channel_labels),
+    )
