@@ -1,12 +1,38 @@
 """Расшифровка речи из аудиофайлов (эндпоинт /v1/transcribe)."""
 
+import json
 import logging
+import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
+import numpy as np
+
 from app.config import settings
+from app.utils import run_subprocess_with_limits
 
 logger = logging.getLogger(__name__)
+
+# Частота дискретизации, с которой работает модель распознавания
+SAMPLE_RATE = 16000
+
+# Демуксер ffmpeg принудительно выбирается по расширению: автоопределение формата
+# позволило бы подсунуть плейлист/concat-скрипт и заставить ffmpeg читать сеть или файлы.
+FFMPEG_DEMUXERS = {
+    "mp3": "mp3",
+    "wav": "wav",
+    "ogg": "ogg",
+    "opus": "ogg",
+    "flac": "flac",
+    "m4a": "mov",
+    "aac": "aac",
+    "wma": "asf",
+    "amr": "amr",
+}
+
+PROBE_TIMEOUT_SECONDS = 30
+DECODE_TIMEOUT_SECONDS = 120
 
 
 @dataclass(frozen=True)
@@ -165,3 +191,145 @@ def build_response(
             for segment in segments
         ],
     }
+
+
+@dataclass(frozen=True)
+class AudioInfo:
+    """Сведения об аудиофайле из ffprobe."""
+
+    duration: Optional[float]
+    channels: int
+
+
+def _demuxer_for(extension: str) -> str:
+    """Демуксер ffmpeg для расширения; неизвестное расширение — ошибка файла."""
+    demuxer = FFMPEG_DEMUXERS.get(extension.lower())
+    if demuxer is None:
+        raise AudioFormatError(f"Неподдерживаемый формат аудио: .{extension}")
+    return demuxer
+
+
+def _run_media_tool(command: list, timeout: int) -> subprocess.CompletedProcess:
+    """
+    Запускает ffprobe/ffmpeg с ограничениями ресурсов.
+
+    Отсутствие бинарника — проблема сервиса (503), а таймаут, лимит памяти
+    и ненулевой код — проблема файла (422).
+    """
+    try:
+        result = run_subprocess_with_limits(command, timeout=timeout, text=False)
+    except FileNotFoundError as error:
+        logger.error(f"Не найден {command[0]}: {error}")
+        raise ModelUnavailableError("Сервис обработки аудио недоступен.") from error
+    except (subprocess.TimeoutExpired, MemoryError) as error:
+        logger.error(f"{command[0]} прерван ({type(error).__name__})")
+        raise AudioFormatError("Не удалось обработать аудиофайл.") from error
+
+    if result.returncode != 0:
+        stderr = (result.stderr or b"").decode("utf-8", errors="replace")[:500]
+        logger.warning(f"{command[0]} завершился с кодом {result.returncode}: {stderr}")
+        raise AudioFormatError("Файл повреждён или не является аудиозаписью.")
+    return result
+
+
+def probe_audio(path: Path, extension: str) -> AudioInfo:
+    """
+    Определяет число каналов и длительность первой аудиодорожки через ffprobe.
+
+    Длительность может быть неизвестна (None) — тогда лимит проверяется
+    после декодирования.
+
+    Raises:
+        AudioFormatError: нет аудиодорожки или файл не читается.
+        AudioTooLongError: известная длительность больше лимита.
+    """
+    command = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-protocol_whitelist",
+        "file",
+        "-f",
+        _demuxer_for(extension),
+        "-select_streams",
+        "a:0",
+        "-show_entries",
+        "stream=channels:format=duration",
+        "-of",
+        "json",
+        str(path),
+    ]
+    result = _run_media_tool(command, PROBE_TIMEOUT_SECONDS)
+
+    try:
+        data = json.loads(result.stdout)
+        stream = data["streams"][0]
+        channels = int(stream["channels"])
+    except (ValueError, KeyError, IndexError, TypeError) as error:
+        raise AudioFormatError("В файле не найдена аудиодорожка.") from error
+
+    duration: Optional[float] = None
+    try:
+        parsed = float((data.get("format") or {}).get("duration"))
+        if parsed > 0:
+            duration = parsed
+    except (TypeError, ValueError):
+        duration = None
+
+    if duration is not None and duration > settings.MAX_AUDIO_DURATION_SECONDS:
+        raise AudioTooLongError(
+            f"Запись длиннее допустимых {settings.MAX_AUDIO_DURATION_SECONDS} секунд."
+        )
+    return AudioInfo(duration=duration, channels=channels)
+
+
+def decode_audio(path: Path, extension: str, channels: int) -> np.ndarray:
+    """
+    Декодирует первую аудиодорожку в PCM int16, 16 кГц.
+
+    Returns:
+        Массив формы (n_channels, n_samples): два канала для стерео, во всех
+        остальных случаях один (микс в моно).
+
+    Raises:
+        AudioFormatError: ошибка декодирования или пустой результат.
+        AudioTooLongError: декодированный звук длиннее лимита.
+    """
+    n_channels = 2 if channels == 2 else 1
+    max_seconds = settings.MAX_AUDIO_DURATION_SECONDS
+    command = [
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-protocol_whitelist",
+        "file",
+        "-f",
+        _demuxer_for(extension),
+        "-i",
+        str(path),
+        "-map",
+        "0:a:0",
+        "-vn",
+        "-ac",
+        str(n_channels),
+        "-ar",
+        str(SAMPLE_RATE),
+        # Страховка на случай неизвестной длительности: декодируем не больше лимита + 1 с
+        "-t",
+        str(max_seconds + 1),
+        "-f",
+        "s16le",
+        "-",
+    ]
+    result = _run_media_tool(command, DECODE_TIMEOUT_SECONDS)
+
+    frame_bytes = 2 * n_channels
+    raw = result.stdout[: len(result.stdout) - len(result.stdout) % frame_bytes]
+    if not raw:
+        raise AudioFormatError("В файле нет звука.")
+
+    pcm = np.frombuffer(raw, dtype="<i2").reshape(-1, n_channels).T
+    if pcm.shape[1] > max_seconds * SAMPLE_RATE:
+        raise AudioTooLongError(f"Запись длиннее допустимых {max_seconds} секунд.")
+    return np.ascontiguousarray(pcm)
