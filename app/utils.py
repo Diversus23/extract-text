@@ -212,6 +212,16 @@ def validate_file_type(content: bytes, filename: str) -> tuple[bool, Optional[st
             "xml": ["application/xml", "text/xml"],
             "yaml": ["text/plain", "application/x-yaml"],
             "yml": ["text/plain", "application/x-yaml"],
+            # Аудио (эндпоинт /v1/transcribe)
+            "mp3": ["audio/mpeg"],
+            "wav": ["audio/x-wav", "audio/wav", "audio/vnd.wave"],
+            "ogg": ["audio/ogg", "application/ogg"],
+            "opus": ["audio/ogg", "application/ogg", "audio/opus"],
+            "flac": ["audio/flac", "audio/x-flac"],
+            "m4a": ["audio/x-m4a", "audio/mp4", "video/mp4"],
+            "aac": ["audio/aac", "audio/x-hx-aac-adts"],
+            "wma": ["video/x-ms-asf", "audio/x-ms-wma"],
+            "amr": ["audio/amr", "audio/AMR"],
             # Архивы
             "zip": ["application/zip"],
             "rar": ["application/vnd.rar"],

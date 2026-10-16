@@ -8,6 +8,7 @@ import asyncio
 import base64
 import logging
 import os
+import threading
 import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
@@ -18,6 +19,7 @@ from fastapi import (
     Depends,
     FastAPI,
     File,
+    Form,
     HTTPException,
     Request,
     UploadFile,
@@ -30,9 +32,17 @@ from pydantic import BaseModel, Field
 from app.auth import verify_api_key
 from app.config import settings
 from app.extractors import TextExtractor
+from app.transcription import (
+    TranscriptionCancelled,
+    TranscriptionError,
+    build_response,
+    parse_channel_labels,
+    transcribe_bytes,
+)
 from app.utils import (
     cleanup_recent_temp_files,
     cleanup_temp_files,
+    get_file_extension,
     sanitize_filename,
     setup_logging,
     validate_file_type,
@@ -44,6 +54,18 @@ logger = logging.getLogger(__name__)
 
 # Константы для FastAPI аргументов
 FILE_UPLOAD = File(...)
+CHANNEL_LABELS_FORM = Form(
+    None,
+    description="Метки каналов через запятую, например: client,operator",
+)
+EXTERNAL_ID_FORM = Form(
+    None,
+    description="Идентификатор записи на стороне клиента (до 128 символов), "
+    "возвращается в ответе без изменений",
+)
+
+# Максимальная длина external_id в запросе /v1/transcribe
+MAX_EXTERNAL_ID_LENGTH = 128
 
 # Инициализация экстрактора текста
 text_extractor = TextExtractor()
@@ -686,6 +708,140 @@ async def extract_text_from_url(request: URLRequest):
                 "message": "Внутренняя ошибка обработки.",
             },
         )
+
+
+def _transcribe_error(
+    status_code: int,
+    filename: str,
+    message: str,
+    headers: Optional[Dict[str, str]] = None,
+) -> JSONResponse:
+    """Ответ с ошибкой /v1/transcribe в общем формате API."""
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": "error", "filename": filename, "message": message},
+        headers=headers,
+    )
+
+
+@v1_router.post("/transcribe")
+async def transcribe(
+    file: UploadFile = FILE_UPLOAD,
+    channel_labels: Optional[str] = CHANNEL_LABELS_FORM,
+    external_id: Optional[str] = EXTERNAL_ID_FORM,
+):
+    """Расшифровка речи из аудиофайла: текст, тайм-коды сегментов, говорящие."""
+    original_filename = file.filename or "unknown_file"
+    logger.info(f"Получен аудиофайл для расшифровки: {original_filename}")
+
+    if not settings.ENABLE_TRANSCRIPTION:
+        return _transcribe_error(
+            503, original_filename, "Расшифровка аудио отключена на этом сервере."
+        )
+
+    if external_id is not None and len(external_id) > MAX_EXTERNAL_ID_LENGTH:
+        return _transcribe_error(
+            400,
+            original_filename,
+            f"Параметр external_id длиннее {MAX_EXTERNAL_ID_LENGTH} символов.",
+        )
+
+    # Проверка наличия размера файла (защита от DoS)
+    if file.size is None:
+        logger.warning(f"Файл {original_filename} не содержит Content-Length")
+        return _transcribe_error(
+            400,
+            original_filename,
+            "Отсутствует заголовок Content-Length. Пожалуйста, убедитесь, что размер файла указан в запросе.",
+        )
+
+    if file.size > settings.MAX_FILE_SIZE:
+        logger.warning(f"Файл {original_filename} слишком большой: {file.size} bytes")
+        return _transcribe_error(
+            413,
+            original_filename,
+            f"Размер файла превышает допустимые {settings.MAX_FILE_SIZE} байт.",
+        )
+
+    extension = get_file_extension(sanitize_filename(original_filename))
+    if extension not in settings.AUDIO_FORMATS:
+        logger.warning(f"Неподдерживаемый аудиоформат: {original_filename}")
+        return _transcribe_error(
+            415,
+            original_filename,
+            "Неподдерживаемый формат аудио. Допустимые: "
+            + ", ".join(settings.AUDIO_FORMATS)
+            + ".",
+        )
+
+    content = await file.read()
+    if not content:
+        logger.warning(f"Файл {original_filename} пуст")
+        return _transcribe_error(422, original_filename, "Файл пуст.")
+
+    is_valid, validation_error = validate_file_type(content, original_filename)
+    if not is_valid:
+        logger.warning(
+            f"Файл {original_filename} не прошел проверку типа: {validation_error}"
+        )
+        return _transcribe_error(
+            415,
+            original_filename,
+            "Расширение файла не соответствует его содержимому.",
+        )
+
+    cancel_event = threading.Event()
+    timeout = settings.TRANSCRIPTION_TIMEOUT_SECONDS
+    deadline = time.monotonic() + timeout
+    start_time = time.time()
+    try:
+        result = await asyncio.wait_for(
+            run_in_threadpool(
+                transcribe_bytes,
+                content,
+                extension=extension,
+                channel_labels=parse_channel_labels(channel_labels),
+                cancel_event=cancel_event,
+                deadline=deadline,
+            ),
+            timeout=timeout,
+        )
+    except (asyncio.TimeoutError, TranscriptionCancelled):
+        # Рабочий поток остановится сам: проверяет флаг отмены между сегментами
+        cancel_event.set()
+        logger.error(
+            f"Таймаут расшифровки {original_filename}: превышен лимит {timeout} секунд"
+        )
+        return _transcribe_error(
+            504,
+            original_filename,
+            f"Расшифровка файла превысила установленный лимит времени ({timeout} секунд).",
+        )
+    except TranscriptionError as error:
+        logger.warning(
+            f"Ошибка расшифровки {original_filename}: {error.message} ({error.status_code})"
+        )
+        headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
+        return _transcribe_error(
+            error.status_code, original_filename, error.message, headers
+        )
+    except Exception:
+        logger.exception(f"Непредвиденная ошибка расшифровки {original_filename}")
+        return _transcribe_error(
+            500, original_filename, "Внутренняя ошибка при расшифровке аудио."
+        )
+
+    logger.info(
+        f"Расшифровка {original_filename} завершена за {time.time() - start_time:.1f}s: "
+        f"сегментов {len(result.segments)}, длительность {result.duration:.1f}s"
+    )
+    return build_response(
+        filename=original_filename,
+        external_id=external_id,
+        duration=result.duration,
+        channels=result.channels,
+        segments=result.segments,
+    )
 
 
 # Регистрируем v1-роутер с единым auth-dependency.
