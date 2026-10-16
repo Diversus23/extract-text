@@ -10,6 +10,7 @@
 - **Настройки:** `ENABLE_TRANSCRIPTION`, `TRANSCRIPTION_MODEL`, `TRANSCRIPTION_QUANTIZATION`, `MODELS_DIR`, `MAX_AUDIO_DURATION_SECONDS` (1800), `TRANSCRIPTION_TIMEOUT_SECONDS` (900), `TRANSCRIPTION_MAX_CONCURRENCY`, `TRANSCRIPTION_QUEUE_WAIT_SECONDS`, `TRANSCRIPTION_THREADS`, `TRANSCRIPTION_VAD_MIN_SILENCE_MS`, `TRANSCRIPTION_VAD_SPEECH_PAD_MS` (см. [env_example](env_example)).
 - **`docker-compose.prod.yml`:** отдельный сервис `api-audio` из того же образа (один воркер, порт 7556), основной сервис запускается с `ENABLE_TRANSCRIPTION=false`, чтобы модель не дублировалась в каждом воркере.
 - Коды ответов `/v1/transcribe`: 400, 401, 413, 415, 422, 500, 503 (с `Retry-After`, если сервис занят), 504 — в формате `{status, filename, message}`.
+- По итогам ревью: записи короче 0.1 с дают `200 no_speech` (silero падал на коротком входе → 500); лимит длительности проверяется по декодированному звуку, а не по оценке ffprobe (сырой AAC с тишиной в начале получал ложный 413); `channel_labels` ограничен 256/64 символами (метка копировалась в каждый сегмент); стерео с совпадающими каналами распознаётся как моно (без дублей реплик); `GIGAAM_QUANTIZATION` передаётся в сборку обоих сервисов из compose.
 
 ### Безопасность
 - `ffprobe` и `ffmpeg` запускаются без shell, под ограничениями ресурсов, демуксер выбирается принудительно по расширению, разрешён только протокол `file`: плейлисты и concat-скрипты не разворачиваются (защита от SSRF и чтения локальных файлов). Лимит длительности применяется и после декодирования, если длительность в метаданных неизвестна.

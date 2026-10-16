@@ -1,7 +1,14 @@
+# Один образ для обоих сервисов: GIGAAM_QUANTIZATION (пусто = fp32, int8) из .env или
+# окружения выбирает веса при сборке; в образ они попадают вместе с настройкой рантайма.
+x-build: &build
+  context: .
+  args:
+    GIGAAM_QUANTIZATION: ${GIGAAM_QUANTIZATION:-}
+
 services:
   api:
     container_name: extract-text-prod
-    build: .
+    build: *build
     # Перебиваем dev-volume ./app:/code/app — в prod код используется только из образа.
     volumes: []
     command: >
@@ -34,7 +41,7 @@ services:
   # модель загружается один раз. Порт 7556.
   api-audio:
     container_name: extract-text-audio-prod
-    build: .
+    build: *build
     command: uvicorn app.main:app --host 0.0.0.0 --port 7556 --workers 1
     ports:
       - "7556:7556"

@@ -35,6 +35,16 @@ class ChannelModel:
         return iter([SimpleNamespace(start=s, end=e, text=t) for s, e, t in segments])
 
 
+def _stereo_pcm(samples: int) -> np.ndarray:
+    """Стерео с разными каналами: левый с сигналом, правый тихий.
+
+    Одинаковые каналы считаются моно-записью, поэтому нули в обоих каналах
+    для проверки разметки по каналам не годятся.
+    """
+    left = (np.arange(samples) % 100).astype(np.int16) * 50
+    return np.stack([left, np.zeros(samples, dtype=np.int16)])
+
+
 def _run(content=b"audio", *, pcm, info, model, labels=None, cancel=None, **kwargs):
     """Вызов transcribe_bytes с подменёнными probe/decode и моделью."""
     transcriber = Transcriber(model_factory=lambda: model)
@@ -63,7 +73,7 @@ class TestTranscribeBytes:
         )
 
         result = _run(
-            pcm=np.zeros((2, 16000 * 6), dtype=np.int16),
+            pcm=_stereo_pcm(16000 * 6),
             info=AudioInfo(duration=6.0, channels=2),
             model=model,
             labels=["client", "operator"],
@@ -81,13 +91,45 @@ class TestTranscribeBytes:
         model = ChannelModel([[], [(0.5, 2.0, "Алло")]])
 
         result = _run(
-            pcm=np.zeros((2, 32000), dtype=np.int16),
+            pcm=_stereo_pcm(32000),
             info=AudioInfo(duration=2.0, channels=2),
             model=model,
             labels=["client", "operator"],
         )
 
         assert result.segments == [Segment(0.5, 2.0, "operator", 1, "Алло")]
+
+    @pytest.mark.parametrize("offset", [0, 1])
+    def test_identical_channels_are_recognized_once_as_mono(self, offset):
+        """Моно, сохранённое как стерео (каналы совпадают), не даёт дублей реплик."""
+        left = (np.arange(32000) % 100).astype(np.int16) * 50
+        # ChannelModel с одним элементом: второй вызов recognize упал бы с IndexError
+        model = ChannelModel([[(0.5, 2.0, "Алло")]])
+
+        result = _run(
+            pcm=np.stack([left, left + offset]),
+            info=AudioInfo(duration=2.0, channels=2),
+            model=model,
+            labels=["client", "operator"],
+        )
+
+        assert model.calls == 1
+        assert result.channels == 2
+        assert result.segments == [Segment(0.5, 2.0, None, None, "Алло")]
+
+    def test_clearly_different_channels_stay_stereo(self):
+        """Каналы, различающиеся заметно, остаются стерео с разметкой говорящих."""
+        model = ChannelModel([[(0.0, 1.0, "а")], [(2.0, 3.0, "б")]])
+
+        result = _run(
+            pcm=_stereo_pcm(16000 * 4),
+            info=AudioInfo(duration=4.0, channels=2),
+            model=model,
+            labels=["client", "operator"],
+        )
+
+        assert model.calls == 2
+        assert [s.speaker for s in result.segments] == ["client", "operator"]
 
     @pytest.mark.parametrize("samples", [1, 16000 * 10])
     def test_total_silence_gives_empty_segments(self, samples):

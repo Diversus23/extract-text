@@ -240,12 +240,13 @@ def probe_audio(path: Path, extension: str) -> AudioInfo:
     """
     Определяет число каналов и длительность первой аудиодорожки через ffprobe.
 
-    Длительность может быть неизвестна (None) — тогда лимит проверяется
-    после декодирования.
+    Длительность из метаданных — лишь подсказка: она может быть неизвестна (None)
+    или оценена по битрейту (сырой AAC/AMR, mp3 без заголовка Xing) и сильно
+    завышена, например при тишине в начале записи. Поэтому лимит длительности
+    здесь не применяется: его проверяет decode_audio по реально декодированному звуку.
 
     Raises:
         AudioFormatError: нет аудиодорожки или файл не читается.
-        AudioTooLongError: известная длительность больше лимита.
     """
     command = [
         "ffprobe",
@@ -282,10 +283,6 @@ def probe_audio(path: Path, extension: str) -> AudioInfo:
         if parsed > 0:
             duration = parsed
 
-    if duration is not None and duration > settings.MAX_AUDIO_DURATION_SECONDS:
-        raise AudioTooLongError(
-            f"Запись длиннее допустимых {settings.MAX_AUDIO_DURATION_SECONDS} секунд."
-        )
     return AudioInfo(duration=duration, channels=channels)
 
 
@@ -353,6 +350,10 @@ def vad_dir(models_dir: str) -> Path:
 
 # Модель принимает записи до 20–30 секунд, поэтому VAD режет речь на куски не длиннее
 VAD_MAX_SPEECH_SECONDS = 20.0
+
+# Короче 0.1 с речи не бывает, а silero падает на входе короче ~36 мс
+# (ValueError/IndexError), что превратилось бы в ответ 500 на оборванной записи.
+MIN_RECOGNIZABLE_SAMPLES = SAMPLE_RATE // 10
 
 
 def _load_default_model() -> Any:
@@ -460,6 +461,8 @@ class Transcriber:
             ModelUnavailableError: модель не загрузилась.
         """
         self._check_not_cancelled(cancel_event, deadline)
+        if samples.shape[0] < MIN_RECOGNIZABLE_SAMPLES:
+            return []
         model = self._get_model()
         waveform = samples.astype(np.float32) / 32768.0
 
@@ -491,6 +494,24 @@ def get_transcriber() -> Transcriber:
     return _transcriber
 
 
+# Каналы считаются одинаковыми, если отсчёты различаются не больше, чем на шум
+# квантования (допуск для моно, сохранённого как стерео после lossy-кодека)
+IDENTICAL_CHANNELS_MAX_DIFF = 8
+_COMPARE_CHUNK_SAMPLES = 1_000_000
+
+
+def _channels_identical(left: np.ndarray, right: np.ndarray) -> bool:
+    """Совпадают ли каналы (моно, записанное как стерео); блоками, чтобы не копить int32."""
+    for start in range(0, left.shape[0], _COMPARE_CHUNK_SAMPLES):
+        end = start + _COMPARE_CHUNK_SAMPLES
+        difference = np.abs(
+            left[start:end].astype(np.int32) - right[start:end].astype(np.int32)
+        )
+        if difference.max() > IDENTICAL_CHANNELS_MAX_DIFF:
+            return False
+    return True
+
+
 @dataclass(frozen=True)
 class TranscriptionResult:
     """Итог обработки файла: длительность, исходное число каналов, сегменты."""
@@ -516,6 +537,7 @@ def transcribe_bytes(
     PCM длинной записи занимает десятки мегабайт, и ожидающие запросы не должны его
     копить. Файл пишется во временный каталог под фиксированным именем
     input.<расширение>, имя от клиента не используется; каталог удаляется всегда.
+    Стерео с совпадающими каналами распознаётся как моно (speaker=None).
 
     Raises:
         TranscriberBusyError: нет свободного слота.
@@ -532,6 +554,12 @@ def transcribe_bytes(
 
             info = probe_audio(path, extension)
             pcm = decode_audio(path, extension, info.channels)
+
+        if pcm.shape[0] == 2 and _channels_identical(pcm[0], pcm[1]):
+            # Моно, сохранённое как стерео: иначе каждая реплика пришла бы дважды
+            # с двумя разными говорящими, а расчёт удвоился бы.
+            logger.info("Каналы стерео-записи совпадают, распознаём как моно")
+            pcm = pcm[:1]
 
         per_channel = [
             transcriber.recognize(pcm[channel], cancel_event, deadline)

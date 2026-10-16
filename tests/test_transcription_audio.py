@@ -88,13 +88,12 @@ class TestProbeAudio:
             probe_audio(Path("a.m4a"), "m4a")
 
     @patch("app.transcription.run_subprocess_with_limits")
-    def test_probe_too_long_raises(self, run):
-        """Длительность больше лимита — AudioTooLongError."""
+    def test_probe_does_not_reject_long_duration(self, run):
+        """Длительность из метаданных — оценка по битрейту; лимит проверяет декодер."""
         limit = settings.MAX_AUDIO_DURATION_SECONDS
         run.return_value = _completed(_probe_output(duration=f"{limit + 1}.0"))
 
-        with pytest.raises(AudioTooLongError):
-            probe_audio(Path("a.mp3"), "mp3")
+        assert probe_audio(Path("a.mp3"), "mp3") == AudioInfo(float(limit + 1), 1)
 
     @patch("app.transcription.run_subprocess_with_limits")
     def test_probe_nonzero_exit_raises(self, run):
@@ -313,14 +312,27 @@ class TestRealFfmpeg:
         assert info.channels == 6
         assert pcm.shape[0] == 1
 
-    def test_real_too_long_by_probe(self, tmp_path, monkeypatch):
-        """Известная длительность больше лимита отклоняется до декодирования."""
-        path = tmp_path / "input.wav"
-        _ffmpeg(*_sine(3), "-ar", "16000", str(path))
-        monkeypatch.setattr(settings, "MAX_AUDIO_DURATION_SECONDS", 1)
+    def test_real_aac_with_leading_silence_is_not_rejected_by_estimate(
+        self, tmp_path, monkeypatch
+    ):
+        """Завышенная оценка длительности AAC с тишиной в начале не даёт ложный 413.
 
-        with pytest.raises(AudioTooLongError):
-            probe_audio(path, "wav")
+        ffprobe оценивает длительность сырого AAC по битрейту первых кадров.
+        Запись в 60 секунд короче лимита и должна приниматься.
+        """
+        path = tmp_path / "input.aac"
+        _ffmpeg(
+            "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono:d=30",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=30",
+            "-filter_complex", "[0:a][1:a]concat=n=2:v=0:a=1",
+            "-c:a", "aac", "-f", "adts", str(path),
+        )  # fmt: skip
+        monkeypatch.setattr(settings, "MAX_AUDIO_DURATION_SECONDS", 100)
+
+        info = probe_audio(path, "aac")
+        pcm = decode_audio(path, "aac", info.channels)
+
+        assert pcm.shape[1] == pytest.approx(60 * 16000, abs=16000)
 
     def test_real_decode_cap_enforces_limit(self, tmp_path, monkeypatch):
         """Даже без проверки зондом декодирование упирается в лимит."""

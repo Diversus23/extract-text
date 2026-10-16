@@ -54,6 +54,11 @@ def _transcriber(model: StubModel) -> Transcriber:
     return Transcriber(model_factory=lambda: model)
 
 
+def _audio(samples: int = 1600) -> np.ndarray:
+    """Тишина достаточной длины (от 0.1 с): более короткий вход модели не отдаётся."""
+    return np.zeros(samples, dtype=np.int16)
+
+
 def _far_deadline() -> float:
     """Дедлайн, до которого точно ничего не истечёт."""
     return time.monotonic() + 3600
@@ -66,13 +71,14 @@ class TestRecognize:
     def test_recognize_converts_int16_to_float32(self):
         """Модель получает float32 в диапазоне [-1, 1] и частоту 16 кГц."""
         model = StubModel()
-        samples = np.array([0, 16384, -32768, 32767], dtype=np.int16)
+        samples = _audio()
+        samples[:4] = [0, 16384, -32768, 32767]
 
         _transcriber(model).recognize(samples, threading.Event(), _far_deadline())
 
         waveform, sample_rate = model.calls[0]
         assert waveform.dtype == np.float32
-        assert waveform.tolist() == pytest.approx([0.0, 0.5, -1.0, 32767 / 32768])
+        assert waveform[:4].tolist() == pytest.approx([0.0, 0.5, -1.0, 32767 / 32768])
         assert sample_rate == 16000
 
     def test_recognize_maps_segments(self):
@@ -80,7 +86,7 @@ class TestRecognize:
         model = StubModel([_segment(0.5, 2.0, "привет"), _segment(3, 4, "мир")])
 
         result = _transcriber(model).recognize(
-            np.zeros(10, dtype=np.int16), threading.Event(), _far_deadline()
+            _audio(), threading.Event(), _far_deadline()
         )
 
         assert result == [RawSegment(0.5, 2.0, "привет"), RawSegment(3.0, 4.0, "мир")]
@@ -94,9 +100,7 @@ class TestRecognize:
         )
 
         with pytest.raises(TranscriptionCancelled):
-            _transcriber(model).recognize(
-                np.zeros(10, dtype=np.int16), cancel, _far_deadline()
-            )
+            _transcriber(model).recognize(_audio(), cancel, _far_deadline())
 
         assert model.pulled == 1
 
@@ -106,12 +110,34 @@ class TestRecognize:
 
         with pytest.raises(TranscriptionCancelled):
             _transcriber(model).recognize(
-                np.zeros(10, dtype=np.int16),
+                _audio(),
                 threading.Event(),
                 time.monotonic() - 1,
             )
 
         assert model.calls == []
+
+    @pytest.mark.parametrize("samples", [1, 300, 1599])
+    def test_recognize_too_short_audio_skips_model(self, samples):
+        """Короче 0.1 с в модель не уходит: silero падает на слишком коротком входе."""
+        model = StubModel([_segment(0, 1, "а")])
+
+        result = _transcriber(model).recognize(
+            np.zeros(samples, dtype=np.int16), threading.Event(), _far_deadline()
+        )
+
+        assert result == []
+        assert model.calls == []
+
+    def test_recognize_minimum_length_audio_reaches_model(self):
+        """Ровно 0.1 с (1600 отсчётов) уже передаётся в модель."""
+        model = StubModel([])
+
+        _transcriber(model).recognize(
+            np.zeros(1600, dtype=np.int16), threading.Event(), _far_deadline()
+        )
+
+        assert len(model.calls) == 1
 
     def test_recognize_empty_audio_gives_no_segments(self):
         """Беззвучный канал — пустой список, не ошибка."""
@@ -132,7 +158,7 @@ class TestModelLoading:
         """Фабрика вызывается один раз на несколько распознаваний."""
         factory = MagicMock(return_value=StubModel())
         transcriber = Transcriber(model_factory=factory)
-        samples = np.zeros(10, dtype=np.int16)
+        samples = _audio()
 
         transcriber.recognize(samples, threading.Event(), _far_deadline())
         transcriber.recognize(samples, threading.Event(), _far_deadline())
@@ -149,7 +175,7 @@ class TestModelLoading:
             return StubModel()
 
         transcriber = Transcriber(model_factory=slow_factory)
-        samples = np.zeros(10, dtype=np.int16)
+        samples = _audio()
         threads = [
             threading.Thread(
                 target=transcriber.recognize,
@@ -171,9 +197,7 @@ class TestModelLoading:
         )
 
         with pytest.raises(ModelUnavailableError) as error:
-            transcriber.recognize(
-                np.zeros(10, dtype=np.int16), threading.Event(), _far_deadline()
-            )
+            transcriber.recognize(_audio(), threading.Event(), _far_deadline())
 
         assert error.value.status_code == 503
 
@@ -181,7 +205,7 @@ class TestModelLoading:
         """Неудачная загрузка не кэшируется: следующий запрос пробует снова."""
         factory = MagicMock(side_effect=[RuntimeError("x"), StubModel()])
         transcriber = Transcriber(model_factory=factory)
-        samples = np.zeros(10, dtype=np.int16)
+        samples = _audio()
 
         with pytest.raises(ModelUnavailableError):
             transcriber.recognize(samples, threading.Event(), _far_deadline())

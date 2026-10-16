@@ -115,6 +115,22 @@ def test_real_silence_is_no_speech():
     assert result.duration == pytest.approx(10.0, abs=0.1)
 
 
+@pytest.mark.parametrize("rate,samples", [(16000, 1), (16000, 300), (8000, 240)])
+def test_real_very_short_file_is_no_speech(rate, samples):
+    """Оборванная запись короче 36 мс: 200 и no_speech, а не 500 из-за VAD."""
+    content = _wav_bytes([np.zeros(samples, dtype=np.int16)], sample_rate=rate)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/transcribe",
+            files={"file": ("short.wav", content, "audio/wav")},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["text_status"] == "no_speech"
+    assert response.json()["segments"] == []
+
+
 def test_real_full_http_cycle():
     """Полный цикл через HTTP: загрузка файла, расшифровка, ответ по контракту."""
     with TestClient(app) as client:

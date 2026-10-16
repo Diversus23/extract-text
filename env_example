@@ -199,8 +199,11 @@ ENABLE_TRANSCRIPTION=true
 TRANSCRIPTION_MODEL=gigaam-v3-e2e-rnnt
 
 # Вариант весов: пусто = fp32 (лучшее качество, ~0.9 GB), int8 = ~230 MB энкодера.
-# Должен совпадать с build-аргументом GIGAAM_QUANTIZATION при сборке образа.
-TRANSCRIPTION_QUANTIZATION=
+# Выбирается ПРИ СБОРКЕ образа переменной GIGAAM_QUANTIZATION (docker-compose.prod.yml
+# передаёт её в build-аргумент), а образ сам выставляет TRANSCRIPTION_QUANTIZATION.
+# Не задавайте TRANSCRIPTION_QUANTIZATION в .env: значение, не совпадающее с весами
+# в образе, даёт 503 на каждый запрос при зелёном /health.
+# GIGAAM_QUANTIZATION=int8
 
 # Каталог с весами модели и VAD внутри образа (скачиваются при сборке)
 MODELS_DIR=/opt/models

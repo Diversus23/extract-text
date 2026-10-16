@@ -150,6 +150,26 @@ class TestTranscribeErrors:
         assert response.json()["status"] == "error"
         transcribe.assert_not_called()
 
+    @pytest.mark.parametrize("labels", ["a" * 257, "client," + "b" * 65])
+    def test_channel_labels_too_long_400(
+        self, test_client, valid_type, transcribe, labels
+    ):
+        """Слишком длинные channel_labels отклоняются: метка копируется в каждый сегмент."""
+        response = _post(test_client, channel_labels=labels)
+
+        assert response.status_code == 400
+        assert response.json()["status"] == "error"
+        transcribe.assert_not_called()
+
+    def test_channel_labels_at_limits_ok(self, test_client, valid_type, transcribe):
+        """Метки на границе лимитов (до 64 символов, всего до 256) принимаются."""
+        labels = ",".join(["x" * 63] * 4)
+
+        response = _post(test_client, channel_labels=labels)
+
+        assert response.status_code == 200
+        assert transcribe.call_args.kwargs["channel_labels"] == ["x" * 63] * 4
+
     def test_missing_content_length_400(self):
         """Без размера файла (нет Content-Length) — 400."""
         fake_file = SimpleNamespace(filename="call.mp3", size=None)

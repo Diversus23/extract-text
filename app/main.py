@@ -64,8 +64,11 @@ EXTERNAL_ID_FORM = Form(
     "возвращается в ответе без изменений",
 )
 
-# Максимальная длина external_id в запросе /v1/transcribe
+# Ограничения параметров /v1/transcribe: метка канала копируется в speaker каждого
+# сегмента, и без лимита длинная метка раздувает ответ в сотни мегабайт.
 MAX_EXTERNAL_ID_LENGTH = 128
+MAX_CHANNEL_LABELS_LENGTH = 256
+MAX_CHANNEL_LABEL_LENGTH = 64
 
 # Инициализация экстрактора текста
 text_extractor = TextExtractor()
@@ -746,6 +749,18 @@ async def transcribe(
             f"Параметр external_id длиннее {MAX_EXTERNAL_ID_LENGTH} символов.",
         )
 
+    labels = parse_channel_labels(channel_labels)
+    if len(channel_labels or "") > MAX_CHANNEL_LABELS_LENGTH or any(
+        len(label) > MAX_CHANNEL_LABEL_LENGTH for label in labels
+    ):
+        return _transcribe_error(
+            400,
+            original_filename,
+            f"Параметр channel_labels слишком длинный: всего до "
+            f"{MAX_CHANNEL_LABELS_LENGTH} символов, каждая метка до "
+            f"{MAX_CHANNEL_LABEL_LENGTH}.",
+        )
+
     # Проверка наличия размера файла (защита от DoS)
     if file.size is None:
         logger.warning(f"Файл {original_filename} не содержит Content-Length")
@@ -800,7 +815,7 @@ async def transcribe(
                 transcribe_bytes,
                 content,
                 extension=extension,
-                channel_labels=parse_channel_labels(channel_labels),
+                channel_labels=labels,
                 cancel_event=cancel_event,
                 deadline=deadline,
             ),
