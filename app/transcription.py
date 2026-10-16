@@ -273,12 +273,14 @@ def probe_audio(path: Path, extension: str) -> AudioInfo:
         raise AudioFormatError("В файле не найдена аудиодорожка.") from error
 
     duration: Optional[float] = None
-    try:
-        parsed = float((data.get("format") or {}).get("duration"))
+    raw_duration = (data.get("format") or {}).get("duration")
+    if raw_duration is not None:
+        try:
+            parsed = float(raw_duration)
+        except (TypeError, ValueError):
+            parsed = 0.0
         if parsed > 0:
             duration = parsed
-    except (TypeError, ValueError):
-        duration = None
 
     if duration is not None and duration > settings.MAX_AUDIO_DURATION_SECONDS:
         raise AudioTooLongError(
