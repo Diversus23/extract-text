@@ -380,7 +380,12 @@ def _load_default_model() -> Any:
         sess_options=options,
     )
     vad = onnx_asr.load_vad("silero", vad_path, sess_options=options)
-    return model.with_vad(vad, max_speech_duration_s=VAD_MAX_SPEECH_SECONDS)
+    return model.with_vad(
+        vad,
+        max_speech_duration_s=VAD_MAX_SPEECH_SECONDS,
+        min_silence_duration_ms=settings.TRANSCRIPTION_VAD_MIN_SILENCE_MS,
+        speech_pad_ms=settings.TRANSCRIPTION_VAD_SPEECH_PAD_MS,
+    )
 
 
 class Transcriber:

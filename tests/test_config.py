@@ -277,6 +277,8 @@ class TestTranscriptionSettings:
         assert settings.TRANSCRIPTION_MAX_CONCURRENCY == 1
         assert settings.TRANSCRIPTION_QUEUE_WAIT_SECONDS == 30
         assert settings.TRANSCRIPTION_THREADS == (os.cpu_count() or 1)
+        assert settings.TRANSCRIPTION_VAD_MIN_SILENCE_MS == 500
+        assert settings.TRANSCRIPTION_VAD_SPEECH_PAD_MS == 300
 
     @patch.dict(
         os.environ,

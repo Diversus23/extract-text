@@ -220,6 +220,8 @@ class TestDefaultModelLoader:
         monkeypatch.setattr(settings, "MODELS_DIR", str(tmp_path))
         monkeypatch.setattr(settings, "TRANSCRIPTION_QUANTIZATION", quantization)
         monkeypatch.setattr(settings, "TRANSCRIPTION_THREADS", 3)
+        monkeypatch.setattr(settings, "TRANSCRIPTION_VAD_MIN_SILENCE_MS", 700)
+        monkeypatch.setattr(settings, "TRANSCRIPTION_VAD_SPEECH_PAD_MS", 250)
         asr_path = model_dir(str(tmp_path), settings.TRANSCRIPTION_MODEL)
         vad_path = vad_dir(str(tmp_path))
         asr_path.mkdir()
@@ -239,7 +241,10 @@ class TestDefaultModelLoader:
         load_vad.assert_called_once()
         assert load_vad.call_args.args == ("silero", vad_path)
         load_model.return_value.with_vad.assert_called_once_with(
-            load_vad.return_value, max_speech_duration_s=20.0
+            load_vad.return_value,
+            max_speech_duration_s=20.0,
+            min_silence_duration_ms=700,
+            speech_pad_ms=250,
         )
         assert result is load_model.return_value.with_vad.return_value
 

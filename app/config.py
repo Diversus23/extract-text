@@ -102,6 +102,14 @@ class Settings:
     TRANSCRIPTION_THREADS: int = int(
         os.getenv("TRANSCRIPTION_THREADS", str(os.cpu_count() or 1))
     )
+    # Параметры VAD: при значениях библиотеки по умолчанию речь режется на короткие
+    # сегменты (менее 1.5 с), для которых модель возвращает пустой текст.
+    TRANSCRIPTION_VAD_MIN_SILENCE_MS: int = int(
+        os.getenv("TRANSCRIPTION_VAD_MIN_SILENCE_MS", "500")
+    )  # пауза, которая разделяет сегменты
+    TRANSCRIPTION_VAD_SPEECH_PAD_MS: int = int(
+        os.getenv("TRANSCRIPTION_VAD_SPEECH_PAD_MS", "300")
+    )  # запас вокруг сегмента речи
 
     # Настройки OCR
     OCR_LANGUAGES: str = os.getenv("OCR_LANGUAGES", "rus+eng")
