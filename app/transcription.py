@@ -3,9 +3,12 @@
 import json
 import logging
 import subprocess
+import threading
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Iterator, Optional
 
 import numpy as np
 
@@ -333,3 +336,148 @@ def decode_audio(path: Path, extension: str, channels: int) -> np.ndarray:
     if pcm.shape[1] > max_seconds * SAMPLE_RATE:
         raise AudioTooLongError(f"Запись длиннее допустимых {max_seconds} секунд.")
     return np.ascontiguousarray(pcm)
+
+
+def model_dir(models_dir: str, model: str) -> Path:
+    """Каталог с весами модели распознавания внутри MODELS_DIR."""
+    return Path(models_dir) / model
+
+
+def vad_dir(models_dir: str) -> Path:
+    """Каталог с весами silero VAD внутри MODELS_DIR."""
+    return Path(models_dir) / "silero-vad"
+
+
+# Модель принимает записи до 20–30 секунд, поэтому VAD режет речь на куски не длиннее
+VAD_MAX_SPEECH_SECONDS = 20.0
+
+
+def _load_default_model() -> Any:
+    """
+    Загружает GigaAM и silero VAD из локальных каталогов MODELS_DIR.
+
+    Если каталога нет, onnx-asr попытался бы скачать веса из интернета, поэтому
+    наличие каталогов проверяется заранее: рантайм работает только офлайн.
+    """
+    asr_path = model_dir(settings.MODELS_DIR, settings.TRANSCRIPTION_MODEL)
+    vad_path = vad_dir(settings.MODELS_DIR)
+    if not asr_path.is_dir() or not vad_path.is_dir():
+        logger.error(f"Нет весов модели: {asr_path} или {vad_path}")
+        raise ModelUnavailableError("Модель распознавания недоступна.")
+
+    # Тяжёлые зависимости импортируются лениво: они нужны только для распознавания
+    import onnx_asr
+    import onnxruntime
+
+    options = onnxruntime.SessionOptions()
+    options.intra_op_num_threads = settings.TRANSCRIPTION_THREADS
+
+    model = onnx_asr.load_model(
+        settings.TRANSCRIPTION_MODEL,
+        asr_path,
+        quantization=settings.TRANSCRIPTION_QUANTIZATION or None,
+        sess_options=options,
+    )
+    vad = onnx_asr.load_vad("silero", vad_path, sess_options=options)
+    return model.with_vad(vad, max_speech_duration_s=VAD_MAX_SPEECH_SECONDS)
+
+
+class Transcriber:
+    """
+    Распознавание речи: ленивая загрузка модели и ограничение параллелизма.
+
+    Модель создаётся один раз при первом распознавании. Число одновременных
+    распознаваний ограничено семафором TRANSCRIPTION_MAX_CONCURRENCY.
+    """
+
+    def __init__(self, model_factory: Optional[Callable[[], Any]] = None) -> None:
+        """model_factory создаёт адаптер onnx-asr с VAD; по умолчанию грузит GigaAM."""
+        self._model_factory = model_factory or _load_default_model
+        self._model: Any = None
+        self._load_lock = threading.Lock()
+        self._semaphore = threading.BoundedSemaphore(
+            max(1, settings.TRANSCRIPTION_MAX_CONCURRENCY)
+        )
+
+    @contextmanager
+    def slot(self, wait_seconds: float) -> Iterator[None]:
+        """
+        Занимает слот распознавания на время блока.
+
+        Raises:
+            TranscriberBusyError: слот не освободился за wait_seconds.
+        """
+        if not self._semaphore.acquire(timeout=wait_seconds):
+            raise TranscriberBusyError(
+                "Сервис распознавания занят, повторите запрос позже."
+            )
+        try:
+            yield
+        finally:
+            self._semaphore.release()
+
+    def _get_model(self) -> Any:
+        """Возвращает модель, загружая её при первом обращении."""
+        if self._model is None:
+            with self._load_lock:
+                if self._model is None:
+                    try:
+                        self._model = self._model_factory()
+                    except TranscriptionError:
+                        raise
+                    except Exception as error:
+                        logger.exception("Не удалось загрузить модель распознавания")
+                        raise ModelUnavailableError(
+                            "Модель распознавания недоступна."
+                        ) from error
+        return self._model
+
+    @staticmethod
+    def _check_not_cancelled(cancel_event: threading.Event, deadline: float) -> None:
+        """Прерывает обработку, если выставлен флаг отмены или истёк дедлайн."""
+        if cancel_event.is_set() or time.monotonic() >= deadline:
+            raise TranscriptionCancelled()
+
+    def recognize(
+        self, samples: np.ndarray, cancel_event: threading.Event, deadline: float
+    ) -> list[RawSegment]:
+        """
+        Распознаёт один канал: samples — одномерный int16, 16 кГц.
+
+        deadline — абсолютное время в шкале time.monotonic(). Флаг отмены и
+        дедлайн проверяются перед обращением к модели и перед каждым сегментом.
+
+        Raises:
+            TranscriptionCancelled: отмена или истёк дедлайн.
+            ModelUnavailableError: модель не загрузилась.
+        """
+        self._check_not_cancelled(cancel_event, deadline)
+        model = self._get_model()
+        waveform = samples.astype(np.float32) / 32768.0
+
+        segments: list[RawSegment] = []
+        iterator = iter(model.recognize(waveform, sample_rate=SAMPLE_RATE))
+        while True:
+            self._check_not_cancelled(cancel_event, deadline)
+            try:
+                segment = next(iterator)
+            except StopIteration:
+                break
+            segments.append(
+                RawSegment(float(segment.start), float(segment.end), str(segment.text))
+            )
+        return segments
+
+
+_transcriber: Optional[Transcriber] = None
+_transcriber_lock = threading.Lock()
+
+
+def get_transcriber() -> Transcriber:
+    """Синглтон Transcriber для процесса (модель одна на воркер)."""
+    global _transcriber
+    if _transcriber is None:
+        with _transcriber_lock:
+            if _transcriber is None:
+                _transcriber = Transcriber()
+    return _transcriber
