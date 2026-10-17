@@ -164,7 +164,9 @@ test-docker: build ## 🐳 Запустить тестирование в Docker
 	@echo "  - Полная изоляция от системных пакетов"
 	@echo ""
 	@echo "🔧 Создание контейнера для тестирования..."
-	@docker run --rm -v $(shell pwd):/code -w /code $(IMAGE_NAME):$(TAG) \
+	@docker run --rm --user "$(shell id -u):$(shell id -g)" \
+		-e PYTHONUSERBASE=/tmp/test-dependencies \
+		-v "$(CURDIR):/code" -w /code $(IMAGE_NAME):$(TAG) \
 		bash -c "python3 -m pip install -q -r requirements-test.txt && \
 		python -m pytest -v --cov=app --cov-report=term-missing --cov-report=html:coverage_html --cov-report=xml:coverage.xml --cov-fail-under=55"
 	@echo ""
