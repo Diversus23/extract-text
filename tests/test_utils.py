@@ -1,6 +1,8 @@
 """Unit тесты для модуля утилит."""
 
 import logging
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -393,3 +395,72 @@ class TestWebUtilityFunctions:
         assert result is not None
         assert isinstance(result, bytes)
         assert len(result) > 0
+
+
+@pytest.mark.unit
+class TestValidateAudioFileType:
+    """Проверка соответствия расширения содержимому для аудиоформатов."""
+
+    ENCODERS = {
+        "mp3": ["-c:a", "libmp3lame"],
+        "wav": [],
+        "ogg": ["-c:a", "libvorbis"],
+        "opus": ["-c:a", "libopus"],
+        "flac": [],
+        "m4a": ["-c:a", "aac"],
+        "aac": ["-c:a", "aac", "-f", "adts"],
+        "wma": ["-c:a", "wmav2"],
+        "amr": ["-c:a", "libopencore_amrnb", "-ar", "8000", "-ac", "1"],
+    }
+
+    @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg не установлен")
+    @pytest.mark.parametrize("extension", sorted(ENCODERS))
+    def test_validate_audio_formats_with_real_ffmpeg(self, tmp_path, extension):
+        """Реальный файл каждого формата проходит проверку MIME."""
+        path = tmp_path / f"sample.{extension}"
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i"]
+            + ["sine=frequency=440:duration=1", *self.ENCODERS[extension], str(path)],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            pytest.skip(f"в ffmpeg нет энкодера для {extension}")
+
+        is_valid, error = validate_file_type(path.read_bytes(), path.name)
+
+        assert is_valid, error
+
+    def test_validate_audio_ext_mismatch(self):
+        """Текст под видом mp3 отклоняется."""
+        is_valid, error = validate_file_type(b"plain text, not audio", "x.mp3")
+
+        assert is_valid is False
+        assert "не соответствует" in error
+
+    @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg не установлен")
+    def test_validate_audio_cross_format_mismatch(self, tmp_path):
+        """WAV под видом mp3 отклоняется: проверка опирается на содержимое."""
+        path = tmp_path / "sample.wav"
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i"]
+            + ["sine=frequency=440:duration=1", str(path)],
+            check=True,
+            capture_output=True,
+        )
+
+        is_valid, error = validate_file_type(path.read_bytes(), "sample.mp3")
+
+        assert is_valid is False
+        assert "не соответствует" in error
+
+    def test_validate_amr_header(self):
+        """AMR определяется по сигнатуре файла (энкодера в ffmpeg может не быть)."""
+        is_valid, error = validate_file_type(b"#!AMR\n" + bytes(64), "voice.amr")
+
+        assert is_valid, error
+
+    def test_validate_amr_wb_header(self):
+        """Широкополосный AMR (AMR-WB) тоже принимается: ffmpeg его декодирует."""
+        is_valid, error = validate_file_type(b"#!AMR-WB\n" + bytes(64), "voice.amr")
+
+        assert is_valid, error

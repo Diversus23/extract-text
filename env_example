@@ -187,3 +187,56 @@ MAX_SCROLL_ATTEMPTS=5
 # ENABLE_JAVASCRIPT=true
 # WEB_PAGE_DELAY=10
 # JS_RENDER_TIMEOUT=20 
+# ===========================================
+# ТРАНСКРИБАЦИЯ АУДИО (v1.12.0, эндпоинт /v1/transcribe)
+# ===========================================
+
+# Включить/выключить эндпоинт. При false отвечает 503, модель не загружается.
+# Для сервиса документов в prod-режиме ставится false (см. docker-compose.prod.yml).
+ENABLE_TRANSCRIPTION=true
+
+# Модель распознавания (onnx-asr). GigaAM v3 e2e RNN-T: русский язык, с пунктуацией.
+TRANSCRIPTION_MODEL=gigaam-v3-e2e-rnnt
+
+# Вариант весов: пусто = fp32 (лучшее качество, ~0.9 GB), int8 = ~230 MB энкодера.
+# Выбирается ПРИ СБОРКЕ образа переменной GIGAAM_QUANTIZATION (docker-compose.prod.yml
+# передаёт её в build-аргумент), а образ сам выставляет TRANSCRIPTION_QUANTIZATION.
+# Не задавайте TRANSCRIPTION_QUANTIZATION в .env: значение, не совпадающее с весами
+# в образе, даёт 503 на каждый запрос при зелёном /health.
+# GIGAAM_QUANTIZATION=int8
+
+# Каталог с весами модели и VAD внутри образа (скачиваются при сборке)
+MODELS_DIR=/opt/models
+
+# Максимальная длительность записи в секундах (30 минут)
+MAX_AUDIO_DURATION_SECONDS=1800
+
+# Таймаут распознавания в секундах (отдельно от PROCESSING_TIMEOUT_SECONDS)
+TRANSCRIPTION_TIMEOUT_SECONDS=900
+
+# Сколько распознаваний выполняется одновременно в одном процессе
+TRANSCRIPTION_MAX_CONCURRENCY=1
+
+# Сколько секунд запрос ждёт свободный слот, прежде чем получить 503
+TRANSCRIPTION_QUEUE_WAIT_SECONDS=30
+
+# Максимум запросов, ожидающих слот до чтения тела. 0 — сразу отвечать 503 при занятости.
+TRANSCRIPTION_MAX_QUEUE_SIZE=2
+
+# Число потоков onnxruntime. По умолчанию — число ядер хоста (os.cpu_count() внутри
+# контейнера не видит лимит cpus), поэтому в контейнере задавайте явно.
+# Для сервиса api-audio: TRANSCRIPTION_THREADS из .env, иначе AUDIO_CPUS (см. ниже).
+# TRANSCRIPTION_THREADS=4
+
+# Лимит CPU контейнера api-audio (docker-compose.prod.yml) и число потоков распознавания
+# по умолчанию. Значение по умолчанию — 4 ядра; если ядер на хосте меньше 4, Docker не
+# запустит контейнер ("range of CPUs is from 0.01 to N"): укажите число ядер хоста или меньше.
+# AUDIO_CPUS=4
+
+# Параметры VAD (разбиение речи на сегменты). С настройками библиотеки по умолчанию
+# речь режется на короткие сегменты, для которых модель возвращает пустой текст.
+# Подбираются на реальных записях. Сегменты разделяются паузой, не меньшей
+# MIN_SILENCE + 2×PAD (при 500/300 это около 1.1 с): запас PAD добавляется с обеих
+# сторон каждого сегмента, поэтому ближние сегменты склеиваются.
+TRANSCRIPTION_VAD_MIN_SILENCE_MS=500
+TRANSCRIPTION_VAD_SPEECH_PAD_MS=300

@@ -8,7 +8,7 @@ class Settings:
     """Настройки приложения."""
 
     # Основные настройки
-    VERSION: str = "1.11.0"
+    VERSION: str = "1.12.1"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
     # Настройки API
@@ -65,6 +65,56 @@ class Settings:
     ENABLE_RESOURCE_LIMITS: bool = (
         os.getenv("ENABLE_RESOURCE_LIMITS", "true").lower() == "true"
     )
+
+    # Настройки транскрибации аудио (эндпоинт /v1/transcribe)
+    # Аудио-расширения держим отдельно от SUPPORTED_FORMATS: /v1/extract/* аудио не принимают.
+    AUDIO_FORMATS: List[str] = [
+        "mp3",
+        "wav",
+        "ogg",
+        "opus",
+        "flac",
+        "m4a",
+        "aac",
+        "wma",
+        "amr",
+    ]
+    ENABLE_TRANSCRIPTION: bool = (
+        os.getenv("ENABLE_TRANSCRIPTION", "true").lower() == "true"
+    )
+    TRANSCRIPTION_MODEL: str = os.getenv("TRANSCRIPTION_MODEL", "gigaam-v3-e2e-rnnt")
+    # Резерв для речевых сегментов, на которых основная модель вернула пустой текст.
+    TRANSCRIPTION_FALLBACK_MODEL: str = "gigaam-v3-e2e-ctc"
+    # Вариант весов: пусто = fp32, "int8" = квантизованная версия
+    TRANSCRIPTION_QUANTIZATION: str = os.getenv("TRANSCRIPTION_QUANTIZATION", "")
+    # Каталог с весами модели и VAD внутри образа (скачиваются на этапе сборки)
+    MODELS_DIR: str = os.getenv("MODELS_DIR", "/opt/models")
+    MAX_AUDIO_DURATION_SECONDS: int = int(
+        os.getenv("MAX_AUDIO_DURATION_SECONDS", "1800")
+    )  # 30 минут
+    TRANSCRIPTION_TIMEOUT_SECONDS: int = int(
+        os.getenv("TRANSCRIPTION_TIMEOUT_SECONDS", "900")
+    )
+    TRANSCRIPTION_MAX_CONCURRENCY: int = int(
+        os.getenv("TRANSCRIPTION_MAX_CONCURRENCY", "1")
+    )
+    TRANSCRIPTION_QUEUE_WAIT_SECONDS: int = int(
+        os.getenv("TRANSCRIPTION_QUEUE_WAIT_SECONDS", "30")
+    )
+    TRANSCRIPTION_MAX_QUEUE_SIZE: int = max(
+        0, int(os.getenv("TRANSCRIPTION_MAX_QUEUE_SIZE", "2"))
+    )
+    TRANSCRIPTION_THREADS: int = int(
+        os.getenv("TRANSCRIPTION_THREADS", str(os.cpu_count() or 1))
+    )
+    # Параметры VAD: при значениях библиотеки по умолчанию речь режется на короткие
+    # сегменты (менее 1.5 с), для которых модель возвращает пустой текст.
+    TRANSCRIPTION_VAD_MIN_SILENCE_MS: int = int(
+        os.getenv("TRANSCRIPTION_VAD_MIN_SILENCE_MS", "500")
+    )  # минимальная пауза; фактический порог деления сегментов = MIN_SILENCE + 2×PAD
+    TRANSCRIPTION_VAD_SPEECH_PAD_MS: int = int(
+        os.getenv("TRANSCRIPTION_VAD_SPEECH_PAD_MS", "300")
+    )  # запас вокруг сегмента речи
 
     # Настройки OCR
     OCR_LANGUAGES: str = os.getenv("OCR_LANGUAGES", "rus+eng")

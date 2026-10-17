@@ -2,6 +2,7 @@
 
 import glob
 import logging
+import math
 import os
 import shutil
 import signal
@@ -212,6 +213,16 @@ def validate_file_type(content: bytes, filename: str) -> tuple[bool, Optional[st
             "xml": ["application/xml", "text/xml"],
             "yaml": ["text/plain", "application/x-yaml"],
             "yml": ["text/plain", "application/x-yaml"],
+            # Аудио (эндпоинт /v1/transcribe)
+            "mp3": ["audio/mpeg"],
+            "wav": ["audio/x-wav", "audio/wav", "audio/vnd.wave"],
+            "ogg": ["audio/ogg", "application/ogg"],
+            "opus": ["audio/ogg", "application/ogg", "audio/opus"],
+            "flac": ["audio/flac", "audio/x-flac"],
+            "m4a": ["audio/x-m4a", "audio/mp4", "video/mp4"],
+            "aac": ["audio/aac", "audio/x-hx-aac-adts"],
+            "wma": ["video/x-ms-asf", "audio/x-ms-wma"],
+            "amr": ["audio/amr", "audio/AMR", "audio/AMR-WB", "audio/amr-wb"],
             # Архивы
             "zip": ["application/zip"],
             "rar": ["application/vnd.rar"],
@@ -560,7 +571,7 @@ def cleanup_recent_temp_files() -> None:
 
 def run_subprocess_with_limits(
     command: list,
-    timeout: int = 30,
+    timeout: float = 30,
     memory_limit: Optional[int] = None,
     capture_output: bool = True,
     text: bool = True,
@@ -606,7 +617,8 @@ def run_subprocess_with_limits(
             resource.setrlimit(resource.RLIMIT_DATA, (memory_limit, memory_limit))
 
             # Устанавливаем ограничение на время CPU (в секундах)
-            resource.setrlimit(resource.RLIMIT_CPU, (timeout * 2, timeout * 2))
+            cpu_limit = max(1, math.ceil(timeout * 2))
+            resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit, cpu_limit))
 
             logger.debug(
                 f"Установлены ограничения ресурсов: память={memory_limit}, CPU={timeout * 2}"

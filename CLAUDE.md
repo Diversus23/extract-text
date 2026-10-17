@@ -47,6 +47,7 @@ app/
 ├── main.py        # FastAPI: 4 эндпоинта, lifespan, middleware, Pydantic-модели
 ├── extractors.py  # TextExtractor: единая точка извлечения по расширению (~3300 строк)
 ├── config.py      # Settings (env-vars), SUPPORTED_FORMATS, MIME_TO_EXTENSION, VERSION
+├── transcription.py  # /v1/transcribe: ffprobe/ffmpeg → GigaAM v3 (onnx-asr) + silero VAD, сегменты, говорящие по каналам
 └── utils.py       # sanitize_filename, validate_file_type, cleanup_temp_files, setup_logging
 ```
 
@@ -70,6 +71,10 @@ app/
 ### Веб-экстракция (`/v1/extract/url`)
 
 Двухрежимная: `requests` + BeautifulSoup для статики; Playwright (Chromium) для JS-рендеринга, lazy loading (защита от бесконечного скролла через `MAX_SCROLL_ATTEMPTS`), base64-изображений. Параметры передаются через Pydantic-модель `ExtractionOptions` (см. `app/main.py:54`) и переопределяют дефолты из `config.py`. Отдельная защита от SSRF: `BLOCKED_IP_RANGES` и `BLOCKED_HOSTNAMES`. Если URL ведёт на файл (определяется HEAD-запросом, `HEAD_REQUEST_TIMEOUT`), он скачивается и обрабатывается как обычный файл.
+
+### Расшифровка аудио (`/v1/transcribe`, v1.12.1)
+
+Контур: `app/transcription_ingress.py` проверяет доступ, Content-Length и размер до разбора multipart, затем асинхронно занимает слот через `Transcriber.reserve`; очередь ограничена `TRANSCRIPTION_MAX_QUEUE_SIZE`. Слот передаётся заданию в отдельном пуле аудио и удерживается до фактического завершения потока, включая отмену HTTP-запроса. В `app/transcription.py` файл пишется как `input.<ext>`; ffprobe/ffmpeg работают без shell, с форсированным демуксером и `-protocol_whitelist file`. Отмена проверяется между этапами и пакетами VAD, таймауты подпроцессов ограничены общим дедлайном. Обе модели грузятся офлайн из `MODELS_DIR` и прогреваются при старте: основная GigaAM RNN-T с VAD и резервная CTC int8 для пустых речевых сегментов. Нераспознанные сегменты сохраняют тайм-коды; `text_status` — `ok`, `partial`, `unrecognized` или `no_speech`. Готовность — `GET /health?check=transcription`. Стерео распознаётся по каналам, для моно `speaker=null`. В prod сервис `api-audio` использует один воркер и порт 7556; у сервиса документов `ENABLE_TRANSCRIPTION=false`. Полный контракт — в `README.md` и `docs/TZ.md`. Интеграция со стороны 1С — отдельная задача.
 
 ### Безопасность (обязательно учитывать при правках)
 

@@ -8,6 +8,7 @@ import asyncio
 import base64
 import logging
 import os
+import threading
 import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
@@ -18,6 +19,7 @@ from fastapi import (
     Depends,
     FastAPI,
     File,
+    Form,
     HTTPException,
     Request,
     UploadFile,
@@ -30,9 +32,19 @@ from pydantic import BaseModel, Field
 from app.auth import verify_api_key
 from app.config import settings
 from app.extractors import TextExtractor
+from app.transcription import (
+    TranscriptionCancelled,
+    TranscriptionError,
+    build_response,
+    get_transcriber,
+    parse_channel_labels,
+    transcribe_bytes,
+)
+from app.transcription_ingress import TranscriptionIngressMiddleware
 from app.utils import (
     cleanup_recent_temp_files,
     cleanup_temp_files,
+    get_file_extension,
     sanitize_filename,
     setup_logging,
     validate_file_type,
@@ -44,6 +56,21 @@ logger = logging.getLogger(__name__)
 
 # Константы для FastAPI аргументов
 FILE_UPLOAD = File(...)
+CHANNEL_LABELS_FORM = Form(
+    None,
+    description="Метки каналов через запятую, например: client,operator",
+)
+EXTERNAL_ID_FORM = Form(
+    None,
+    description="Идентификатор записи на стороне клиента (до 128 символов), "
+    "возвращается в ответе без изменений",
+)
+
+# Ограничения параметров /v1/transcribe: метка канала копируется в speaker каждого
+# сегмента, и без лимита длинная метка раздувает ответ в сотни мегабайт.
+MAX_EXTERNAL_ID_LENGTH = 128
+MAX_CHANNEL_LABELS_LENGTH = 256
+MAX_CHANNEL_LABEL_LENGTH = 64
 
 # Инициализация экстрактора текста
 text_extractor = TextExtractor()
@@ -154,10 +181,23 @@ async def lifespan(app: FastAPI):
     # Очистка временных файлов при старте
     cleanup_temp_files()
 
+    # Прогрев модели: ошибка конфигурации (нет весов) видна сразу при старте, а не на
+    # первом запросе. Сбой не роняет API: документы продолжают обрабатываться.
+    if settings.ENABLE_TRANSCRIPTION:
+        try:
+            await run_in_threadpool(get_transcriber().warm_up)
+            logger.info("Модель распознавания речи загружена")
+        except TranscriptionError as error:
+            logger.error(
+                f"Модель распознавания речи недоступна: {error.message} "
+                "Эндпоинт /v1/transcribe будет отвечать 503."
+            )
+
     yield
 
     # Graceful shutdown: корректно закрываем пул потоков
     logger.info("Завершение работы Text Extraction API")
+    await run_in_threadpool(get_transcriber().close)
     try:
         if hasattr(text_extractor, "_thread_pool"):
             logger.info("Закрытие пула потоков...")
@@ -186,6 +226,7 @@ app = FastAPI(
         "url": "https://softonit.ru",
     },
 )
+app.add_middleware(TranscriptionIngressMiddleware)
 
 # Добавление CORS middleware. allow_credentials=True не совместим с allow_origins=["*"]
 # по спецификации CORS — браузер просто проигнорирует ответ. Поэтому при wildcard
@@ -236,8 +277,23 @@ async def root() -> Dict[str, str]:
 
 
 @app.get("/health")
-async def health() -> Dict[str, str]:
-    """Проверка состояния API."""
+async def health(check: Optional[str] = None) -> Any:
+    """
+    Проверка состояния API.
+
+    GET /health?check=transcription — проба готовности модели распознавания речи
+    (для healthcheck сервиса api-audio): 200 только когда модель загружена.
+    """
+    if check == "transcription":
+        state = (
+            get_transcriber().status if settings.ENABLE_TRANSCRIPTION else "disabled"
+        )
+        if state != "ready":
+            return JSONResponse(
+                status_code=503,
+                content={"status": "unavailable", "transcription": state},
+            )
+        return {"status": "ok", "transcription": "ready"}
     return {"status": "ok"}
 
 
@@ -686,6 +742,165 @@ async def extract_text_from_url(request: URLRequest):
                 "message": "Внутренняя ошибка обработки.",
             },
         )
+
+
+def _transcribe_error(
+    status_code: int,
+    filename: str,
+    message: str,
+    headers: Optional[Dict[str, str]] = None,
+) -> JSONResponse:
+    """Ответ с ошибкой /v1/transcribe в общем формате API."""
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": "error", "filename": filename, "message": message},
+        headers=headers,
+    )
+
+
+@v1_router.post("/transcribe")
+async def transcribe(
+    request: Request,
+    file: UploadFile = FILE_UPLOAD,
+    channel_labels: Optional[str] = CHANNEL_LABELS_FORM,
+    external_id: Optional[str] = EXTERNAL_ID_FORM,
+):
+    """Расшифровка речи из аудиофайла: текст, тайм-коды сегментов, говорящие."""
+    original_filename = file.filename or "unknown_file"
+    logger.info(f"Получен аудиофайл для расшифровки: {original_filename}")
+
+    if not settings.ENABLE_TRANSCRIPTION:
+        return _transcribe_error(
+            503, original_filename, "Расшифровка аудио отключена на этом сервере."
+        )
+
+    if external_id is not None and len(external_id) > MAX_EXTERNAL_ID_LENGTH:
+        return _transcribe_error(
+            400,
+            original_filename,
+            f"Параметр external_id длиннее {MAX_EXTERNAL_ID_LENGTH} символов.",
+        )
+
+    labels = parse_channel_labels(channel_labels)
+    if len(channel_labels or "") > MAX_CHANNEL_LABELS_LENGTH or any(
+        len(label) > MAX_CHANNEL_LABEL_LENGTH for label in labels
+    ):
+        return _transcribe_error(
+            400,
+            original_filename,
+            f"Параметр channel_labels слишком длинный: всего до "
+            f"{MAX_CHANNEL_LABELS_LENGTH} символов, каждая метка до "
+            f"{MAX_CHANNEL_LABEL_LENGTH}.",
+        )
+
+    # Content-Length и общий размер тела проверены middleware до разбора формы.
+    if file.size is None:
+        logger.warning(f"Файл {original_filename} не содержит Content-Length")
+        return _transcribe_error(
+            400,
+            original_filename,
+            "Отсутствует заголовок Content-Length. Пожалуйста, убедитесь, что размер файла указан в запросе.",
+        )
+
+    if file.size > settings.MAX_FILE_SIZE:
+        logger.warning(f"Файл {original_filename} слишком большой: {file.size} bytes")
+        return _transcribe_error(
+            413,
+            original_filename,
+            f"Размер файла превышает допустимые {settings.MAX_FILE_SIZE} байт.",
+        )
+
+    extension = get_file_extension(sanitize_filename(original_filename))
+    if extension not in settings.AUDIO_FORMATS:
+        logger.warning(f"Неподдерживаемый аудиоформат: {original_filename}")
+        return _transcribe_error(
+            415,
+            original_filename,
+            "Неподдерживаемый формат аудио. Допустимые: "
+            + ", ".join(settings.AUDIO_FORMATS)
+            + ".",
+        )
+
+    content = await file.read()
+    if not content:
+        logger.warning(f"Файл {original_filename} пуст")
+        return _transcribe_error(422, original_filename, "Файл пуст.")
+
+    is_valid, validation_error = validate_file_type(content, original_filename)
+    if not is_valid:
+        logger.warning(
+            f"Файл {original_filename} не прошел проверку типа: {validation_error}"
+        )
+        return _transcribe_error(
+            415,
+            original_filename,
+            "Расширение файла не соответствует его содержимому.",
+        )
+
+    cancel_event = threading.Event()
+    timeout = settings.TRANSCRIPTION_TIMEOUT_SECONDS
+    deadline = time.monotonic() + timeout
+    start_time = time.time()
+    try:
+        future = asyncio.wrap_future(
+            get_transcriber().submit(
+                request.state.transcription_slot,
+                transcribe_bytes,
+                content,
+                extension=extension,
+                channel_labels=labels,
+                cancel_event=cancel_event,
+                deadline=deadline,
+            )
+        )
+        # Даже после 504 слот принадлежит потоку до его фактического завершения.
+        # Забираем исключение завершившегося после таймаута задания из Future.
+        future.add_done_callback(
+            lambda done: None if done.cancelled() else done.exception()
+        )
+        result = await asyncio.wait_for(
+            asyncio.shield(future),
+            timeout=timeout,
+        )
+    except asyncio.CancelledError:
+        cancel_event.set()
+        raise
+    except (asyncio.TimeoutError, TranscriptionCancelled):
+        # Рабочий поток остановится сам: проверяет флаг отмены между сегментами
+        cancel_event.set()
+        logger.error(
+            f"Таймаут расшифровки {original_filename}: превышен лимит {timeout} секунд"
+        )
+        return _transcribe_error(
+            504,
+            original_filename,
+            f"Расшифровка файла превысила установленный лимит времени ({timeout} секунд).",
+        )
+    except TranscriptionError as error:
+        logger.warning(
+            f"Ошибка расшифровки {original_filename}: {error.message} ({error.status_code})"
+        )
+        headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
+        return _transcribe_error(
+            error.status_code, original_filename, error.message, headers
+        )
+    except Exception:
+        logger.exception(f"Непредвиденная ошибка расшифровки {original_filename}")
+        return _transcribe_error(
+            500, original_filename, "Внутренняя ошибка при расшифровке аудио."
+        )
+
+    logger.info(
+        f"Расшифровка {original_filename} завершена за {time.time() - start_time:.1f}s: "
+        f"сегментов {len(result.segments)}, длительность {result.duration:.1f}s"
+    )
+    return build_response(
+        filename=original_filename,
+        external_id=external_id,
+        duration=result.duration,
+        channels=result.channels,
+        segments=result.segments,
+    )
 
 
 # Регистрируем v1-роутер с единым auth-dependency.
