@@ -36,6 +36,7 @@ from app.transcription import (
     TranscriptionCancelled,
     TranscriptionError,
     build_response,
+    get_transcriber,
     parse_channel_labels,
     transcribe_bytes,
 )
@@ -179,6 +180,18 @@ async def lifespan(app: FastAPI):
     # Очистка временных файлов при старте
     cleanup_temp_files()
 
+    # Прогрев модели: ошибка конфигурации (нет весов) видна сразу при старте, а не на
+    # первом запросе. Сбой не роняет API: документы продолжают обрабатываться.
+    if settings.ENABLE_TRANSCRIPTION:
+        try:
+            await run_in_threadpool(get_transcriber().warm_up)
+            logger.info("Модель распознавания речи загружена")
+        except TranscriptionError as error:
+            logger.error(
+                f"Модель распознавания речи недоступна: {error.message} "
+                "Эндпоинт /v1/transcribe будет отвечать 503."
+            )
+
     yield
 
     # Graceful shutdown: корректно закрываем пул потоков
@@ -261,8 +274,23 @@ async def root() -> Dict[str, str]:
 
 
 @app.get("/health")
-async def health() -> Dict[str, str]:
-    """Проверка состояния API."""
+async def health(check: Optional[str] = None) -> Any:
+    """
+    Проверка состояния API.
+
+    GET /health?check=transcription — проба готовности модели распознавания речи
+    (для healthcheck сервиса api-audio): 200 только когда модель загружена.
+    """
+    if check == "transcription":
+        state = (
+            get_transcriber().status if settings.ENABLE_TRANSCRIPTION else "disabled"
+        )
+        if state != "ready":
+            return JSONResponse(
+                status_code=503,
+                content={"status": "unavailable", "transcription": state},
+            )
+        return {"status": "ok", "transcription": "ready"}
     return {"status": "ok"}
 
 

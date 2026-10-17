@@ -51,3 +51,32 @@ def test_compose_passes_quantization_build_arg(service):
 
     assert isinstance(build, dict)
     assert "GIGAAM_QUANTIZATION" in build["args"]
+
+
+def _audio_service() -> dict:
+    """Описание сервиса api-audio из docker-compose.prod.yml."""
+    compose = yaml.safe_load(
+        (ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8")
+    )
+    return compose["services"]["api-audio"]
+
+
+def test_audio_healthcheck_uses_readiness_probe():
+    """Healthcheck api-audio ждёт готовую модель, а не просто живой процесс."""
+    command = _audio_service()["healthcheck"]["test"]
+
+    assert any("/health?check=transcription" in part for part in command)
+
+
+def test_audio_threads_can_be_overridden_from_env():
+    """TRANSCRIPTION_THREADS из .env не перебивается молча значением из AUDIO_CPUS."""
+    environment = _audio_service()["environment"]
+
+    assert any("${TRANSCRIPTION_THREADS:-" in item for item in environment)
+
+
+def test_env_example_documents_audio_cpus():
+    """AUDIO_CPUS описан: на хосте меньше 4 ядер значение по умолчанию не запустится."""
+    text = (ROOT / "env_example").read_text(encoding="utf-8")
+
+    assert "AUDIO_CPUS" in text

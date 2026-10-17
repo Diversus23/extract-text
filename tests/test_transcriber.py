@@ -221,6 +221,48 @@ class TestModelLoading:
 
 
 @pytest.mark.unit
+class TestWarmUp:
+    """Тесты прогрева модели и статуса готовности."""
+
+    def test_status_not_loaded_initially(self):
+        """До первого обращения модель не загружена."""
+        assert Transcriber(model_factory=StubModel).status == "not_loaded"
+
+    def test_warm_up_loads_model_once(self):
+        """Прогрев загружает модель; следующее распознавание её не перезагружает."""
+        factory = MagicMock(return_value=StubModel())
+        transcriber = Transcriber(model_factory=factory)
+
+        transcriber.warm_up()
+        transcriber.recognize(_audio(), threading.Event(), _far_deadline())
+
+        assert transcriber.status == "ready"
+        assert factory.call_count == 1
+
+    def test_warm_up_failure_marks_unavailable(self):
+        """Ошибка загрузки: ModelUnavailableError и статус unavailable."""
+        transcriber = Transcriber(
+            model_factory=MagicMock(side_effect=RuntimeError("x"))
+        )
+
+        with pytest.raises(ModelUnavailableError):
+            transcriber.warm_up()
+
+        assert transcriber.status == "unavailable"
+
+    def test_status_recovers_after_successful_retry(self):
+        """Повторный успешный прогрев возвращает статус ready."""
+        factory = MagicMock(side_effect=[RuntimeError("x"), StubModel()])
+        transcriber = Transcriber(model_factory=factory)
+
+        with pytest.raises(ModelUnavailableError):
+            transcriber.warm_up()
+        transcriber.warm_up()
+
+        assert transcriber.status == "ready"
+
+
+@pytest.mark.unit
 class TestDefaultModelLoader:
     """Тесты загрузчика по умолчанию (onnx-asr подменён)."""
 

@@ -106,7 +106,7 @@ class Settings:
     # сегменты (менее 1.5 с), для которых модель возвращает пустой текст.
     TRANSCRIPTION_VAD_MIN_SILENCE_MS: int = int(
         os.getenv("TRANSCRIPTION_VAD_MIN_SILENCE_MS", "500")
-    )  # пауза, которая разделяет сегменты
+    )  # минимальная пауза; фактический порог деления сегментов = MIN_SILENCE + 2×PAD
     TRANSCRIPTION_VAD_SPEECH_PAD_MS: int = int(
         os.getenv("TRANSCRIPTION_VAD_SPEECH_PAD_MS", "300")
     )  # запас вокруг сегмента речи

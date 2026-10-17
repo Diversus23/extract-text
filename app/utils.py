@@ -221,7 +221,7 @@ def validate_file_type(content: bytes, filename: str) -> tuple[bool, Optional[st
             "m4a": ["audio/x-m4a", "audio/mp4", "video/mp4"],
             "aac": ["audio/aac", "audio/x-hx-aac-adts"],
             "wma": ["video/x-ms-asf", "audio/x-ms-wma"],
-            "amr": ["audio/amr", "audio/AMR"],
+            "amr": ["audio/amr", "audio/AMR", "audio/AMR-WB", "audio/amr-wb"],
             # Архивы
             "zip": ["application/zip"],
             "rar": ["application/vnd.rar"],

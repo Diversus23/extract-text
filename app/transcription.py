@@ -403,6 +403,7 @@ class Transcriber:
         """model_factory создаёт адаптер onnx-asr с VAD; по умолчанию грузит GigaAM."""
         self._model_factory = model_factory or _load_default_model
         self._model: Any = None
+        self._load_failed = False
         self._load_lock = threading.Lock()
         self._semaphore = threading.BoundedSemaphore(
             max(1, settings.TRANSCRIPTION_MAX_CONCURRENCY)
@@ -425,6 +426,22 @@ class Transcriber:
         finally:
             self._semaphore.release()
 
+    @property
+    def status(self) -> str:
+        """Готовность модели: ready, unavailable (загрузка не удалась) или not_loaded."""
+        if self._model is not None:
+            return "ready"
+        return "unavailable" if self._load_failed else "not_loaded"
+
+    def warm_up(self) -> None:
+        """
+        Загружает модель заранее (при старте сервиса), не дожидаясь первого запроса.
+
+        Raises:
+            ModelUnavailableError: модель не загрузилась.
+        """
+        self._get_model()
+
     def _get_model(self) -> Any:
         """Возвращает модель, загружая её при первом обращении."""
         if self._model is None:
@@ -432,9 +449,12 @@ class Transcriber:
                 if self._model is None:
                     try:
                         self._model = self._model_factory()
+                        self._load_failed = False
                     except TranscriptionError:
+                        self._load_failed = True
                         raise
                     except Exception as error:
+                        self._load_failed = True
                         logger.exception("Не удалось загрузить модель распознавания")
                         raise ModelUnavailableError(
                             "Модель распознавания недоступна."
@@ -453,8 +473,10 @@ class Transcriber:
         """
         Распознаёт один канал: samples — одномерный int16, 16 кГц.
 
-        deadline — абсолютное время в шкале time.monotonic(). Флаг отмены и
-        дедлайн проверяются перед обращением к модели и перед каждым сегментом.
+        deadline — абсолютное время в шкале time.monotonic(). Флаг отмены и дедлайн
+        проверяются перед обращением к модели и перед получением каждого сегмента;
+        onnx-asr распознаёт сегменты пакетами (по умолчанию до 8), поэтому остановка
+        может занять время обработки одного пакета.
 
         Raises:
             TranscriptionCancelled: отмена или истёк дедлайн.

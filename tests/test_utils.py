@@ -458,3 +458,9 @@ class TestValidateAudioFileType:
         is_valid, error = validate_file_type(b"#!AMR\n" + bytes(64), "voice.amr")
 
         assert is_valid, error
+
+    def test_validate_amr_wb_header(self):
+        """Широкополосный AMR (AMR-WB) тоже принимается: ffmpeg его декодирует."""
+        is_valid, error = validate_file_type(b"#!AMR-WB\n" + bytes(64), "voice.amr")
+
+        assert is_valid, error
