@@ -24,6 +24,9 @@ def main() -> None:
 
     print(f"Скачивание модели {model} (quantization={quantization}) в {models_dir}")
     onnx_asr.load_model(model, models_dir / model, quantization=quantization)
+    # CTC int8 восстанавливает короткие реплики, которые RNN-T возвращает пустыми.
+    fallback = "gigaam-v3-e2e-ctc"
+    onnx_asr.load_model(fallback, models_dir / fallback, quantization="int8")
     onnx_asr.load_vad("silero", models_dir / "silero-vad")
     print("Веса модели и VAD готовы")
 

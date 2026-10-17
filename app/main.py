@@ -40,6 +40,7 @@ from app.transcription import (
     parse_channel_labels,
     transcribe_bytes,
 )
+from app.transcription_ingress import TranscriptionIngressMiddleware
 from app.utils import (
     cleanup_recent_temp_files,
     cleanup_temp_files,
@@ -196,6 +197,7 @@ async def lifespan(app: FastAPI):
 
     # Graceful shutdown: корректно закрываем пул потоков
     logger.info("Завершение работы Text Extraction API")
+    await run_in_threadpool(get_transcriber().close)
     try:
         if hasattr(text_extractor, "_thread_pool"):
             logger.info("Закрытие пула потоков...")
@@ -224,6 +226,7 @@ app = FastAPI(
         "url": "https://softonit.ru",
     },
 )
+app.add_middleware(TranscriptionIngressMiddleware)
 
 # Добавление CORS middleware. allow_credentials=True не совместим с allow_origins=["*"]
 # по спецификации CORS — браузер просто проигнорирует ответ. Поэтому при wildcard
@@ -757,6 +760,7 @@ def _transcribe_error(
 
 @v1_router.post("/transcribe")
 async def transcribe(
+    request: Request,
     file: UploadFile = FILE_UPLOAD,
     channel_labels: Optional[str] = CHANNEL_LABELS_FORM,
     external_id: Optional[str] = EXTERNAL_ID_FORM,
@@ -789,7 +793,7 @@ async def transcribe(
             f"{MAX_CHANNEL_LABEL_LENGTH}.",
         )
 
-    # Проверка наличия размера файла (защита от DoS)
+    # Content-Length и общий размер тела проверены middleware до разбора формы.
     if file.size is None:
         logger.warning(f"Файл {original_filename} не содержит Content-Length")
         return _transcribe_error(
@@ -838,17 +842,29 @@ async def transcribe(
     deadline = time.monotonic() + timeout
     start_time = time.time()
     try:
-        result = await asyncio.wait_for(
-            run_in_threadpool(
+        future = asyncio.wrap_future(
+            get_transcriber().submit(
+                request.state.transcription_slot,
                 transcribe_bytes,
                 content,
                 extension=extension,
                 channel_labels=labels,
                 cancel_event=cancel_event,
                 deadline=deadline,
-            ),
+            )
+        )
+        # Даже после 504 слот принадлежит потоку до его фактического завершения.
+        # Забираем исключение завершившегося после таймаута задания из Future.
+        future.add_done_callback(
+            lambda done: None if done.cancelled() else done.exception()
+        )
+        result = await asyncio.wait_for(
+            asyncio.shield(future),
             timeout=timeout,
         )
+    except asyncio.CancelledError:
+        cancel_event.set()
+        raise
     except (asyncio.TimeoutError, TranscriptionCancelled):
         # Рабочий поток остановится сам: проверяет флаг отмены между сегментами
         cancel_event.set()

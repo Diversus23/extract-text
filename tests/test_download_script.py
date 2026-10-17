@@ -34,7 +34,7 @@ def test_download_script_layout_matches_runtime(tmp_path, monkeypatch):
     ):
         _load_script().main()
 
-    assert load_model.call_args.args == (
+    assert load_model.call_args_list[0].args == (
         settings.TRANSCRIPTION_MODEL,
         model_dir(str(tmp_path), settings.TRANSCRIPTION_MODEL),
     )
@@ -50,18 +50,23 @@ def test_download_script_passes_quantization(tmp_path, monkeypatch, value, expec
     with patch("onnx_asr.load_model") as load_model, patch("onnx_asr.load_vad"):
         _load_script().main()
 
-    assert load_model.call_args.kwargs["quantization"] == expected
+    assert load_model.call_args_list[0].kwargs["quantization"] == expected
+    assert load_model.call_args_list[1].args == (
+        settings.TRANSCRIPTION_FALLBACK_MODEL,
+        model_dir(str(tmp_path), settings.TRANSCRIPTION_FALLBACK_MODEL),
+    )
+    assert load_model.call_args_list[1].kwargs["quantization"] == "int8"
 
 
 def test_download_script_uses_model_from_env(tmp_path, monkeypatch):
     """Имя модели берётся из TRANSCRIPTION_MODEL."""
     monkeypatch.setenv("MODELS_DIR", str(tmp_path))
-    monkeypatch.setenv("TRANSCRIPTION_MODEL", "gigaam-v3-e2e-ctc")
+    monkeypatch.setenv("TRANSCRIPTION_MODEL", "gigaam-v3-ctc")
 
     with patch("onnx_asr.load_model") as load_model, patch("onnx_asr.load_vad"):
         _load_script().main()
 
-    assert load_model.call_args.args == (
-        "gigaam-v3-e2e-ctc",
-        model_dir(str(tmp_path), "gigaam-v3-e2e-ctc"),
+    assert load_model.call_args_list[0].args == (
+        "gigaam-v3-ctc",
+        model_dir(str(tmp_path), "gigaam-v3-ctc"),
     )

@@ -30,7 +30,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Веса модели распознавания речи (GigaAM v3) и silero VAD скачиваются при сборке:
+# Веса GigaAM v3 (основная модель и резервная CTC int8) и silero VAD — при сборке:
 # в рантайме образ работает без интернета. GIGAAM_QUANTIZATION: пусто = fp32 (~0.9 ГБ),
 # int8 = компактные веса энкодера (~230 МБ). Скрипт копируется до кода приложения,
 # чтобы слой с весами не пересобирался при каждой правке кода.
@@ -80,6 +80,10 @@ RUN chown -R appuser:appuser /code && \
 USER appuser
 
 # Устанавливаем Playwright браузер от пользователя
+# Необязательные официальные зеркала для сетей с фильтрацией CDN.
+# ARG действуют только при сборке и не сохраняются в окружении готового образа.
+ARG PLAYWRIGHT_DOWNLOAD_HOST
+ARG PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST
 RUN playwright install chromium
 
 # Переменные окружения
@@ -90,4 +94,4 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 7555
 
 # Команда по умолчанию
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7555"] 
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7555"]

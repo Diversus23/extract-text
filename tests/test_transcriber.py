@@ -289,8 +289,10 @@ class TestDefaultModelLoader:
         monkeypatch.setattr(settings, "TRANSCRIPTION_VAD_MIN_SILENCE_MS", 700)
         monkeypatch.setattr(settings, "TRANSCRIPTION_VAD_SPEECH_PAD_MS", 250)
         asr_path = model_dir(str(tmp_path), settings.TRANSCRIPTION_MODEL)
+        fallback_path = model_dir(str(tmp_path), settings.TRANSCRIPTION_FALLBACK_MODEL)
         vad_path = vad_dir(str(tmp_path))
         asr_path.mkdir()
+        fallback_path.mkdir()
         vad_path.mkdir()
 
         with (
@@ -299,8 +301,8 @@ class TestDefaultModelLoader:
         ):
             result = transcription._load_default_model()
 
-        load_model.assert_called_once()
-        args, kwargs = load_model.call_args
+        assert load_model.call_count == 2
+        args, kwargs = load_model.call_args_list[0]
         assert args == (settings.TRANSCRIPTION_MODEL, asr_path)
         assert kwargs["quantization"] == expected
         assert kwargs["sess_options"].intra_op_num_threads == 3
@@ -312,7 +314,12 @@ class TestDefaultModelLoader:
             min_silence_duration_ms=700,
             speech_pad_ms=250,
         )
-        assert result is load_model.return_value.with_vad.return_value
+        assert isinstance(result, transcription.SpeechRecognitionModel)
+        assert load_model.call_args_list[1].args == (
+            settings.TRANSCRIPTION_FALLBACK_MODEL,
+            fallback_path,
+        )
+        assert load_model.call_args_list[1].kwargs["quantization"] == "int8"
 
 
 @pytest.mark.unit

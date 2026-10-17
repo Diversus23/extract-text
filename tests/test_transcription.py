@@ -44,13 +44,15 @@ class TestBuildSegments:
         assert segments[0].speaker is None
         assert segments[0].channel is None
 
-    def test_build_segments_drops_blank_text(self):
-        """Сегменты с пустым текстом отбрасываются."""
+    def test_build_segments_preserves_unrecognized_speech(self):
+        """Выделенная VAD, но не распознанная речь сохраняет тайм-коды."""
         segments = build_segments(
             [[RawSegment(0.0, 1.0, "  "), RawSegment(1.0, 2.0, " текст ")]], []
         )
 
-        assert [s.text for s in segments] == ["текст"]
+        assert [s.text for s in segments] == ["", "текст"]
+        assert segments[0].start == 0.0
+        assert segments[0].end == 1.0
 
     def test_build_segments_equal_start_orders_by_channel(self):
         """При одинаковом начале порядок определяется номером канала."""
@@ -115,6 +117,25 @@ class TestBuildResponse:
         assert response["text_status"] == "no_speech"
         assert response["segments"] == []
         assert response["language"] == "ru"
+
+    @pytest.mark.parametrize(
+        "texts,status,text",
+        [([""], "unrecognized", ""), (["", "Алло"], "partial", "Алло")],
+    )
+    def test_unrecognized_speech_is_not_silence(self, texts, status, text):
+        response = build_response(
+            filename="call.wav",
+            external_id=None,
+            duration=2.0,
+            channels=1,
+            segments=[
+                Segment(i, i + 1, None, None, value) for i, value in enumerate(texts)
+            ],
+        )
+
+        assert response["text_status"] == status
+        assert response["text"] == text
+        assert response["segments"][0]["text"] == ""
 
     def test_build_response_ok_text_joined(self):
         """Текст собирается из сегментов через пробел, поля соответствуют контракту."""

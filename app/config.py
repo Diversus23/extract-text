@@ -8,7 +8,7 @@ class Settings:
     """Настройки приложения."""
 
     # Основные настройки
-    VERSION: str = "1.12.0"
+    VERSION: str = "1.12.1"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
     # Настройки API
@@ -83,6 +83,8 @@ class Settings:
         os.getenv("ENABLE_TRANSCRIPTION", "true").lower() == "true"
     )
     TRANSCRIPTION_MODEL: str = os.getenv("TRANSCRIPTION_MODEL", "gigaam-v3-e2e-rnnt")
+    # Резерв для речевых сегментов, на которых основная модель вернула пустой текст.
+    TRANSCRIPTION_FALLBACK_MODEL: str = "gigaam-v3-e2e-ctc"
     # Вариант весов: пусто = fp32, "int8" = квантизованная версия
     TRANSCRIPTION_QUANTIZATION: str = os.getenv("TRANSCRIPTION_QUANTIZATION", "")
     # Каталог с весами модели и VAD внутри образа (скачиваются на этапе сборки)
@@ -98,6 +100,9 @@ class Settings:
     )
     TRANSCRIPTION_QUEUE_WAIT_SECONDS: int = int(
         os.getenv("TRANSCRIPTION_QUEUE_WAIT_SECONDS", "30")
+    )
+    TRANSCRIPTION_MAX_QUEUE_SIZE: int = max(
+        0, int(os.getenv("TRANSCRIPTION_MAX_QUEUE_SIZE", "2"))
     )
     TRANSCRIPTION_THREADS: int = int(
         os.getenv("TRANSCRIPTION_THREADS", str(os.cpu_count() or 1))

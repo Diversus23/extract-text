@@ -220,6 +220,9 @@ TRANSCRIPTION_MAX_CONCURRENCY=1
 # Сколько секунд запрос ждёт свободный слот, прежде чем получить 503
 TRANSCRIPTION_QUEUE_WAIT_SECONDS=30
 
+# Максимум запросов, ожидающих слот до чтения тела. 0 — сразу отвечать 503 при занятости.
+TRANSCRIPTION_MAX_QUEUE_SIZE=2
+
 # Число потоков onnxruntime. По умолчанию — число ядер хоста (os.cpu_count() внутри
 # контейнера не видит лимит cpus), поэтому в контейнере задавайте явно.
 # Для сервиса api-audio: TRANSCRIPTION_THREADS из .env, иначе AUDIO_CPUS (см. ниже).

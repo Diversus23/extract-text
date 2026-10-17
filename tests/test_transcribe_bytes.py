@@ -176,7 +176,7 @@ class TestTranscribeBytes:
         """Файл пишется во временный каталог как input.<расширение>."""
         seen = {}
 
-        def fake_probe(path, extension):
+        def fake_probe(path, extension, **kwargs):
             seen["name"] = path.name
             seen["content"] = Path(path).read_bytes()
             seen["extension"] = extension
@@ -257,6 +257,52 @@ class TestTranscribeBytes:
 
             with transcriber.slot(0.05):
                 pass
+
+    @pytest.mark.parametrize("expired", [False, True])
+    def test_cancelled_job_never_starts_media_tools(self, expired):
+        cancel = threading.Event()
+        if not expired:
+            cancel.set()
+        transcriber = Transcriber(model_factory=lambda: ChannelModel([]))
+        with (
+            patch("app.transcription.probe_audio", side_effect=AssertionError("probe")),
+            patch(
+                "app.transcription.decode_audio", side_effect=AssertionError("decode")
+            ),
+        ):
+            with pytest.raises(TranscriptionCancelled):
+                transcribe_bytes(
+                    b"audio",
+                    extension="wav",
+                    channel_labels=[],
+                    cancel_event=cancel,
+                    deadline=time.monotonic() + (-1 if expired else 60),
+                    transcriber=transcriber,
+                )
+
+    def test_cancel_during_probe_prevents_decoding(self):
+        cancel = threading.Event()
+
+        def probe(*args, **kwargs):
+            cancel.set()
+            return AudioInfo(1.0, 1)
+
+        transcriber = Transcriber(model_factory=lambda: ChannelModel([]))
+        with (
+            patch("app.transcription.probe_audio", side_effect=probe),
+            patch(
+                "app.transcription.decode_audio", side_effect=AssertionError("decode")
+            ),
+        ):
+            with pytest.raises(TranscriptionCancelled):
+                transcribe_bytes(
+                    b"audio",
+                    extension="wav",
+                    channel_labels=[],
+                    cancel_event=cancel,
+                    deadline=time.monotonic() + 60,
+                    transcriber=transcriber,
+                )
 
     def test_busy_slot_rejects_before_decoding(self, monkeypatch):
         """Занятый слот отклоняет запрос до зондирования и декодирования."""

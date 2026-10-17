@@ -3,6 +3,8 @@
 import json
 import shutil
 import subprocess
+import sys
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,11 +18,24 @@ from app.transcription import (
     AudioInfo,
     AudioTooLongError,
     ModelUnavailableError,
+    TranscriptionCancelled,
     decode_audio,
     probe_audio,
 )
 
 TWO_SAMPLES = b"\x01\x00" * 100
+
+
+def test_media_subprocess_is_killed_at_transcription_deadline():
+    """Общий дедлайн останавливает подпроцесс раньше его собственного таймаута."""
+    started = time.monotonic()
+    with pytest.raises(TranscriptionCancelled):
+        transcription._run_media_tool(
+            [sys.executable, "-c", "import time; time.sleep(2)"],
+            timeout=5,
+            deadline=started + 0.05,
+        )
+    assert time.monotonic() - started < 1
 
 
 def _completed(stdout: bytes, returncode: int = 0) -> subprocess.CompletedProcess:

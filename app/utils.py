@@ -2,6 +2,7 @@
 
 import glob
 import logging
+import math
 import os
 import shutil
 import signal
@@ -570,7 +571,7 @@ def cleanup_recent_temp_files() -> None:
 
 def run_subprocess_with_limits(
     command: list,
-    timeout: int = 30,
+    timeout: float = 30,
     memory_limit: Optional[int] = None,
     capture_output: bool = True,
     text: bool = True,
@@ -616,7 +617,8 @@ def run_subprocess_with_limits(
             resource.setrlimit(resource.RLIMIT_DATA, (memory_limit, memory_limit))
 
             # Устанавливаем ограничение на время CPU (в секундах)
-            resource.setrlimit(resource.RLIMIT_CPU, (timeout * 2, timeout * 2))
+            cpu_limit = max(1, math.ceil(timeout * 2))
+            resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit, cpu_limit))
 
             logger.debug(
                 f"Установлены ограничения ресурсов: память={memory_limit}, CPU={timeout * 2}"

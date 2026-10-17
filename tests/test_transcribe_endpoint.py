@@ -3,7 +3,6 @@
 import asyncio
 import threading
 from io import BytesIO
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -170,16 +169,16 @@ class TestTranscribeErrors:
         assert response.status_code == 200
         assert transcribe.call_args.kwargs["channel_labels"] == ["x" * 63] * 4
 
-    def test_missing_content_length_400(self):
-        """Без размера файла (нет Content-Length) — 400."""
-        fake_file = SimpleNamespace(filename="call.mp3", size=None)
-
-        response = asyncio.run(
-            app_main.transcribe(file=fake_file, channel_labels=None, external_id=None)
+    def test_missing_content_length_400(self, test_client):
+        """Настоящий потоковый запрос без Content-Length отклоняется."""
+        response = test_client.post(
+            "/v1/transcribe",
+            content=iter([b"audio"]),
+            headers={"Content-Type": "multipart/form-data; boundary=x"},
         )
 
         assert response.status_code == 400
-        assert b"Content-Length" in response.body
+        assert "Content-Length" in response.json()["message"]
 
     def test_empty_file_422(self, test_client, valid_type, transcribe):
         """Пустой файл — 422."""

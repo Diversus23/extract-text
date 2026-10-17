@@ -1,11 +1,13 @@
 """Расшифровка речи из аудиофайлов (эндпоинт /v1/transcribe)."""
 
+import asyncio
 import json
 import logging
 import subprocess
 import tempfile
 import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -115,6 +117,37 @@ class TranscriptionCancelled(Exception):
     """Внутренний сигнал: обработка отменена по таймауту или флагу отмены."""
 
 
+class TranscriptionSlot:
+    """Слот от приёма запроса до фактического завершения рабочего потока."""
+
+    def __init__(self, semaphore: threading.BoundedSemaphore) -> None:
+        """Принимает уже занятый семафор обработки."""
+        self._semaphore = semaphore
+        self._lock = threading.Lock()
+        self._transferred = False
+        self._released = False
+
+    def transfer(self) -> None:
+        """Передаёт ответственность за освобождение рабочему заданию."""
+        with self._lock:
+            self._transferred = True
+
+    def release(self, *, unless_transferred: bool = False) -> None:
+        """Освобождает слот ровно один раз, в том числе после отмены HTTP-запроса."""
+        with self._lock:
+            if self._released or (unless_transferred and self._transferred):
+                return
+            self._released = True
+            self._semaphore.release()
+
+    def __enter__(self) -> None:
+        """Слот уже занят до чтения тела запроса."""
+
+    def __exit__(self, *args: Any) -> None:
+        """Возвращает слот после обработки, включая ошибки и отмену."""
+        self.release()
+
+
 def parse_channel_labels(raw: Optional[str]) -> list[str]:
     """
     Разбор параметра channel_labels: метки через запятую.
@@ -141,7 +174,7 @@ def build_segments(
     Объединяет сегменты каналов в один список, отсортированный по времени.
 
     Для стерео (ровно два канала) заполняются channel и speaker, для моно
-    оба поля остаются None. Сегменты с пустым текстом отбрасываются.
+    оба поля остаются None. Нераспознанные речевые сегменты сохраняют тайм-коды.
     """
     is_stereo = len(per_channel) == 2
     segments: list[Segment] = []
@@ -149,8 +182,6 @@ def build_segments(
     for channel_index, raw_segments in enumerate(per_channel):
         for raw in raw_segments:
             text = raw.text.strip()
-            if not text:
-                continue
             segments.append(
                 Segment(
                     start=raw.start,
@@ -174,6 +205,15 @@ def build_response(
     segments: list[Segment],
 ) -> dict:
     """Формирует тело успешного ответа /v1/transcribe."""
+    texts = [segment.text for segment in segments if segment.text]
+    if not segments:
+        text_status = "no_speech"
+    elif not texts:
+        text_status = "unrecognized"
+    elif len(texts) < len(segments):
+        text_status = "partial"
+    else:
+        text_status = "ok"
     return {
         "status": "success",
         "filename": filename,
@@ -182,8 +222,8 @@ def build_response(
         "channels": channels,
         "model": settings.TRANSCRIPTION_MODEL,
         "language": "ru",
-        "text_status": "ok" if segments else "no_speech",
-        "text": " ".join(segment.text for segment in segments),
+        "text_status": text_status,
+        "text": " ".join(texts),
         "segments": [
             {
                 "start": round(segment.start, 2),
@@ -213,19 +253,28 @@ def _demuxer_for(extension: str) -> str:
     return demuxer
 
 
-def _run_media_tool(command: list, timeout: int) -> subprocess.CompletedProcess:
+def _run_media_tool(
+    command: list, timeout: float, deadline: Optional[float] = None
+) -> subprocess.CompletedProcess:
     """
     Запускает ffprobe/ffmpeg с ограничениями ресурсов.
 
     Отсутствие бинарника — проблема сервиса (503), а таймаут, лимит памяти
     и ненулевой код — проблема файла (422).
     """
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TranscriptionCancelled()
+        timeout = min(timeout, remaining)
     try:
         result = run_subprocess_with_limits(command, timeout=timeout, text=False)
     except FileNotFoundError as error:
         logger.error(f"Не найден {command[0]}: {error}")
         raise ModelUnavailableError("Сервис обработки аудио недоступен.") from error
     except (subprocess.TimeoutExpired, MemoryError) as error:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TranscriptionCancelled() from error
         logger.error(f"{command[0]} прерван ({type(error).__name__})")
         raise AudioFormatError("Не удалось обработать аудиофайл.") from error
 
@@ -236,7 +285,9 @@ def _run_media_tool(command: list, timeout: int) -> subprocess.CompletedProcess:
     return result
 
 
-def probe_audio(path: Path, extension: str) -> AudioInfo:
+def probe_audio(
+    path: Path, extension: str, *, deadline: Optional[float] = None
+) -> AudioInfo:
     """
     Определяет число каналов и длительность первой аудиодорожки через ffprobe.
 
@@ -264,7 +315,7 @@ def probe_audio(path: Path, extension: str) -> AudioInfo:
         "json",
         str(path),
     ]
-    result = _run_media_tool(command, PROBE_TIMEOUT_SECONDS)
+    result = _run_media_tool(command, PROBE_TIMEOUT_SECONDS, deadline)
 
     try:
         data = json.loads(result.stdout)
@@ -286,7 +337,13 @@ def probe_audio(path: Path, extension: str) -> AudioInfo:
     return AudioInfo(duration=duration, channels=channels)
 
 
-def decode_audio(path: Path, extension: str, channels: int) -> np.ndarray:
+def decode_audio(
+    path: Path,
+    extension: str,
+    channels: int,
+    *,
+    deadline: Optional[float] = None,
+) -> np.ndarray:
     """
     Декодирует первую аудиодорожку в PCM int16, 16 кГц.
 
@@ -325,7 +382,7 @@ def decode_audio(path: Path, extension: str, channels: int) -> np.ndarray:
         "s16le",
         "-",
     ]
-    result = _run_media_tool(command, DECODE_TIMEOUT_SECONDS)
+    result = _run_media_tool(command, DECODE_TIMEOUT_SECONDS, deadline)
 
     frame_bytes = 2 * n_channels
     raw = result.stdout[: len(result.stdout) - len(result.stdout) % frame_bytes]
@@ -356,6 +413,30 @@ VAD_MAX_SPEECH_SECONDS = 20.0
 MIN_RECOGNIZABLE_SAMPLES = SAMPLE_RATE // 10
 
 
+class SpeechRecognitionModel:
+    """Основная модель с VAD и резервная CTC для пустых речевых сегментов."""
+
+    def __init__(self, primary: Any, fallback: Any) -> None:
+        """Объединяет основную модель с VAD и резервную модель без VAD."""
+        self._primary = primary
+        self._fallback = fallback
+
+    def recognize(
+        self, waveform: np.ndarray, *, sample_rate: int
+    ) -> Iterator[RawSegment]:
+        """Повторяет только нераспознанные фрагменты, сохраняя время и канал."""
+        for segment in self._primary.recognize(waveform, sample_rate=sample_rate):
+            text = segment.text.strip()
+            if not text:
+                start = max(0, round(segment.start * sample_rate))
+                end = min(len(waveform), round(segment.end * sample_rate))
+                if end - start >= MIN_RECOGNIZABLE_SAMPLES:
+                    text = self._fallback.recognize(
+                        waveform[start:end], sample_rate=sample_rate
+                    ).strip()
+            yield RawSegment(float(segment.start), float(segment.end), text)
+
+
 def _load_default_model() -> Any:
     """
     Загружает GigaAM и silero VAD из локальных каталогов MODELS_DIR.
@@ -364,9 +445,12 @@ def _load_default_model() -> Any:
     наличие каталогов проверяется заранее: рантайм работает только офлайн.
     """
     asr_path = model_dir(settings.MODELS_DIR, settings.TRANSCRIPTION_MODEL)
+    fallback_path = model_dir(
+        settings.MODELS_DIR, settings.TRANSCRIPTION_FALLBACK_MODEL
+    )
     vad_path = vad_dir(settings.MODELS_DIR)
-    if not asr_path.is_dir() or not vad_path.is_dir():
-        logger.error(f"Нет весов модели: {asr_path} или {vad_path}")
+    if not all(path.is_dir() for path in (asr_path, fallback_path, vad_path)):
+        logger.error(f"Нет весов модели: {asr_path}, {fallback_path} или {vad_path}")
         raise ModelUnavailableError("Модель распознавания недоступна.")
 
     # Тяжёлые зависимости импортируются лениво: они нужны только для распознавания
@@ -383,12 +467,19 @@ def _load_default_model() -> Any:
         sess_options=options,
     )
     vad = onnx_asr.load_vad("silero", vad_path, sess_options=options)
-    return model.with_vad(
+    primary = model.with_vad(
         vad,
         max_speech_duration_s=VAD_MAX_SPEECH_SECONDS,
         min_silence_duration_ms=settings.TRANSCRIPTION_VAD_MIN_SILENCE_MS,
         speech_pad_ms=settings.TRANSCRIPTION_VAD_SPEECH_PAD_MS,
     )
+    fallback = onnx_asr.load_model(
+        settings.TRANSCRIPTION_FALLBACK_MODEL,
+        fallback_path,
+        quantization="int8",
+        sess_options=options,
+    )
+    return SpeechRecognitionModel(primary, fallback)
 
 
 class Transcriber:
@@ -408,6 +499,61 @@ class Transcriber:
         self._semaphore = threading.BoundedSemaphore(
             max(1, settings.TRANSCRIPTION_MAX_CONCURRENCY)
         )
+        self._admission_lock = threading.Lock()
+        self._waiting = 0
+        self._executor_lock = threading.Lock()
+        self._executor: Optional[ThreadPoolExecutor] = None
+
+    async def reserve(self) -> TranscriptionSlot:
+        """Ожидает слот без рабочего потока, ограничивая число ожидающих запросов."""
+        if self._semaphore.acquire(blocking=False):
+            return TranscriptionSlot(self._semaphore)
+        with self._admission_lock:
+            if self._waiting >= settings.TRANSCRIPTION_MAX_QUEUE_SIZE:
+                raise TranscriberBusyError("Очередь распознавания заполнена.")
+            self._waiting += 1
+        deadline = time.monotonic() + settings.TRANSCRIPTION_QUEUE_WAIT_SECONDS
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TranscriberBusyError(
+                        "Сервис распознавания занят, повторите запрос позже."
+                    )
+                if self._semaphore.acquire(blocking=False):
+                    return TranscriptionSlot(self._semaphore)
+                await asyncio.sleep(min(0.01, remaining))
+        finally:
+            with self._admission_lock:
+                self._waiting -= 1
+
+    def submit(
+        self, slot: TranscriptionSlot, function: Callable, *args: Any, **kwargs: Any
+    ) -> Future:
+        """Запускает принятое задание в отдельном ограниченном пуле аудио."""
+        slot.transfer()
+        try:
+            with self._executor_lock:
+                if self._executor is None:
+                    self._executor = ThreadPoolExecutor(
+                        max_workers=max(1, settings.TRANSCRIPTION_MAX_CONCURRENCY),
+                        thread_name_prefix="transcription",
+                    )
+                future = self._executor.submit(
+                    function, *args, slot=slot, transcriber=self, **kwargs
+                )
+        except BaseException:
+            slot.release()
+            raise
+        future.add_done_callback(lambda _: slot.release())
+        return future
+
+    def close(self) -> None:
+        """Дожидается завершения заданий при остановке сервиса."""
+        with self._executor_lock:
+            executor, self._executor = self._executor, None
+        if executor is not None:
+            executor.shutdown(wait=True)
 
     @contextmanager
     def slot(self, wait_seconds: float) -> Iterator[None]:
@@ -507,7 +653,7 @@ _transcriber_lock = threading.Lock()
 
 
 def get_transcriber() -> Transcriber:
-    """Синглтон Transcriber для процесса (модель одна на воркер)."""
+    """Синглтон Transcriber: один комплект моделей и пул аудио на процесс."""
     global _transcriber
     if _transcriber is None:
         with _transcriber_lock:
@@ -551,6 +697,7 @@ def transcribe_bytes(
     cancel_event: threading.Event,
     deadline: float,
     transcriber: Optional[Transcriber] = None,
+    slot: Optional[TranscriptionSlot] = None,
 ) -> TranscriptionResult:
     """
     Расшифровывает аудиофайл целиком: зондирование, декодирование, распознавание.
@@ -569,13 +716,18 @@ def transcribe_bytes(
     """
     transcriber = transcriber or get_transcriber()
 
-    with transcriber.slot(settings.TRANSCRIPTION_QUEUE_WAIT_SECONDS):
+    transcriber._check_not_cancelled(cancel_event, deadline)
+    with slot or transcriber.slot(settings.TRANSCRIPTION_QUEUE_WAIT_SECONDS):
+        transcriber._check_not_cancelled(cancel_event, deadline)
         with tempfile.TemporaryDirectory(prefix="transcribe_") as directory:
             path = Path(directory) / f"input.{extension}"
             path.write_bytes(content)
 
-            info = probe_audio(path, extension)
-            pcm = decode_audio(path, extension, info.channels)
+            transcriber._check_not_cancelled(cancel_event, deadline)
+            info = probe_audio(path, extension, deadline=deadline)
+            transcriber._check_not_cancelled(cancel_event, deadline)
+            pcm = decode_audio(path, extension, info.channels, deadline=deadline)
+            transcriber._check_not_cancelled(cancel_event, deadline)
 
         if pcm.shape[0] == 2 and _channels_identical(pcm[0], pcm[1]):
             # Моно, сохранённое как стерео: иначе каждая реплика пришла бы дважды

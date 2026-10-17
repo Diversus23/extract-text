@@ -23,6 +23,7 @@ SAMPLE = Path(__file__).parent / "audio" / "ru_short.wav"
 
 MODEL_READY = (
     model_dir(settings.MODELS_DIR, settings.TRANSCRIPTION_MODEL).is_dir()
+    and model_dir(settings.MODELS_DIR, settings.TRANSCRIPTION_FALLBACK_MODEL).is_dir()
     and vad_dir(settings.MODELS_DIR).is_dir()
 )
 
@@ -113,6 +114,26 @@ def test_real_silence_is_no_speech():
 
     assert result.segments == []
     assert result.duration == pytest.approx(10.0, abs=0.1)
+
+
+def test_real_short_utterance_is_recognized():
+    """Отдельная короткая реплика не превращается в no_speech."""
+    result, _ = _transcribe(_wav_bytes([_sample_samples()[:32000]]))
+
+    assert "компани" in " ".join(s.text for s in result.segments).lower()
+
+
+def test_real_pause_does_not_erase_first_utterance():
+    clip = _sample_samples()
+    content = _wav_bytes(
+        [np.concatenate([clip[:32000], np.zeros(48000, dtype=np.int16), clip[32000:]])]
+    )
+
+    result, _ = _transcribe(content)
+
+    text = " ".join(s.text for s in result.segments).lower()
+    assert "компани" in text
+    assert "помочь" in text
 
 
 @pytest.mark.parametrize("rate,samples", [(16000, 1), (16000, 300), (8000, 240)])
