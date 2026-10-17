@@ -47,7 +47,9 @@ def _completed(stdout: bytes, returncode: int = 0) -> subprocess.CompletedProces
 
 def _probe_output(channels: int = 1, duration: str = "10.0") -> bytes:
     """Ответ ffprobe в формате JSON; duration=None — поле отсутствует."""
-    format_info = {} if duration is None else {"duration": duration}
+    format_info = {"format_name": "wav"}
+    if duration is not None:
+        format_info["duration"] = duration
     return json.dumps(
         {"streams": [{"channels": channels}], "format": format_info}
     ).encode()
@@ -64,15 +66,25 @@ class TestProbeAudio:
 
     @patch("app.transcription.run_subprocess_with_limits")
     def test_probe_command_is_hardened(self, run):
-        """Команда ffprobe: только протокол file, форсированный демуксер."""
+        """Команда ffprobe: локальный протокол и ограниченный список демуксеров."""
         run.return_value = _completed(_probe_output())
 
-        probe_audio(Path("/tmp/input.m4a"), "m4a")
+        probe_audio(Path("/tmp/input.m4a"))
 
         command = run.call_args[0][0]
         assert command[0] == "ffprobe"
         assert _flag_value(command, "-protocol_whitelist") == "file"
-        assert _flag_value(command, "-f") == "mov"
+        assert "-f" not in command
+        assert set(_flag_value(command, "-format_whitelist").split(",")) == {
+            "mp3",
+            "wav",
+            "ogg",
+            "flac",
+            "mov",
+            "aac",
+            "asf",
+            "amr",
+        }
         assert _flag_value(command, "-select_streams") == "a:0"
         assert command[-1] == str(Path("/tmp/input.m4a"))
         assert run.call_args.kwargs["text"] is False
@@ -82,9 +94,9 @@ class TestProbeAudio:
         """Число каналов и длительность берутся из ответа ffprobe."""
         run.return_value = _completed(_probe_output(channels=2, duration="183.4"))
 
-        info = probe_audio(Path("a.mp3"), "mp3")
+        info = probe_audio(Path("a.mp3"))
 
-        assert info == AudioInfo(duration=183.4, channels=2)
+        assert info == AudioInfo(duration=183.4, channels=2, format="wav")
 
     @pytest.mark.parametrize("duration", ["N/A", None, "0.000000", "abc"])
     @patch("app.transcription.run_subprocess_with_limits")
@@ -92,7 +104,7 @@ class TestProbeAudio:
         """Неизвестная длительность (N/A, нет поля, ноль) даёт None."""
         run.return_value = _completed(_probe_output(duration=duration))
 
-        assert probe_audio(Path("a.aac"), "aac") == AudioInfo(None, 1)
+        assert probe_audio(Path("a.aac")) == AudioInfo(None, 1, "wav")
 
     @patch("app.transcription.run_subprocess_with_limits")
     def test_probe_no_audio_stream_raises(self, run):
@@ -100,7 +112,7 @@ class TestProbeAudio:
         run.return_value = _completed(b'{"streams": [], "format": {}}')
 
         with pytest.raises(AudioFormatError):
-            probe_audio(Path("a.m4a"), "m4a")
+            probe_audio(Path("a.m4a"))
 
     @patch("app.transcription.run_subprocess_with_limits")
     def test_probe_does_not_reject_long_duration(self, run):
@@ -108,15 +120,17 @@ class TestProbeAudio:
         limit = settings.MAX_AUDIO_DURATION_SECONDS
         run.return_value = _completed(_probe_output(duration=f"{limit + 1}.0"))
 
-        assert probe_audio(Path("a.mp3"), "mp3") == AudioInfo(float(limit + 1), 1)
+        assert probe_audio(Path("a.mp3")) == AudioInfo(float(limit + 1), 1, "wav")
 
     @patch("app.transcription.run_subprocess_with_limits")
-    def test_probe_nonzero_exit_raises(self, run):
+    def test_probe_nonzero_exit_raises(self, run, tmp_path):
         """Ненулевой код ffprobe — AudioFormatError."""
         run.return_value = _completed(b"", returncode=1)
+        path = tmp_path / "input"
+        path.write_bytes(b"not audio")
 
         with pytest.raises(AudioFormatError):
-            probe_audio(Path("a.mp3"), "mp3")
+            probe_audio(path)
 
     @patch("app.transcription.run_subprocess_with_limits")
     def test_probe_invalid_json_raises(self, run):
@@ -124,7 +138,7 @@ class TestProbeAudio:
         run.return_value = _completed(b"not json")
 
         with pytest.raises(AudioFormatError):
-            probe_audio(Path("a.mp3"), "mp3")
+            probe_audio(Path("a.mp3"))
 
     @patch("app.transcription.run_subprocess_with_limits")
     def test_probe_timeout_raises(self, run):
@@ -132,7 +146,7 @@ class TestProbeAudio:
         run.side_effect = subprocess.TimeoutExpired(cmd="ffprobe", timeout=30)
 
         with pytest.raises(AudioFormatError):
-            probe_audio(Path("a.mp3"), "mp3")
+            probe_audio(Path("a.mp3"))
 
     @patch("app.transcription.run_subprocess_with_limits")
     def test_probe_missing_binary_is_unavailable(self, run):
@@ -140,12 +154,7 @@ class TestProbeAudio:
         run.side_effect = FileNotFoundError("ffprobe")
 
         with pytest.raises(ModelUnavailableError):
-            probe_audio(Path("a.mp3"), "mp3")
-
-    def test_probe_unknown_extension_raises(self):
-        """Расширение вне allowlist демуксеров отклоняется до запуска ffprobe."""
-        with pytest.raises(AudioFormatError):
-            probe_audio(Path("a.txt"), "txt")
+            probe_audio(Path("a.mp3"))
 
     def test_demuxers_cover_all_audio_formats(self):
         """Для каждого поддерживаемого аудио-расширения задан демуксер."""
@@ -272,7 +281,7 @@ class TestRealFfmpeg:
         path = tmp_path / "input.wav"
         _ffmpeg(*_sine(2), "-ac", "2", "-ar", "16000", str(path))
 
-        info = probe_audio(path, "wav")
+        info = probe_audio(path)
         pcm = decode_audio(path, "wav", info.channels)
 
         assert info.channels == 2
@@ -285,7 +294,7 @@ class TestRealFfmpeg:
         path = tmp_path / "input.mp3"
         _ffmpeg(*_sine(2), "-c:a", "libmp3lame", str(path))
 
-        info = probe_audio(path, "mp3")
+        info = probe_audio(path)
         pcm = decode_audio(path, "mp3", info.channels)
 
         assert info.channels == 1
@@ -299,7 +308,7 @@ class TestRealFfmpeg:
             *video, *_sine(2), "-c:v", "mpeg4", "-c:a", "aac", "-f", "mp4", str(path)
         )
 
-        info = probe_audio(path, "m4a")
+        info = probe_audio(path)
         pcm = decode_audio(path, "m4a", info.channels)
 
         assert info.channels == 1
@@ -313,7 +322,7 @@ class TestRealFfmpeg:
         _ffmpeg(*video, "-c:v", "mpeg4", "-an", "-f", "mp4", str(path))
 
         with pytest.raises(AudioFormatError):
-            probe_audio(path, "m4a")
+            probe_audio(path)
 
     def test_real_five_one_downmixed_to_mono(self, tmp_path):
         """Дорожка 5.1 (шесть каналов) сводится в моно."""
@@ -321,7 +330,7 @@ class TestRealFfmpeg:
         source = ["-f", "lavfi", "-i", "anullsrc=channel_layout=5.1:sample_rate=16000"]
         _ffmpeg(*source, "-t", "1", str(path))
 
-        info = probe_audio(path, "wav")
+        info = probe_audio(path)
         pcm = decode_audio(path, "wav", info.channels)
 
         assert info.channels == 6
@@ -344,7 +353,7 @@ class TestRealFfmpeg:
         )  # fmt: skip
         monkeypatch.setattr(settings, "MAX_AUDIO_DURATION_SECONDS", 100)
 
-        info = probe_audio(path, "aac")
+        info = probe_audio(path)
         pcm = decode_audio(path, "aac", info.channels)
 
         assert pcm.shape[1] == pytest.approx(60 * 16000, abs=16000)
@@ -364,7 +373,7 @@ class TestRealFfmpeg:
         path.write_bytes(bytes(range(256)) * 40)
 
         with pytest.raises(AudioFormatError):
-            probe_audio(path, "mp3")
+            probe_audio(path)
 
     @pytest.mark.parametrize(
         "extension,content",
@@ -381,4 +390,4 @@ class TestRealFfmpeg:
         path.write_bytes(content)
 
         with pytest.raises(AudioFormatError):
-            probe_audio(path, extension)
+            probe_audio(path)

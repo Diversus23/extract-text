@@ -802,40 +802,19 @@ async def transcribe(
             "Отсутствует заголовок Content-Length. Пожалуйста, убедитесь, что размер файла указан в запросе.",
         )
 
-    if file.size > settings.MAX_FILE_SIZE:
+    if file.size > settings.MAX_AUDIO_FILE_SIZE:
         logger.warning(f"Файл {original_filename} слишком большой: {file.size} bytes")
         return _transcribe_error(
             413,
             original_filename,
-            f"Размер файла превышает допустимые {settings.MAX_FILE_SIZE} байт.",
-        )
-
-    extension = get_file_extension(sanitize_filename(original_filename))
-    if extension not in settings.AUDIO_FORMATS:
-        logger.warning(f"Неподдерживаемый аудиоформат: {original_filename}")
-        return _transcribe_error(
-            415,
-            original_filename,
-            "Неподдерживаемый формат аудио. Допустимые: "
-            + ", ".join(settings.AUDIO_FORMATS)
-            + ".",
+            f"Размер аудиофайла превышает допустимые {settings.MAX_AUDIO_FILE_SIZE} "
+            f"байт ({settings.MAX_AUDIO_FILE_SIZE / (1024 * 1024):g} МиБ).",
         )
 
     content = await file.read()
     if not content:
         logger.warning(f"Файл {original_filename} пуст")
         return _transcribe_error(422, original_filename, "Файл пуст.")
-
-    is_valid, validation_error = validate_file_type(content, original_filename)
-    if not is_valid:
-        logger.warning(
-            f"Файл {original_filename} не прошел проверку типа: {validation_error}"
-        )
-        return _transcribe_error(
-            415,
-            original_filename,
-            "Расширение файла не соответствует его содержимому.",
-        )
 
     cancel_event = threading.Event()
     timeout = settings.TRANSCRIPTION_TIMEOUT_SECONDS
@@ -847,7 +826,6 @@ async def transcribe(
                 request.state.transcription_slot,
                 transcribe_bytes,
                 content,
-                extension=extension,
                 channel_labels=labels,
                 cancel_event=cancel_event,
                 deadline=deadline,
@@ -899,6 +877,7 @@ async def transcribe(
         external_id=external_id,
         duration=result.duration,
         channels=result.channels,
+        detected_format=result.detected_format,
         segments=result.segments,
     )
 

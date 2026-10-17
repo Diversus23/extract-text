@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
 
+import magic
 import numpy as np
 
 from app.config import settings
@@ -23,8 +24,8 @@ logger = logging.getLogger(__name__)
 # Частота дискретизации, с которой работает модель распознавания
 SAMPLE_RATE = 16000
 
-# Демуксер ffmpeg принудительно выбирается по расширению: автоопределение формата
-# позволило бы подсунуть плейлист/concat-скрипт и заставить ffmpeg читать сеть или файлы.
+# Канонический формат -> разрешённый демуксер. ffprobe определяет контейнер по
+# содержимому только в этом списке, ffmpeg получает уже определённый формат явно.
 FFMPEG_DEMUXERS = {
     "mp3": "mp3",
     "wav": "wav",
@@ -35,6 +36,29 @@ FFMPEG_DEMUXERS = {
     "aac": "aac",
     "wma": "asf",
     "amr": "amr",
+}
+
+# Только для различения неизвестного содержимого (415) и повреждённого медиа (422)
+# после ошибки ffprobe. Успешное определение формата от MIME не зависит.
+_AUDIO_MIME_TYPES = {
+    "audio/mpeg",
+    "audio/x-wav",
+    "audio/wav",
+    "audio/vnd.wave",
+    "audio/ogg",
+    "application/ogg",
+    "audio/opus",
+    "audio/flac",
+    "audio/x-flac",
+    "audio/x-m4a",
+    "audio/mp4",
+    "video/mp4",
+    "audio/aac",
+    "audio/x-hx-aac-adts",
+    "video/x-ms-asf",
+    "audio/x-ms-wma",
+    "audio/amr",
+    "audio/amr-wb",
 }
 
 PROBE_TIMEOUT_SECONDS = 30
@@ -92,6 +116,12 @@ class AudioFormatError(TranscriptionError):
     """Файл повреждён, пустой или не содержит аудиодорожки (422)."""
 
     default_status_code = 422
+
+
+class UnsupportedAudioFormatError(AudioFormatError):
+    """Содержимое не является поддерживаемым аудиоформатом (415)."""
+
+    default_status_code = 415
 
 
 class AudioTooLongError(TranscriptionError):
@@ -202,6 +232,7 @@ def build_response(
     external_id: Optional[str],
     duration: float,
     channels: int,
+    detected_format: str,
     segments: list[Segment],
 ) -> dict:
     """Формирует тело успешного ответа /v1/transcribe."""
@@ -220,6 +251,7 @@ def build_response(
         "external_id": external_id,
         "duration": round(duration, 1),
         "channels": channels,
+        "detected_format": detected_format,
         "model": settings.TRANSCRIPTION_MODEL,
         "language": "ru",
         "text_status": text_status,
@@ -243,18 +275,25 @@ class AudioInfo:
 
     duration: Optional[float]
     channels: int
+    format: str
 
 
-def _demuxer_for(extension: str) -> str:
-    """Демуксер ffmpeg для расширения; неизвестное расширение — ошибка файла."""
-    demuxer = FFMPEG_DEMUXERS.get(extension.lower())
+def _demuxer_for(audio_format: str) -> str:
+    """Выбирает демуксер для определённого по содержимому канонического формата."""
+    demuxer = FFMPEG_DEMUXERS.get(audio_format.lower())
     if demuxer is None:
-        raise AudioFormatError(f"Неподдерживаемый формат аудио: .{extension}")
+        raise UnsupportedAudioFormatError(
+            f"Неподдерживаемый формат аудио: {audio_format}"
+        )
     return demuxer
 
 
 def _run_media_tool(
-    command: list, timeout: float, deadline: Optional[float] = None
+    command: list,
+    timeout: float,
+    deadline: Optional[float] = None,
+    *,
+    probe_path: Optional[Path] = None,
 ) -> subprocess.CompletedProcess:
     """
     Запускает ffprobe/ffmpeg с ограничениями ресурсов.
@@ -281,15 +320,23 @@ def _run_media_tool(
     if result.returncode != 0:
         stderr = (result.stderr or b"").decode("utf-8", errors="replace")[:500]
         logger.warning(f"{command[0]} завершился с кодом {result.returncode}: {stderr}")
+        if probe_path is not None:
+            # MIME уточняет только код ошибки неудачного зондирования. Успешный
+            # ffprobe авторитетнее MIME, расширения и заголовков клиента.
+            with probe_path.open("rb") as audio:
+                mime = magic.from_buffer(audio.read(8192), mime=True).lower()
+            if "not on whitelist" in stderr or mime not in _AUDIO_MIME_TYPES:
+                raise UnsupportedAudioFormatError(
+                    "Содержимое файла не является поддерживаемым аудиоформатом. "
+                    "Допустимые: " + ", ".join(settings.AUDIO_FORMATS) + "."
+                )
         raise AudioFormatError("Файл повреждён или не является аудиозаписью.")
     return result
 
 
-def probe_audio(
-    path: Path, extension: str, *, deadline: Optional[float] = None
-) -> AudioInfo:
+def probe_audio(path: Path, *, deadline: Optional[float] = None) -> AudioInfo:
     """
-    Определяет число каналов и длительность первой аудиодорожки через ffprobe.
+    Определяет формат, число каналов и длительность по содержимому через ffprobe.
 
     Длительность из метаданных — лишь подсказка: она может быть неизвестна (None)
     или оценена по битрейту (сырой AAC/AMR, mp3 без заголовка Xing) и сильно
@@ -305,24 +352,36 @@ def probe_audio(
         "error",
         "-protocol_whitelist",
         "file",
-        "-f",
-        _demuxer_for(extension),
+        "-format_whitelist",
+        ",".join(dict.fromkeys(FFMPEG_DEMUXERS.values())),
         "-select_streams",
         "a:0",
         "-show_entries",
-        "stream=channels:format=duration",
+        "stream=channels,codec_name:format=duration,format_name",
         "-of",
         "json",
         str(path),
     ]
-    result = _run_media_tool(command, PROBE_TIMEOUT_SECONDS, deadline)
+    result = _run_media_tool(command, PROBE_TIMEOUT_SECONDS, deadline, probe_path=path)
 
     try:
         data = json.loads(result.stdout)
         stream = data["streams"][0]
         channels = int(stream["channels"])
+        if channels <= 0:
+            raise ValueError("нет каналов аудио")
     except (ValueError, KeyError, IndexError, TypeError) as error:
         raise AudioFormatError("В файле не найдена аудиодорожка.") from error
+
+    format_names = (data.get("format") or {}).get("format_name", "").split(",")
+    detected_format = next(
+        (name for name, demuxer in FFMPEG_DEMUXERS.items() if demuxer in format_names),
+        None,
+    )
+    if detected_format is None:
+        raise UnsupportedAudioFormatError("Контейнер аудио не поддерживается.")
+    if detected_format == "ogg" and stream.get("codec_name") == "opus":
+        detected_format = "opus"
 
     duration: Optional[float] = None
     raw_duration = (data.get("format") or {}).get("duration")
@@ -334,12 +393,12 @@ def probe_audio(
         if parsed > 0:
             duration = parsed
 
-    return AudioInfo(duration=duration, channels=channels)
+    return AudioInfo(duration=duration, channels=channels, format=detected_format)
 
 
 def decode_audio(
     path: Path,
-    extension: str,
+    audio_format: str,
     channels: int,
     *,
     deadline: Optional[float] = None,
@@ -364,8 +423,10 @@ def decode_audio(
         "error",
         "-protocol_whitelist",
         "file",
+        "-format_whitelist",
+        ",".join(dict.fromkeys(FFMPEG_DEMUXERS.values())),
         "-f",
-        _demuxer_for(extension),
+        _demuxer_for(audio_format),
         "-i",
         str(path),
         "-map",
@@ -687,12 +748,12 @@ class TranscriptionResult:
     duration: float
     channels: int
     segments: list[Segment]
+    detected_format: str
 
 
 def transcribe_bytes(
     content: bytes,
     *,
-    extension: str,
     channel_labels: list[str],
     cancel_event: threading.Event,
     deadline: float,
@@ -705,7 +766,7 @@ def transcribe_bytes(
     Слот распознавания занимается до зондирования и декодирования: декодированный
     PCM длинной записи занимает десятки мегабайт, и ожидающие запросы не должны его
     копить. Файл пишется во временный каталог под фиксированным именем
-    input.<расширение>, имя от клиента не используется; каталог удаляется всегда.
+    input без расширения, имя от клиента не используется; каталог удаляется всегда.
     Стерео с совпадающими каналами распознаётся как моно (speaker=None).
 
     Raises:
@@ -720,13 +781,13 @@ def transcribe_bytes(
     with slot or transcriber.slot(settings.TRANSCRIPTION_QUEUE_WAIT_SECONDS):
         transcriber._check_not_cancelled(cancel_event, deadline)
         with tempfile.TemporaryDirectory(prefix="transcribe_") as directory:
-            path = Path(directory) / f"input.{extension}"
+            path = Path(directory) / "input"
             path.write_bytes(content)
 
             transcriber._check_not_cancelled(cancel_event, deadline)
-            info = probe_audio(path, extension, deadline=deadline)
+            info = probe_audio(path, deadline=deadline)
             transcriber._check_not_cancelled(cancel_event, deadline)
-            pcm = decode_audio(path, extension, info.channels, deadline=deadline)
+            pcm = decode_audio(path, info.format, info.channels, deadline=deadline)
             transcriber._check_not_cancelled(cancel_event, deadline)
 
         if pcm.shape[0] == 2 and _channels_identical(pcm[0], pcm[1]):
@@ -744,4 +805,5 @@ def transcribe_bytes(
         duration=pcm.shape[1] / SAMPLE_RATE,
         channels=info.channels,
         segments=build_segments(per_channel, channel_labels),
+        detected_format=info.format,
     )

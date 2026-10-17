@@ -211,6 +211,9 @@ MODELS_DIR=/opt/models
 # Максимальная длительность записи в секундах (30 минут)
 MAX_AUDIO_DURATION_SECONDS=1800
 
+# Максимальный размер аудиофайла (100 МиБ), независимо от лимита документов MAX_FILE_SIZE
+MAX_AUDIO_FILE_SIZE=104857600
+
 # Таймаут распознавания в секундах (отдельно от PROCESSING_TIMEOUT_SECONDS)
 TRANSCRIPTION_TIMEOUT_SECONDS=900
 

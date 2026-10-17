@@ -109,6 +109,7 @@ class TestBuildResponse:
             external_id=None,
             duration=3.0,
             channels=1,
+            detected_format="wav",
             segments=[],
         )
 
@@ -128,6 +129,7 @@ class TestBuildResponse:
             external_id=None,
             duration=2.0,
             channels=1,
+            detected_format="wav",
             segments=[
                 Segment(i, i + 1, None, None, value) for i, value in enumerate(texts)
             ],
@@ -149,6 +151,7 @@ class TestBuildResponse:
             external_id="rec-123",
             duration=183.44,
             channels=2,
+            detected_format="wav",
             segments=segments,
         )
 
@@ -174,6 +177,7 @@ class TestBuildResponse:
             external_id=None,
             duration=1.0,
             channels=1,
+            detected_format="wav",
             segments=[Segment(0.0, 1.0, None, None, "текст")],
         )
 

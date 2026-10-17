@@ -54,7 +54,6 @@ def _run(content=b"audio", *, pcm, info, model, labels=None, cancel=None, **kwar
     ):
         return transcribe_bytes(
             content,
-            extension=kwargs.pop("extension", "mp3"),
             channel_labels=labels or [],
             cancel_event=cancel or threading.Event(),
             deadline=time.monotonic() + 3600,
@@ -74,7 +73,7 @@ class TestTranscribeBytes:
 
         result = _run(
             pcm=_stereo_pcm(16000 * 6),
-            info=AudioInfo(duration=6.0, channels=2),
+            info=AudioInfo(duration=6.0, channels=2, format="wav"),
             model=model,
             labels=["client", "operator"],
         )
@@ -92,7 +91,7 @@ class TestTranscribeBytes:
 
         result = _run(
             pcm=_stereo_pcm(32000),
-            info=AudioInfo(duration=2.0, channels=2),
+            info=AudioInfo(duration=2.0, channels=2, format="wav"),
             model=model,
             labels=["client", "operator"],
         )
@@ -108,7 +107,7 @@ class TestTranscribeBytes:
 
         result = _run(
             pcm=np.stack([left, left + offset]),
-            info=AudioInfo(duration=2.0, channels=2),
+            info=AudioInfo(duration=2.0, channels=2, format="wav"),
             model=model,
             labels=["client", "operator"],
         )
@@ -123,7 +122,7 @@ class TestTranscribeBytes:
 
         result = _run(
             pcm=_stereo_pcm(16000 * 4),
-            info=AudioInfo(duration=4.0, channels=2),
+            info=AudioInfo(duration=4.0, channels=2, format="wav"),
             model=model,
             labels=["client", "operator"],
         )
@@ -138,7 +137,7 @@ class TestTranscribeBytes:
 
         result = _run(
             pcm=np.zeros((2, samples), dtype=np.int16),
-            info=AudioInfo(duration=None, channels=2),
+            info=AudioInfo(duration=None, channels=2, format="wav"),
             model=model,
         )
 
@@ -151,7 +150,7 @@ class TestTranscribeBytes:
 
         result = _run(
             pcm=np.zeros((1, 16000), dtype=np.int16),
-            info=AudioInfo(duration=1.0, channels=1),
+            info=AudioInfo(duration=1.0, channels=1, format="wav"),
             model=model,
             labels=["client"],
         )
@@ -165,22 +164,21 @@ class TestTranscribeBytes:
 
         result = _run(
             pcm=np.zeros((1, 16000), dtype=np.int16),
-            info=AudioInfo(duration=1.0, channels=6),
+            info=AudioInfo(duration=1.0, channels=6, format="wav"),
             model=model,
         )
 
         assert result.channels == 6
         assert result.segments[0].speaker is None
 
-    def test_upload_is_written_under_fixed_name_with_extension(self):
-        """Файл пишется во временный каталог как input.<расширение>."""
+    def test_upload_is_written_under_fixed_name_without_extension(self):
+        """Файл пишется как input без расширения и не зависит от имени клиента."""
         seen = {}
 
-        def fake_probe(path, extension, **kwargs):
+        def fake_probe(path, **kwargs):
             seen["name"] = path.name
             seen["content"] = Path(path).read_bytes()
-            seen["extension"] = extension
-            return AudioInfo(1.0, 1)
+            return AudioInfo(1.0, 1, "wav")
 
         transcriber = Transcriber(model_factory=lambda: ChannelModel([[]]))
         with (
@@ -192,14 +190,13 @@ class TestTranscribeBytes:
         ):
             transcribe_bytes(
                 b"RIFFdata",
-                extension="wav",
                 channel_labels=[],
                 cancel_event=threading.Event(),
                 deadline=time.monotonic() + 60,
                 transcriber=transcriber,
             )
 
-        assert seen == {"name": "input.wav", "content": b"RIFFdata", "extension": "wav"}
+        assert seen == {"name": "input", "content": b"RIFFdata"}
 
     def test_temp_dir_removed_on_error(self, tmp_path, monkeypatch):
         """После ошибки временный каталог удалён."""
@@ -212,7 +209,6 @@ class TestTranscribeBytes:
             with pytest.raises(AudioFormatError):
                 transcribe_bytes(
                     b"x",
-                    extension="mp3",
                     channel_labels=[],
                     cancel_event=threading.Event(),
                     deadline=time.monotonic() + 60,
@@ -227,7 +223,7 @@ class TestTranscribeBytes:
 
         _run(
             pcm=np.zeros((1, 16000), dtype=np.int16),
-            info=AudioInfo(1.0, 1),
+            info=AudioInfo(1.0, 1, "wav"),
             model=ChannelModel([[]]),
         )
 
@@ -239,14 +235,15 @@ class TestTranscribeBytes:
         cancel.set()
         transcriber = Transcriber(model_factory=lambda: ChannelModel([[]]))
         args = dict(
-            extension="mp3",
             channel_labels=[],
             deadline=time.monotonic() + 60,
             transcriber=transcriber,
         )
 
         with (
-            patch("app.transcription.probe_audio", return_value=AudioInfo(1.0, 1)),
+            patch(
+                "app.transcription.probe_audio", return_value=AudioInfo(1.0, 1, "wav")
+            ),
             patch(
                 "app.transcription.decode_audio",
                 return_value=np.zeros((1, 16000), dtype=np.int16),
@@ -273,7 +270,6 @@ class TestTranscribeBytes:
             with pytest.raises(TranscriptionCancelled):
                 transcribe_bytes(
                     b"audio",
-                    extension="wav",
                     channel_labels=[],
                     cancel_event=cancel,
                     deadline=time.monotonic() + (-1 if expired else 60),
@@ -285,7 +281,7 @@ class TestTranscribeBytes:
 
         def probe(*args, **kwargs):
             cancel.set()
-            return AudioInfo(1.0, 1)
+            return AudioInfo(1.0, 1, "wav")
 
         transcriber = Transcriber(model_factory=lambda: ChannelModel([]))
         with (
@@ -297,7 +293,6 @@ class TestTranscribeBytes:
             with pytest.raises(TranscriptionCancelled):
                 transcribe_bytes(
                     b"audio",
-                    extension="wav",
                     channel_labels=[],
                     cancel_event=cancel,
                     deadline=time.monotonic() + 60,
@@ -318,7 +313,6 @@ class TestTranscribeBytes:
                 with pytest.raises(TranscriberBusyError):
                     transcribe_bytes(
                         b"x",
-                        extension="mp3",
                         channel_labels=[],
                         cancel_event=threading.Event(),
                         deadline=time.monotonic() + 60,

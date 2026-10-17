@@ -77,11 +77,14 @@ class TranscriptionIngressMiddleware:
             )
             return
 
-        limit = settings.MAX_FILE_SIZE + MULTIPART_OVERHEAD_BYTES
+        file_limit = settings.MAX_AUDIO_FILE_SIZE
+        limit = file_limit + MULTIPART_OVERHEAD_BYTES
+        size_error_message = (
+            "Размер тела запроса превышает допустимый лимит. "
+            f"Аудиофайл — до {file_limit / (1024 * 1024):g} МиБ ({file_limit} байт)."
+        )
         if int(lengths[0]) > limit:
-            await _error(413, "Размер тела запроса превышает допустимый лимит.")(
-                scope, receive, send
-            )
+            await _error(413, size_error_message)(scope, receive, send)
             return
 
         try:
@@ -111,9 +114,7 @@ class TranscriptionIngressMiddleware:
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
                 if received > limit:
-                    rejection = _error(
-                        413, "Размер тела запроса превышает допустимый лимит."
-                    )
+                    rejection = _error(413, size_error_message)
                     # Парсер закрывает уже созданные временные файлы при этой ошибке.
                     raise MultiPartException("Превышен размер тела запроса.")
             return message

@@ -8,7 +8,7 @@ class Settings:
     """Настройки приложения."""
 
     # Основные настройки
-    VERSION: str = "1.12.1"
+    VERSION: str = "1.12.3"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
     # Настройки API
@@ -82,6 +82,9 @@ class Settings:
     ENABLE_TRANSCRIPTION: bool = (
         os.getenv("ENABLE_TRANSCRIPTION", "true").lower() == "true"
     )
+    MAX_AUDIO_FILE_SIZE: int = int(
+        os.getenv("MAX_AUDIO_FILE_SIZE", str(100 * 1024 * 1024))
+    )  # 100 МиБ, независимо от лимита документов MAX_FILE_SIZE
     TRANSCRIPTION_MODEL: str = os.getenv("TRANSCRIPTION_MODEL", "gigaam-v3-e2e-rnnt")
     # Резерв для речевых сегментов, на которых основная модель вернула пустой текст.
     TRANSCRIPTION_FALLBACK_MODEL: str = "gigaam-v3-e2e-ctc"

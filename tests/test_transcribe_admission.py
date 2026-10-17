@@ -83,7 +83,7 @@ async def test_content_length_is_checked_before_body(admission, length):
 
 
 async def test_large_declared_body_is_rejected_without_reading(admission, monkeypatch):
-    monkeypatch.setattr(settings, "MAX_FILE_SIZE", 1024)
+    monkeypatch.setattr(settings, "MAX_AUDIO_FILE_SIZE", 1024)
 
     response = await _post_stream(_unread_body(), length=1024 * 1024)
 
@@ -91,7 +91,7 @@ async def test_large_declared_body_is_rejected_without_reading(admission, monkey
 
 
 async def test_actual_body_is_bounded_when_content_length_lies(admission, monkeypatch):
-    monkeypatch.setattr(settings, "MAX_FILE_SIZE", 1024)
+    monkeypatch.setattr(settings, "MAX_AUDIO_FILE_SIZE", 1024)
     consumed = 0
 
     async def body():
@@ -126,7 +126,9 @@ async def test_transcription_uses_its_own_worker_pool(admission, monkeypatch):
     limiter = anyio.to_thread.current_default_thread_limiter()
     previous = limiter.total_tokens
     limiter.total_tokens = 1
-    result = SimpleNamespace(duration=1.0, channels=1, segments=[])
+    result = SimpleNamespace(
+        duration=1.0, channels=1, segments=[], detected_format="wav"
+    )
     try:
         async with limiter:
             with (
@@ -174,7 +176,9 @@ async def test_http_timeout_does_not_release_running_worker_slot(
     def worker(*args, **kwargs):
         started.set()
         finish.wait(2)
-        return SimpleNamespace(duration=1.0, channels=1, segments=[])
+        return SimpleNamespace(
+            duration=1.0, channels=1, segments=[], detected_format="wav"
+        )
 
     try:
         with (

@@ -5,6 +5,7 @@ tests/audio/ru_short.wav — синтезированная русская фр�
 Вне образа пропускаются.
 """
 
+import subprocess
 import threading
 import time
 import wave
@@ -60,7 +61,6 @@ def _transcribe(content: bytes, labels=None):
     started = time.monotonic()
     result = transcribe_bytes(
         content,
-        extension="wav",
         channel_labels=labels or [],
         cancel_event=threading.Event(),
         deadline=time.monotonic() + settings.TRANSCRIPTION_TIMEOUT_SECONDS,
@@ -169,3 +169,43 @@ def test_real_full_http_cycle():
     assert body["language"] == "ru"
     assert body["text_status"] == "ok"
     assert body["text"] == " ".join(s["text"] for s in body["segments"])
+    assert body["detected_format"] == "wav"
+
+
+@pytest.fixture(scope="module")
+def m4a_sample(tmp_path_factory):
+    """Публичная синтетическая фраза в контейнере M4A, без личных записей."""
+    path = tmp_path_factory.mktemp("audio_detection") / "sample.m4a"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-v",
+            "error",
+            "-i",
+            str(SAMPLE),
+            "-c:a",
+            "aac",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return path.read_bytes()
+
+
+@pytest.mark.parametrize("filename", ["iphone.ogg", "recording.bin", "recording"])
+def test_real_m4a_transcribed_regardless_of_filename(m4a_sample, filename):
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/transcribe",
+            files={"file": (filename, m4a_sample, "application/octet-stream")},
+            data={"external_id": "m4a-detection-smoke"},
+        )
+
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    assert body["filename"] == filename
+    assert body["detected_format"] == "m4a"
+    assert body["external_id"] == "m4a-detection-smoke"
+    assert "помочь" in body["text"].lower()
