@@ -8,10 +8,9 @@ fastapi==0.136.1
 uvicorn[standard]==0.46.0
 
 # Обработка файлов
-python-multipart==0.0.27
+python-multipart==0.0.31
 
 # PDF обработка (основные пакеты)
-PyPDF2==3.0.1
 pdfplumber==0.11.9
 
 # Word и Office документы
@@ -26,7 +25,7 @@ pandas==3.0.2
 openpyxl==3.1.5
 
 # Изображения (без OCR для начала)
-Pillow==12.2.0
+Pillow==12.3.0
 
 # HTML и Markdown
 # 4.13.5 — последняя в 4.13.x; 4.14 несовместим с extract-msg<0.56.
@@ -40,7 +39,7 @@ defusedxml==0.7.1
 
 # Общие утилиты
 python-dotenv==1.2.2
-werkzeug==3.1.8
+werkzeug==3.1.9
 
 # Логирование
 structlog==25.5.0

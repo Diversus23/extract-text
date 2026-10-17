@@ -166,8 +166,7 @@ test-docker: build ## 🐳 Запустить тестирование в Docker
 	@echo "🔧 Создание контейнера для тестирования..."
 	@docker run --rm -v $(shell pwd):/code -w /code $(IMAGE_NAME):$(TAG) \
 		bash -c "python3 -m pip install -q -r requirements-test.txt && \
-		python -m pytest -v --cov=app --cov-report=term-missing --cov-report=html:coverage_html --cov-report=xml:coverage.xml --cov-fail-under=55" || \
-		echo "⚠️ Некоторые тесты завершились с ошибками"
+		python -m pytest -v --cov=app --cov-report=term-missing --cov-report=html:coverage_html --cov-report=xml:coverage.xml --cov-fail-under=55"
 	@echo ""
 	@echo "✅ Docker тестирование завершено!"
 
@@ -265,4 +264,4 @@ quick-test: ## ⚡ Быстрый тест API
 	fi
 
 # Показать help по умолчанию
-.DEFAULT_GOAL := help 
+.DEFAULT_GOAL := help
