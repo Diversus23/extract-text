@@ -69,10 +69,16 @@ def test_audio_healthcheck_uses_readiness_probe():
 
 
 def test_audio_threads_can_be_overridden_from_env():
-    """TRANSCRIPTION_THREADS из .env не перебивается молча значением из AUDIO_CPUS."""
+    """TRANSCRIPTION_THREADS из .env не перебивается молча значением из AUDIO_CPUS.
+
+    Compose не задаёт TRANSCRIPTION_THREADS, поэтому значение из .env доходит до
+    контейнера как есть. Выбор «TRANSCRIPTION_THREADS, иначе AUDIO_CPUS» делает
+    app/config.py: вложенные значения по умолчанию docker-compose v1 не разбирает.
+    """
     environment = _audio_service()["environment"]
 
-    assert any("${TRANSCRIPTION_THREADS:-" in item for item in environment)
+    assert not any(item.startswith("TRANSCRIPTION_THREADS") for item in environment)
+    assert any(item.startswith("AUDIO_CPUS=") for item in environment)
 
 
 def test_env_example_documents_audio_cpus():

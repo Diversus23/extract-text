@@ -4,11 +4,26 @@ import os
 from typing import List
 
 
+def _transcription_threads() -> int:
+    """TRANSCRIPTION_THREADS, иначе лимит CPU сервиса api-audio, иначе ядра хоста.
+
+    AUDIO_CPUS читаем здесь, а не собираем в docker-compose.prod.yml:
+    docker-compose v1 не поддерживает вложенные значения по умолчанию.
+    """
+    explicit = os.getenv("TRANSCRIPTION_THREADS")
+    if explicit:
+        return int(explicit)
+    audio_cpus = os.getenv("AUDIO_CPUS")
+    if audio_cpus:
+        return max(1, int(float(audio_cpus)))
+    return os.cpu_count() or 1
+
+
 class Settings:
     """Настройки приложения."""
 
     # Основные настройки
-    VERSION: str = "1.13.0"
+    VERSION: str = "1.13.1"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
     # Настройки API
@@ -112,9 +127,7 @@ class Settings:
     TRANSCRIPTION_MAX_QUEUE_SIZE: int = max(
         0, int(os.getenv("TRANSCRIPTION_MAX_QUEUE_SIZE", "2"))
     )
-    TRANSCRIPTION_THREADS: int = int(
-        os.getenv("TRANSCRIPTION_THREADS", str(os.cpu_count() or 1))
-    )
+    TRANSCRIPTION_THREADS: int = _transcription_threads()
     # Параметры VAD: при значениях библиотеки по умолчанию речь режется на короткие
     # сегменты (менее 1.5 с), для которых модель возвращает пустой текст.
     TRANSCRIPTION_VAD_MIN_SILENCE_MS: int = int(

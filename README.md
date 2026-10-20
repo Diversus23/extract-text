@@ -573,7 +573,7 @@ curl -X POST http://localhost:7556/v1/transcribe \
 | `TRANSCRIPTION_MAX_CONCURRENCY` | `1` | сколько распознаваний одновременно в одном процессе |
 | `TRANSCRIPTION_QUEUE_WAIT_SECONDS` | `30` | сколько запрос ждёт свободный слот до ответа 503 |
 | `TRANSCRIPTION_MAX_QUEUE_SIZE` | `2` | максимум запросов, ожидающих слот; `0` — отказывать сразу при занятости |
-| `TRANSCRIPTION_THREADS` | число ядер хоста | потоки onnxruntime; в контейнере с лимитом CPU задавайте явно (для `api-audio` — из `.env`, иначе из `AUDIO_CPUS`) |
+| `TRANSCRIPTION_THREADS` | `AUDIO_CPUS`, иначе число ядер хоста | потоки onnxruntime; в контейнере с лимитом CPU задавайте явно (для `api-audio` — из `.env`, иначе из `AUDIO_CPUS`, по умолчанию 4) |
 | `TRANSCRIPTION_VAD_MIN_SILENCE_MS` | `500` | минимальная пауза между сегментами речи |
 | `TRANSCRIPTION_VAD_SPEECH_PAD_MS` | `300` | запас вокруг сегмента речи; сегменты делятся паузой не меньше `MIN_SILENCE + 2×PAD` (при 500/300 около 1,1 с) |
 

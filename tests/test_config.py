@@ -23,7 +23,7 @@ class TestSettings:
         importlib.reload(config)
         settings = config.Settings()
 
-        assert settings.VERSION == "1.13.0"
+        assert settings.VERSION == "1.13.1"
         assert settings.API_PORT == 7555
         assert settings.MAX_FILE_SIZE == 20971520  # 20MB
         assert settings.PROCESSING_TIMEOUT_SECONDS == 300
@@ -302,6 +302,27 @@ class TestTranscriptionSettings:
         assert settings.ENABLE_TRANSCRIPTION is False
         assert settings.TRANSCRIPTION_MAX_CONCURRENCY == 2
         assert settings.TRANSCRIPTION_QUANTIZATION == "int8"
+
+    @pytest.mark.parametrize(
+        ("env", "expected"),
+        [
+            ({"TRANSCRIPTION_THREADS": "3"}, 3),
+            ({"TRANSCRIPTION_THREADS": "3", "AUDIO_CPUS": "8"}, 3),
+            ({"AUDIO_CPUS": "6"}, 6),
+            ({"AUDIO_CPUS": "2.5"}, 2),
+            ({"AUDIO_CPUS": "0.5"}, 1),
+            ({"TRANSCRIPTION_THREADS": "", "AUDIO_CPUS": "6"}, 6),
+        ],
+    )
+    def test_transcription_threads_fall_back_to_audio_cpus(self, env, expected):
+        """Потоки: TRANSCRIPTION_THREADS, иначе лимит CPU api-audio (AUDIO_CPUS)."""
+        import importlib
+
+        from app import config
+
+        with patch.dict(os.environ, env, clear=True):
+            importlib.reload(config)
+            assert config.Settings().TRANSCRIPTION_THREADS == expected
 
     @patch.dict(os.environ, {}, clear=True)
     def test_transcription_upstream_url_is_empty_by_default(self):

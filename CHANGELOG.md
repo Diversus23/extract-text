@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.13.1] - 2026-10-20
+
+### Исправлено
+- Сервис `api-audio` не запускался под docker-compose v1 (его вызывает `make prod-up`): вложенное значение по умолчанию `TRANSCRIPTION_THREADS=${TRANSCRIPTION_THREADS:-${AUDIO_CPUS:-4}}` передавалось в контейнер как текст, и `int()` в `config.py` падал при импорте, контейнер перезапускался по кругу. В `docker-compose.prod.yml` остался одноуровневый `AUDIO_CPUS=${AUDIO_CPUS:-4}`, а выбор «`TRANSCRIPTION_THREADS`, иначе `AUDIO_CPUS`, иначе число ядер хоста» перенесён в `app/config.py`. Дробное `AUDIO_CPUS` (например, `2.5`) округляется вниз, но не меньше одного потока; пустой `TRANSCRIPTION_THREADS` считается незаданным.
+- Тест `tests/test_compose_compat.py` не допускает вложенных подстановок в compose-файлах.
+
 ## [1.13.0] - 2026-10-20
 
 ### Добавлено

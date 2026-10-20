@@ -52,8 +52,10 @@ services:
       - .env
     environment:
       # os.cpu_count() внутри контейнера видит все ядра хоста, а не лимит cpus, поэтому
-      # потоки задаются явно: TRANSCRIPTION_THREADS из .env, иначе AUDIO_CPUS (по умолчанию 4)
-      - TRANSCRIPTION_THREADS=${TRANSCRIPTION_THREADS:-${AUDIO_CPUS:-4}}
+      # потоки задаются явно: приложение берёт TRANSCRIPTION_THREADS из .env, иначе
+      # AUDIO_CPUS (по умолчанию 4). Значение по умолчанию, само содержащее переменную,
+      # здесь нельзя: Makefile запускает docker-compose v1, он передаст его как текст.
+      - AUDIO_CPUS=${AUDIO_CPUS:-4}
     deploy:
       resources:
         limits:
