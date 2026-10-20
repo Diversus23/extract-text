@@ -195,6 +195,11 @@ MAX_SCROLL_ATTEMPTS=5
 # Для сервиса документов в prod-режиме ставится false (см. docker-compose.prod.yml).
 ENABLE_TRANSCRIPTION=true
 
+# Адрес сервиса api-audio. Действует только при ENABLE_TRANSCRIPTION=false: тогда
+# POST /v1/transcribe на этом сервисе пересылается туда, а не отклоняется с 503.
+# В docker-compose.prod.yml для сервиса api по умолчанию http://api-audio:7556.
+# TRANSCRIPTION_UPSTREAM_URL=http://api-audio:7556
+
 # Модель распознавания (onnx-asr). GigaAM v3 e2e RNN-T: русский язык, с пунктуацией.
 TRANSCRIPTION_MODEL=gigaam-v3-e2e-rnnt
 

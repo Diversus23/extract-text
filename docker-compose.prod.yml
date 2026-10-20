@@ -21,8 +21,10 @@ services:
       - .env
     environment:
       # Распознавание речи вынесено в отдельный сервис api-audio: иначе каждый из
-      # воркеров (2*CPU+1) держал бы свою копию модели в памяти.
+      # воркеров (2*CPU+1) держал бы свою копию модели в памяти. POST /v1/transcribe,
+      # пришедший на этот сервис, пересылается в api-audio по внутренней сети.
       - ENABLE_TRANSCRIPTION=false
+      - TRANSCRIPTION_UPSTREAM_URL=${TRANSCRIPTION_UPSTREAM_URL:-http://api-audio:7556}
     deploy:
       resources:
         limits:

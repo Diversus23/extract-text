@@ -23,7 +23,7 @@ class TestSettings:
         importlib.reload(config)
         settings = config.Settings()
 
-        assert settings.VERSION == "1.12.4"
+        assert settings.VERSION == "1.13.0"
         assert settings.API_PORT == 7555
         assert settings.MAX_FILE_SIZE == 20971520  # 20MB
         assert settings.PROCESSING_TIMEOUT_SECONDS == 300
@@ -302,6 +302,28 @@ class TestTranscriptionSettings:
         assert settings.ENABLE_TRANSCRIPTION is False
         assert settings.TRANSCRIPTION_MAX_CONCURRENCY == 2
         assert settings.TRANSCRIPTION_QUANTIZATION == "int8"
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_transcription_upstream_url_is_empty_by_default(self):
+        """Без адреса api-audio проксирование выключено."""
+        import importlib
+
+        from app import config
+
+        importlib.reload(config)
+
+        assert config.Settings().TRANSCRIPTION_UPSTREAM_URL == ""
+
+    @patch.dict(os.environ, {"TRANSCRIPTION_UPSTREAM_URL": " http://api-audio:7556/ "})
+    def test_transcription_upstream_url_is_normalized(self):
+        """Пробелы и завершающий слэш убираются, чтобы путь склеивался корректно."""
+        import importlib
+
+        from app import config
+
+        importlib.reload(config)
+
+        assert config.Settings().TRANSCRIPTION_UPSTREAM_URL == "http://api-audio:7556"
 
     def test_audio_formats_not_in_supported_formats(self):
         """Аудио-расширения не должны попадать в SUPPORTED_FORMATS."""

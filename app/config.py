@@ -8,7 +8,7 @@ class Settings:
     """Настройки приложения."""
 
     # Основные настройки
-    VERSION: str = "1.12.4"
+    VERSION: str = "1.13.0"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
     # Настройки API
@@ -81,6 +81,11 @@ class Settings:
     ]
     ENABLE_TRANSCRIPTION: bool = (
         os.getenv("ENABLE_TRANSCRIPTION", "true").lower() == "true"
+    )
+    # Адрес сервиса api-audio (например, http://api-audio:7556). Используется только при
+    # ENABLE_TRANSCRIPTION=false: /v1/transcribe тогда пересылается в этот сервис.
+    TRANSCRIPTION_UPSTREAM_URL: str = (
+        os.getenv("TRANSCRIPTION_UPSTREAM_URL", "").strip().rstrip("/")
     )
     MAX_AUDIO_FILE_SIZE: int = int(
         os.getenv("MAX_AUDIO_FILE_SIZE", str(100 * 1024 * 1024))

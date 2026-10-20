@@ -41,6 +41,7 @@ from app.transcription import (
     transcribe_bytes,
 )
 from app.transcription_ingress import TranscriptionIngressMiddleware
+from app.transcription_proxy import probe_readiness, proxy_enabled
 from app.utils import (
     cleanup_recent_temp_files,
     cleanup_temp_files,
@@ -285,6 +286,8 @@ async def health(check: Optional[str] = None) -> Any:
     (для healthcheck сервиса api-audio): 200 только когда модель загружена.
     """
     if check == "transcription":
+        if proxy_enabled():
+            return await probe_readiness()
         state = (
             get_transcriber().status if settings.ENABLE_TRANSCRIPTION else "disabled"
         )

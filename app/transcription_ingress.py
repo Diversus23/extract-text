@@ -12,23 +12,20 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.auth import verify_api_key
 from app.config import settings
 from app.transcription import TranscriptionError, get_transcriber
+from app.transcription_proxy import error_response as _error
+from app.transcription_proxy import forward_transcribe, proxy_enabled
 
 # Небольшой запас для заголовков multipart и полей формы; размер самого файла
 # дополнительно проверяет эндпоинт. Общий объём тела ограничен и при ложном CL.
 MULTIPART_OVERHEAD_BYTES = 64 * 1024
 
 
-def _error(code: int, message: str, headers: dict | None = None) -> JSONResponse:
-    """До разбора формы имя файла неизвестно."""
-    return JSONResponse(
-        status_code=code,
-        content={"status": "error", "filename": "unknown_file", "message": message},
-        headers=headers,
-    )
-
-
 class TranscriptionIngressMiddleware:
-    """Проверяет доступ, размер запроса и свободный слот до чтения тела."""
+    """Проверяет доступ, размер запроса и свободный слот до чтения тела.
+
+    Если расшифровка выключена, но задан TRANSCRIPTION_UPSTREAM_URL, после тех же
+    проверок запрос пересылается в сервис api-audio.
+    """
 
     def __init__(self, app: ASGIApp) -> None:
         """Сохраняет следующее приложение в цепочке middleware."""
@@ -59,7 +56,8 @@ class TranscriptionIngressMiddleware:
             )(scope, receive, send)
             return
 
-        if not settings.ENABLE_TRANSCRIPTION:
+        forwarding = proxy_enabled()
+        if not settings.ENABLE_TRANSCRIPTION and not forwarding:
             await _error(503, "Расшифровка аудио отключена на этом сервере.")(
                 scope, receive, send
             )
@@ -85,6 +83,16 @@ class TranscriptionIngressMiddleware:
         )
         if int(lengths[0]) > limit:
             await _error(413, size_error_message)(scope, receive, send)
+            return
+
+        if forwarding:
+            await forward_transcribe(
+                scope,
+                receive,
+                send,
+                limit=limit,
+                size_error_message=size_error_message,
+            )
             return
 
         try:
