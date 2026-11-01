@@ -31,4 +31,4 @@ def test_models(test_client, monkeypatch, enabled, upstream, count):
 
 
 def test_version(test_client):
-    assert test_client.get("/").json()["version"] == "1.14.1"
+    assert test_client.get("/").json()["version"] == "1.14.2"

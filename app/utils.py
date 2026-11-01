@@ -1,6 +1,7 @@
 """Утилиты для приложения."""
 
 import glob
+import io
 import logging
 import math
 import os
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Union
 
@@ -276,6 +278,15 @@ def validate_file_type(content: bytes, filename: str) -> tuple[bool, Optional[st
         # Проверяем соответствие
         if mime_type in expected_mimes:
             return True, None
+
+        # libmagic может вернуть общий MIME для корректного ZIP. Проверяем
+        # центральный каталог, не распаковывая данные до проверок лимитов.
+        if file_extension == "zip" and mime_type == "application/octet-stream":
+            try:
+                with zipfile.ZipFile(io.BytesIO(content)):
+                    return True, None
+            except zipfile.BadZipFile:
+                return False, "Некорректная структура ZIP-архива"
 
         # Особые случаи для текстовых файлов и исходного кода
         text_based_extensions = [
