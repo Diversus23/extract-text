@@ -1,6 +1,6 @@
 # Техническое задание: API для извлечения текста для RAG
 
-**Версия:** 1.14.0
+**Версия:** 1.14.1
 **Дата:** 16.10.2026
 
 ---
@@ -963,23 +963,23 @@ build:
   docker build -t $(IMAGE_NAME):$(TAG) .
 
 dev: build
-  docker-compose -f docker-compose.yml up
+  docker compose -f docker-compose.yml up
 
 prod: build
-  docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 stop:
-  docker-compose -f docker-compose.yml -f docker-compose.prod.yml down
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 
 logs:
-  docker-compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
 
 test:
   @echo "Запуск тестов конвертации..."
   @./run_tests.sh
 
 clean:
-  docker-compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes --remove-orphans
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes --remove-orphans
 ```
 
 **7.2. docker-compose.yml (для разработки)**

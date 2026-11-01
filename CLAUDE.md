@@ -12,10 +12,10 @@ Text Extraction API — FastAPI-сервис на Python 3.12+, извлекаю
 
 ```bash
 # Разработка / запуск
-make up               # dev-режим (docker-compose, hot reload, foreground)
+make up               # dev-режим (docker compose v2, hot reload, foreground)
 make prod-up          # prod-режим (git pull → stop → up -d с docker-compose.prod.yml)
 make stop / make down # остановить контейнеры
-make logs             # docker-compose logs -f
+make logs             # docker compose logs -f
 make debug            # exec /bin/bash в dev-контейнер
 
 # Тестирование (минимальный порог покрытия --cov-fail-under=60)
@@ -33,6 +33,8 @@ make format           # автоисправление: isort + black
 make lint-check       # CI-режим: только проверка, без исправлений
 make lint             # все линтеры с предупреждениями (включая bandit/safety)
 ```
+
+Compose — v2 (`docker compose`, переменная `COMPOSE` в `Makefile`). Имя проекта закреплено как `extracttext` (`COMPOSE_PROJECT_NAME`): так v2 видит контейнеры, созданные прежним v1, иначе фиксированные `container_name` дают конфликт имён.
 
 CI (`.github/workflows/ci.yml`) запускает `lint` → `test-docker` → matrix на Python 3.12/3.13 → security (pip-audit) → docker build. Линтер блокирующий, MyPy — `continue-on-error`. Минимум — Python 3.12 (поднято с 3.10 в v1.11.0).
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.14.1] - 2026-11-01
+
+### Изменено
+- Запуск контейнеров переведён с docker-compose v1 на Docker Compose v2: `Makefile` вызывает `docker compose` (переменная `COMPOSE`; для старого v1 — `make COMPOSE=docker-compose ...`). v1 снят с поддержки и падает на событиях новых версий Docker: поток `watch_events` в `docker-compose logs -f` завершался с `KeyError: 'id'`.
+- Имя проекта Compose закреплено в `Makefile` как `extracttext` (`COMPOSE_PROJECT_NAME`): под этим именем v1 создавал контейнеры для директории `extract-text`. По умолчанию v2 назвал бы проект `extract-text`, не увидел бы эти контейнеры и упёрся бы в конфликт фиксированных `container_name`.
+- Команды в README.md, docs/TZ.md и CLAUDE.md обновлены на `docker compose`.
+
+### Исправлено
+- В `docker-compose.prod.yml` строка `volumes: []` не очищала dev-монтирования из `docker-compose.yml`: списки сливаются, и сервис `api` в prod получал `./app` и `./tests` с диска хоста. Теперь список сбрасывается тегом `!reset` (нужен Compose v2.24.4 и новее), prod запускает код из образа. Тест `test_prod_api_drops_dev_volumes` следит за этим.
+
+### Миграция на сервере
+1. Установить Compose v2.24.4 или новее (например, пакет `docker-compose-plugin` из репозитория Docker) и проверить `docker compose version`. Без него `make prod-up` обновит код, но остановить контейнеры не сможет.
+2. Выполнить `make prod-up`. Если директория проекта на сервере называется не `extract-text` и запуск падает с «container name ... is already in use», один раз выполнить `docker rm -f extract-text-prod extract-text-audio-prod` и повторить `make prod-up`.
+
 ## [1.14.0] - 2026-11-01
 
 ### Добавлено

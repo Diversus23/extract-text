@@ -1,4 +1,7 @@
-"""Совместимость compose-файлов со старым docker-compose v1 (его вызывает Makefile)."""
+"""Совместимость compose-файлов со старым docker-compose v1.
+
+Makefile вызывает Compose v2, но файлы должны запускаться и под v1.
+"""
 
 import re
 from pathlib import Path

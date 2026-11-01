@@ -789,15 +789,17 @@ make clean          # Полная очистка системы
 
 ### Docker Compose команды
 
+Нужен Docker Compose v2.24.4 или новее (плагин `docker compose`, проверка: `docker compose version`). Команды `make` вызывают его с именем проекта `extracttext`.
+
 ```bash
 # Разработка
-docker-compose up
+docker compose up
 
 # Продакшен
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # Остановка
-docker-compose down
+docker compose down
 ```
 
 ## Разработка
@@ -998,7 +1000,7 @@ make logs
 make status
 
 # Или напрямую
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ## Производительность
@@ -1234,5 +1236,5 @@ curl http://localhost:7555/v1/audio/transcriptions \
 
 ---
 
-**Версия**: 1.14.0
+**Версия**: 1.14.1
 **Разработчик**: Барилко Виталий

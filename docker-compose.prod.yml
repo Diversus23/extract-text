@@ -9,8 +9,9 @@ services:
   api:
     container_name: extract-text-prod
     build: *build
-    # Перебиваем dev-volume ./app:/code/app — в prod код используется только из образа.
-    volumes: []
+    # Сбрасываем dev-volumes (./app, ./tests): в prod код берётся только из образа.
+    # Обычный `volumes: []` список не очищает, нужен !reset (Compose v2.24.4+).
+    volumes: !reset []
     command: >
       sh -c "
         CALCULATED_WORKERS=$$(expr 2 \* $${CPU_CORES:-4} + 1);
@@ -54,7 +55,7 @@ services:
       # os.cpu_count() внутри контейнера видит все ядра хоста, а не лимит cpus, поэтому
       # потоки задаются явно: приложение берёт TRANSCRIPTION_THREADS из .env, иначе
       # AUDIO_CPUS (по умолчанию 4). Значение по умолчанию, само содержащее переменную,
-      # здесь нельзя: Makefile запускает docker-compose v1, он передаст его как текст.
+      # здесь нельзя: docker-compose v1 (запуск не через Makefile) передаст его как текст.
       - AUDIO_CPUS=${AUDIO_CPUS:-4}
     deploy:
       resources:

@@ -10,6 +10,30 @@ ROOT = Path(__file__).parent.parent
 pytestmark = pytest.mark.unit
 
 
+class _ComposeLoader(yaml.SafeLoader):
+    """SafeLoader, понимающий теги Compose: `!reset`, `!override`."""
+
+
+def _construct_compose_tag(loader, suffix, node):
+    """Тег Compose превращается в {"!тег": значение}, чтобы тест видел его в файле."""
+    if isinstance(node, yaml.SequenceNode):
+        value = loader.construct_sequence(node, deep=True)
+    elif isinstance(node, yaml.MappingNode):
+        value = loader.construct_mapping(node, deep=True)
+    else:
+        value = loader.construct_scalar(node)
+    return {f"!{suffix}": value}
+
+
+_ComposeLoader.add_multi_constructor("!", _construct_compose_tag)
+
+
+def _load_compose(name: str) -> dict:
+    """Разобранный compose-файл из корня репозитория."""
+    text = (ROOT / name).read_text(encoding="utf-8")
+    return yaml.load(text, Loader=_ComposeLoader)  # nosec B506: свой SafeLoader
+
+
 def _env_example_lines() -> list:
     """Незакомментированные строки env_example."""
     lines = (ROOT / "env_example").read_text(encoding="utf-8").splitlines()
@@ -43,9 +67,7 @@ def test_env_example_documents_build_quantization():
 @pytest.mark.parametrize("service", ["api", "api-audio"])
 def test_compose_passes_quantization_build_arg(service):
     """Compose передаёт GIGAAM_QUANTIZATION в сборку обоих сервисов."""
-    compose = yaml.safe_load(
-        (ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8")
-    )
+    compose = _load_compose("docker-compose.prod.yml")
 
     build = compose["services"][service]["build"]
 
@@ -55,10 +77,19 @@ def test_compose_passes_quantization_build_arg(service):
 
 def _audio_service() -> dict:
     """Описание сервиса api-audio из docker-compose.prod.yml."""
-    compose = yaml.safe_load(
-        (ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8")
-    )
-    return compose["services"]["api-audio"]
+    return _load_compose("docker-compose.prod.yml")["services"]["api-audio"]
+
+
+def test_prod_api_drops_dev_volumes():
+    """Prod-сервис api не монтирует dev-каталоги ./app и ./tests.
+
+    `volumes: []` в override не очищает список из docker-compose.yml: списки
+    сливаются, и prod запускал бы код с диска вместо кода из образа. Сбросить
+    список можно только тегом `!reset` (Compose v2.24.4 и новее).
+    """
+    api = _load_compose("docker-compose.prod.yml")["services"]["api"]
+
+    assert api["volumes"] == {"!reset": []}
 
 
 def test_audio_healthcheck_uses_readiness_probe():

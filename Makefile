@@ -3,6 +3,11 @@ SHELL := /bin/bash
 IMAGE_NAME := text-extraction-api
 TAG := latest
 
+# Docker Compose v2 (плагин `docker compose`). Имя проекта закреплено как у v1
+# (директория extract-text → extracttext): у сервисов фиксированные container_name,
+# и при другом имени проекта v2 не увидит контейнеры, созданные v1, и упрётся в конфликт имён.
+COMPOSE ?= docker compose
+export COMPOSE_PROJECT_NAME ?= extracttext
 
 .PHONY: help build up prod-up down stop logs test test-unit test-integration test-coverage test-legacy clean status lint format lint-check install-linters
 
@@ -61,7 +66,7 @@ up: build ## 🚀 Запустить в режиме разработки
 	@echo "📖 Документация: http://localhost:7555/docs"
 	@echo ""
 	@echo "Для остановки нажмите Ctrl+C"
-	@docker-compose -f docker-compose.yml up
+	@$(COMPOSE) -f docker-compose.yml up
 
 prod-up: build ## 🏭 Запустить в продакшене
 	@echo "🔄 Обновление репозитория..."
@@ -74,7 +79,7 @@ prod-up: build ## 🏭 Запустить в продакшене
 	@echo "  - Автоперезапуск при сбоях"
 	@echo "  - Оптимизированная производительность"
 	@echo ""
-	@docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+	@$(COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 	@echo "✅ Сервис запущен в фоновом режиме!"
 	@echo "🌐 API доступен по адресу: http://localhost:7555"
 	@echo "📖 Документация: http://localhost:7555/docs"
@@ -84,7 +89,7 @@ prod-up: build ## 🏭 Запустить в продакшене
 
 down: ## 🛑 Остановить все контейнеры
 	@echo "🛑 Остановка всех контейнеров..."
-	@docker-compose -f docker-compose.yml -f docker-compose.prod.yml down
+	@$(COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml down
 	@echo "✅ Все контейнеры остановлены!"
 
 stop: down ## 🛑 Остановить все контейнеры (алиас для down)
@@ -93,12 +98,12 @@ logs: ## 📋 Показать логи приложения
 	@echo "📋 Показ логов приложения..."
 	@echo "Для выхода нажмите Ctrl+C"
 	@echo ""
-	@docker-compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
+	@$(COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml logs -f
 
 status: ## 📊 Показать статус контейнеров
 	@echo "📊 Статус контейнеров:"
 	@echo ""
-	@docker-compose -f docker-compose.yml ps 2>/dev/null || echo "Контейнеры не запущены"
+	@$(COMPOSE) -f docker-compose.yml ps 2>/dev/null || echo "Контейнеры не запущены"
 	@echo ""
 	@echo "📈 Использование ресурсов:"
 	@docker stats --no-stream 2>/dev/null | grep text-extraction || echo "Контейнеры не запущены"
@@ -240,7 +245,7 @@ clean: ## 🧹 Полная очистка
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
 		echo ""; \
 		echo "🗑️  Удаление контейнеров и томов..."; \
-		docker-compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes --remove-orphans; \
+		$(COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml down --volumes --remove-orphans; \
 		echo "🗑️  Удаление результатов тестов..."; \
 		rm -f tests/*.ok.txt tests/*.err.txt tests/supported_formats.json 2>/dev/null || true; \
 		echo "🗑️  Удаление отчетов покрытия..."; \
@@ -255,7 +260,7 @@ clean: ## 🧹 Полная очистка
 debug: ## 🐛 Запустить в режиме отладки
 	@echo "🐛 Режим отладки..."
 	@echo "Подключение к контейнеру для отладки"
-	@docker-compose -f docker-compose.yml exec api /bin/bash
+	@$(COMPOSE) -f docker-compose.yml exec api /bin/bash
 
 quick-test: ## ⚡ Быстрый тест API
 	@echo "⚡ Быстрый тест API..."
