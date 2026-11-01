@@ -42,7 +42,7 @@ brew install libreoffice antiword libmagic
 ```
 
 **Windows:**
-Используйте Docker для разработки (рекомендуется):
+Используйте Docker для разработки (рекомендуется). Нужен **Docker Compose v2.24.4+** (`docker compose version`; `docker-compose` v1 не подходит):
 ```bash
 make dev  # Запуск в Docker
 ```
@@ -373,6 +373,12 @@ make logs
 # Подключение к контейнеру
 docker exec -it extract-text-api-1 /bin/bash
 ```
+
+Проблемы с Docker Compose (нужен v2.24.4 или новее, установка описана в README):
+
+- `unknown shorthand flag: 'f' in -f` при `make down` или `make prod-up` — не установлен плагин Compose v2. На Ubuntu 24.04 с `docker.io`: `sudo apt install docker-compose-v2`, затем `docker compose version`.
+- `KeyError: 'id'` в `watch_events` — запущен устаревший `docker-compose` v1. Используйте `docker compose` (через `make` это делается автоматически).
+- `container name ... is already in use` после перехода с v1 — выполните один раз `docker rm -f extract-text-prod extract-text-audio-prod` и повторите `make prod-up`.
 
 ## Внесение вклада
 

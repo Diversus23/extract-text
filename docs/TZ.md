@@ -861,6 +861,7 @@
 
 **5.4. Среда развертывания:**
 * Сервис должен поставляться в виде **Docker-контейнера**.
+* **Оркестрация:** Docker Compose v2.24.4 и новее (`docker compose`). Устаревший docker-compose v1 не поддерживается: он падает с `KeyError: 'id'` на событиях Docker Engine 29, а тег `!reset` из `docker-compose.prod.yml` появился только в Compose v2.24.4.
 
 #### 5.4.1. Рекомендации по Docker развертыванию
 * **Обязательный HEALTHCHECK:** Docker образ должен содержать инструкцию HEALTHCHECK для автоматического мониторинга работоспособности приложения системами оркестрации (Kubernetes, Docker Swarm).
@@ -1004,7 +1005,7 @@ services:
 version: '3.8'
 services:
   api:
-    volumes: []
+    volumes: !reset []  # обычный [] не очищает dev-монтирования
     command: >
       sh -c "
         CALCULATED_WORKERS=$$(expr 2 \* $${CPU_CORES:-4} + 1);

@@ -22,7 +22,7 @@ API для извлечения текста из файлов различны�
 - 🚀 **Асинхронная обработка**: Неблокирующее выполнение с поддержкой множественных worker-процессов
 - 📊 **Структурированный вывод**: Объединение текста из разных источников
 - 🔒 **Безопасность**: Защита от path traversal, подделки типов файлов, DoS-атак и SSRF
-- 🐳 **Docker**: Готовый к развертыванию контейнер
+- 🐳 **Docker**: Готовый к развертыванию контейнер; для `make` и docker-compose.prod.yml нужен **Docker Compose v2.24.4+** (`docker compose`, не `docker-compose` v1)
 - 📝 **Автодокументация**: Swagger UI интерфейс
 - 🧪 **Комплексное тестирование**: Unit, integration и функциональные тесты
 - 💾 **Полное извлечение**: Полное извлечение из DOCX (с колонтитулами, сносками, комментариями) и PPTX (с заметками спикера)
@@ -125,6 +125,8 @@ cd text-extraction-api
 ```
 
 ### 2. Запуск в Docker (рекомендуется)
+
+Нужны Docker и Docker Compose v2.24.4 или новее (см. [Docker Compose команды](#docker-compose-команды)).
 
 ```bash
 # Сборка и запуск в режиме разработки
@@ -790,6 +792,34 @@ make clean          # Полная очистка системы
 ### Docker Compose команды
 
 Нужен Docker Compose v2.24.4 или новее (плагин `docker compose`, проверка: `docker compose version`). Команды `make` вызывают его с именем проекта `extracttext`.
+
+Старый docker-compose v1 (команда `docker-compose`, Python-пакет) не поддерживается. С Docker Engine 29 его поток `watch_events` в `docker-compose logs -f` падает с `KeyError: 'id'`, а `docker-compose.prod.yml` использует тег `!reset`, который появился только в Compose v2.24.4.
+
+#### Установка Compose v2
+
+```bash
+# Ubuntu 24.04, Docker из репозитория Ubuntu (пакет docker.io): версия 2.24.6
+sudo apt update && sudo apt install docker-compose-v2
+
+# Docker из репозитория docker.com
+sudo apt install docker-compose-plugin
+
+# Любая установка Docker, плагин только для текущего пользователя
+# (для ARM замените x86_64 на aarch64)
+mkdir -p ~/.docker/cli-plugins
+curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+  -o ~/.docker/cli-plugins/docker-compose
+chmod +x ~/.docker/cli-plugins/docker-compose
+
+docker compose version    # v2.24.4 или выше
+```
+
+Пакет `docker-compose` (v1) после проверки можно удалить: `sudo apt remove docker-compose`.
+
+#### Переход с v1 на сервере
+
+- Без плагина команда `docker compose -f …` отвечает `unknown shorthand flag: 'f' in -f`. В этом случае `make prod-up` соберёт образ и выполнит `git pull`, но остановить контейнеры не сможет, и старые продолжат работать. Установите плагин и повторите `make prod-up`.
+- Имя проекта закреплено в `Makefile` как `extracttext`. Под этим именем v1 создавал контейнеры для папки `extract-text`, поэтому v2 подхватывает уже запущенные контейнеры. Если папка проекта называется иначе и запуск падает с «container name … is already in use», один раз выполните `docker rm -f extract-text-prod extract-text-audio-prod` и повторите `make prod-up`.
 
 ```bash
 # Разработка

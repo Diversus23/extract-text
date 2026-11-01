@@ -11,7 +11,7 @@
 - В `docker-compose.prod.yml` строка `volumes: []` не очищала dev-монтирования из `docker-compose.yml`: списки сливаются, и сервис `api` в prod получал `./app` и `./tests` с диска хоста. Теперь список сбрасывается тегом `!reset` (нужен Compose v2.24.4 и новее), prod запускает код из образа. Тест `test_prod_api_drops_dev_volumes` следит за этим.
 
 ### Миграция на сервере
-1. Установить Compose v2.24.4 или новее (например, пакет `docker-compose-plugin` из репозитория Docker) и проверить `docker compose version`. Без него `make prod-up` обновит код, но остановить контейнеры не сможет.
+1. Установить Compose v2.24.4 или новее и проверить `docker compose version`. На Ubuntu 24.04 с Docker из пакета `docker.io`: `sudo apt install docker-compose-v2` (версия 2.24.6); для Docker из репозитория docker.com — `docker-compose-plugin`. Подробности — в README, раздел «Docker Compose команды». Без него `make prod-up` обновит код, но остановить контейнеры не сможет.
 2. Выполнить `make prod-up`. Если директория проекта на сервере называется не `extract-text` и запуск падает с «container name ... is already in use», один раз выполнить `docker rm -f extract-text-prod extract-text-audio-prod` и повторить `make prod-up`.
 
 ## [1.14.0] - 2026-11-01
