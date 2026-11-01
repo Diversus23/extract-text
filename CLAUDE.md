@@ -34,7 +34,7 @@ make lint-check       # CI-режим: только проверка, без и�
 make lint             # все линтеры с предупреждениями (включая bandit/safety)
 ```
 
-Compose — v2 (`docker compose`, переменная `COMPOSE` в `Makefile`). Имя проекта закреплено как `extracttext` (`COMPOSE_PROJECT_NAME`): так v2 видит контейнеры, созданные прежним v1, иначе фиксированные `container_name` дают конфликт имён. Prod-сервер — Ubuntu 24.04 с `docker.io` 29: Compose ставится как `apt install docker-compose-v2` (2.24.6); v1 там падает с `KeyError: 'id'` в `watch_events`. Установка и миграция — в README, раздел «Docker Compose команды».
+Compose — v2 (`docker compose`, переменная `COMPOSE` в `Makefile`). Имя проекта не задаём: v1 и v2 берут его из имени директории (`extract-text`), поэтому v2 видит контейнеры, созданные прежним v1; при другом имени фиксированные `container_name` дают конфликт имён. Prod-сервер — Ubuntu 24.04 с `docker.io` 29: Compose ставится как `apt install docker-compose-v2` (2.24.6); v1 там падает с `KeyError: 'id'` в `watch_events`. Установка и миграция — в README, раздел «Docker Compose команды».
 
 CI (`.github/workflows/ci.yml`) запускает `lint` → `test-docker` → matrix на Python 3.12/3.13 → security (pip-audit) → docker build. Линтер блокирующий, MyPy — `continue-on-error`. Минимум — Python 3.12 (поднято с 3.10 в v1.11.0).
 

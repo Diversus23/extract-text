@@ -791,7 +791,7 @@ make clean          # Полная очистка системы
 
 ### Docker Compose команды
 
-Нужен Docker Compose v2.24.4 или новее (плагин `docker compose`, проверка: `docker compose version`). Команды `make` вызывают его с именем проекта `extracttext`.
+Нужен Docker Compose v2.24.4 или новее (плагин `docker compose`, проверка: `docker compose version`).
 
 Старый docker-compose v1 (команда `docker-compose`, Python-пакет) не поддерживается. С Docker Engine 29 его поток `watch_events` в `docker-compose logs -f` падает с `KeyError: 'id'`, а `docker-compose.prod.yml` использует тег `!reset`, который появился только в Compose v2.24.4.
 
@@ -819,7 +819,7 @@ docker compose version    # v2.24.4 или выше
 #### Переход с v1 на сервере
 
 - Без плагина команда `docker compose -f …` отвечает `unknown shorthand flag: 'f' in -f`. В этом случае `make prod-up` соберёт образ и выполнит `git pull`, но остановить контейнеры не сможет, и старые продолжат работать. Установите плагин и повторите `make prod-up`.
-- Имя проекта закреплено в `Makefile` как `extracttext`. Под этим именем v1 создавал контейнеры для папки `extract-text`, поэтому v2 подхватывает уже запущенные контейнеры. Если папка проекта называется иначе и запуск падает с «container name … is already in use», один раз выполните `docker rm -f extract-text-prod extract-text-audio-prod` и повторите `make prod-up`.
+- Имя проекта v1 и v2 берут из имени папки (`extract-text`), поэтому `down` в `make prod-up` находит и останавливает контейнеры, созданные v1. Если запуск всё же падает с «container name … is already in use» (например, имя проекта задано в `.env` через `COMPOSE_PROJECT_NAME`), один раз выполните `docker rm -f extract-text-prod extract-text-audio-prod` и повторите `make prod-up`.
 
 ```bash
 # Разработка

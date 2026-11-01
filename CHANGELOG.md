@@ -4,7 +4,6 @@
 
 ### Изменено
 - Запуск контейнеров переведён с docker-compose v1 на Docker Compose v2: `Makefile` вызывает `docker compose` (переменная `COMPOSE`; для старого v1 — `make COMPOSE=docker-compose ...`). v1 снят с поддержки и падает на событиях новых версий Docker: поток `watch_events` в `docker-compose logs -f` завершался с `KeyError: 'id'`.
-- Имя проекта Compose закреплено в `Makefile` как `extracttext` (`COMPOSE_PROJECT_NAME`): под этим именем v1 создавал контейнеры для директории `extract-text`. По умолчанию v2 назвал бы проект `extract-text`, не увидел бы эти контейнеры и упёрся бы в конфликт фиксированных `container_name`.
 - Команды в README.md, docs/TZ.md и CLAUDE.md обновлены на `docker compose`.
 
 ### Исправлено
@@ -12,7 +11,7 @@
 
 ### Миграция на сервере
 1. Установить Compose v2.24.4 или новее и проверить `docker compose version`. На Ubuntu 24.04 с Docker из пакета `docker.io`: `sudo apt install docker-compose-v2` (версия 2.24.6); для Docker из репозитория docker.com — `docker-compose-plugin`. Подробности — в README, раздел «Docker Compose команды». Без него `make prod-up` обновит код, но остановить контейнеры не сможет.
-2. Выполнить `make prod-up`. Если директория проекта на сервере называется не `extract-text` и запуск падает с «container name ... is already in use», один раз выполнить `docker rm -f extract-text-prod extract-text-audio-prod` и повторить `make prod-up`.
+2. Выполнить `make prod-up`. Имя проекта v1 и v2 берут из имени директории (`extract-text`), поэтому `down` найдёт контейнеры, созданные v1, и остановит их. Если запуск всё же падает с «container name ... is already in use» (например, имя проекта задано в `.env` через `COMPOSE_PROJECT_NAME`), один раз выполнить `docker rm -f extract-text-prod extract-text-audio-prod` и повторить `make prod-up`.
 
 ## [1.14.0] - 2026-11-01
 

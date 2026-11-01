@@ -3,11 +3,10 @@ SHELL := /bin/bash
 IMAGE_NAME := text-extraction-api
 TAG := latest
 
-# Docker Compose v2 (плагин `docker compose`). Имя проекта закреплено как у v1
-# (директория extract-text → extracttext): у сервисов фиксированные container_name,
-# и при другом имени проекта v2 не увидит контейнеры, созданные v1, и упрётся в конфликт имён.
+# Docker Compose v2 (плагин `docker compose`, версия 2.24.4+ из-за !reset в prod-файле).
+# Имя проекта не задаём: и v1, и v2 берут его из имени директории (extract-text),
+# поэтому v2 видит контейнеры, созданные v1.
 COMPOSE ?= docker compose
-export COMPOSE_PROJECT_NAME ?= extracttext
 
 .PHONY: help build up prod-up down stop logs test test-unit test-integration test-coverage test-legacy clean status lint format lint-check install-linters
 
