@@ -4,8 +4,8 @@ import logging
 import secrets
 from typing import Optional
 
-from fastapi import HTTPException, Security, status
-from fastapi.security import APIKeyHeader
+from fastapi import HTTPException, Request, Security
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
 
@@ -25,41 +25,42 @@ api_key_scheme = APIKeyHeader(
 )
 
 
-async def verify_api_key(
-    x_api_key: Optional[str] = Security(api_key_scheme),
-) -> None:
-    """
-    FastAPI-dependency: проверяет API-ключ согласно AUTH_MODE.
+bearer_scheme = HTTPBearer(auto_error=False)
 
-    AUTH_MODE=none — пропускает любые запросы (default).
-    AUTH_MODE=apikey — требует заголовок X-API-Key, сверяет со списком settings.API_KEYS
-    через secrets.compare_digest (constant-time, защита от timing-attack).
-    """
+
+def extract_api_key(x_api_key=None, authorization=None):
+    """Извлекает ключ: непустой X-API-Key имеет приоритет над Bearer."""
+    if x_api_key:
+        return x_api_key
+    if authorization:
+        scheme, _, credentials = authorization.partition(" ")
+        if scheme.lower() == "bearer":
+            return credentials.strip() or None
+    return None
+
+
+def check_api_key(key):
+    """Проверяет режим доступа и сравнивает ключи за постоянное время."""
     if settings.AUTH_MODE == "none":
         return
-
     if settings.AUTH_MODE != "apikey":
-        logger.error(
-            f"Неизвестный AUTH_MODE: {settings.AUTH_MODE!r}, ожидается 'none' или 'apikey'"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server auth misconfiguration",
-        )
-
-    if not x_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key required",
-            headers={"WWW-Authenticate": "ApiKey"},
-        )
-
-    for valid_key in settings.API_KEYS:
-        if secrets.compare_digest(x_api_key, valid_key):
-            return
-
+        raise HTTPException(500, "Server auth misconfiguration")
+    if key and any(
+        secrets.compare_digest(key.encode("utf-8"), valid.encode("utf-8"))
+        for valid in settings.API_KEYS
+    ):
+        return
     raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid API key",
+        401,
+        "Invalid API key" if key else "API key required",
         headers={"WWW-Authenticate": "ApiKey"},
     )
+
+
+async def verify_api_key(
+    request: Request,
+    x_api_key: Optional[str] = Security(api_key_scheme),
+    bearer: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
+) -> None:
+    """Проверяет оба способа авторизации для прежних маршрутов API."""
+    check_api_key(extract_api_key(x_api_key, request.headers.get("authorization")))

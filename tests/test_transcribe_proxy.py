@@ -440,3 +440,50 @@ async def test_plain_health_does_not_call_upstream(proxy_mode, monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+async def test_openai_path_and_bearer_forwarded(proxy_mode, monkeypatch):
+    monkeypatch.setattr(settings, "AUTH_MODE", "apikey")
+    monkeypatch.setattr(settings, "API_KEYS", ["test-key"])
+    seen = {}
+
+    async def handler(request):
+        seen["url"] = str(request.url)
+        seen["key"] = request.headers["authorization"]
+        seen["body"] = await request.aread()
+        return httpx.Response(200, json={"text": "hello"})
+
+    use_upstream(monkeypatch, handler)
+    async with gateway() as client:
+        response = await client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", b"audio")},
+            data={"model": "gigaam-v3-e2e-rnnt", "response_format": "json"},
+            headers={"Authorization": "Bearer test-key"},
+        )
+    assert response.json() == {"text": "hello"}
+    assert seen["url"] == UPSTREAM + "/v1/audio/transcriptions"
+    assert seen["key"] == "Bearer test-key"
+    assert b'name="model"' in seen["body"]
+    assert b'name="response_format"' in seen["body"]
+
+
+@pytest.mark.parametrize(
+    "exception,status,code",
+    [
+        (httpx.ConnectError("down"), 503, "service_busy"),
+        (httpx.ReadTimeout("slow"), 504, "request_timeout"),
+        (httpx.RemoteProtocolError("bad"), 502, "internal_error"),
+    ],
+)
+async def test_openai_proxy_errors(proxy_mode, monkeypatch, exception, status, code):
+    def handler(request):
+        raise exception
+
+    use_upstream(monkeypatch, handler)
+    async with gateway() as client:
+        response = await client.post("/v1/audio/transcriptions", content=b"audio")
+    assert response.status_code == status
+    assert response.json()["error"]["code"] == code
+    if status == 503:
+        assert "retry-after" in response.headers

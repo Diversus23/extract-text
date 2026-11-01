@@ -67,7 +67,7 @@ class _UploadRejected(Exception):
     """Загрузка отклонена по размеру или времени, ответ клиенту уже готов."""
 
     def __init__(self, response: Response) -> None:
-        super().__init__()
+        super().__init__(response)
         self.response = response
 
 
@@ -82,6 +82,8 @@ async def forward_transcribe(
     *,
     limit: int,
     size_error_message: str,
+    path: str = "/v1/transcribe",
+    error_factory=error_response,
 ) -> None:
     """Потоком пересылает запрос в api-audio и возвращает его ответ без изменений."""
     upload_done = asyncio.Event()
@@ -97,14 +99,14 @@ async def forward_transcribe(
                 )
             except asyncio.TimeoutError as error:
                 raise _UploadRejected(
-                    error_response(408, "Превышено время загрузки аудиофайла.")
+                    error_factory(408, "Превышено время загрузки аудиофайла.")
                 ) from error
             if message["type"] == "http.disconnect":
                 raise _ClientGone
             body = message.get("body", b"")
             received += len(body)
             if received > limit:
-                raise _UploadRejected(error_response(413, size_error_message))
+                raise _UploadRejected(error_factory(413, size_error_message))
             if body:
                 yield body
             if not message.get("more_body", False):
@@ -126,7 +128,7 @@ async def forward_transcribe(
         async with _make_client(timeout) as client:
             request = client.build_request(
                 "POST",
-                f"{settings.TRANSCRIPTION_UPSTREAM_URL}/v1/transcribe",
+                f"{settings.TRANSCRIPTION_UPSTREAM_URL}{path}",
                 headers=headers,
                 content=request_body(),
             )
@@ -134,7 +136,7 @@ async def forward_transcribe(
                 client, request, receive, upload_done
             )
     except _ClientGone:
-        await _client_closed(scope, receive, send)
+        await _client_closed(scope, receive, send, error_factory)
         return
     except _UploadRejected as rejected:
         await rejected.response(scope, receive, send)
@@ -143,7 +145,7 @@ async def forward_transcribe(
         logger.error(
             f"Сервис расшифровки {settings.TRANSCRIPTION_UPSTREAM_URL}: {error!r}"
         )
-        await error_response(
+        await error_factory(
             503,
             "Сервис расшифровки аудио временно недоступен.",
             {"Retry-After": str(UPSTREAM_RETRY_AFTER_SECONDS)},
@@ -151,19 +153,19 @@ async def forward_transcribe(
         return
     except httpx.TimeoutException:
         logger.error("Сервис расшифровки не ответил за отведённое время")
-        await error_response(
+        await error_factory(
             504, "Сервис расшифровки аудио не ответил за отведённое время."
         )(scope, receive, send)
         return
     except httpx.HTTPError as error:
         logger.error(f"Некорректный ответ сервиса расшифровки: {error!r}")
-        await error_response(
-            502, "Сервис расшифровки аудио вернул некорректный ответ."
-        )(scope, receive, send)
+        await error_factory(502, "Сервис расшифровки аудио вернул некорректный ответ.")(
+            scope, receive, send
+        )
         return
 
     if response is None:
-        await _client_closed(scope, receive, send)
+        await _client_closed(scope, receive, send, error_factory)
         return
     await Response(
         content=response.content,
@@ -176,10 +178,12 @@ async def forward_transcribe(
     )(scope, receive, send)
 
 
-async def _client_closed(scope: Scope, receive: Receive, send: Send) -> None:
+async def _client_closed(
+    scope: Scope, receive: Receive, send: Send, error_factory=error_response
+) -> None:
     """Клиент ушёл: uvicorn отбросит ответ, но вышестоящим middleware он нужен."""
     logger.info("Клиент закрыл соединение до завершения запроса")
-    await error_response(499, "Клиент закрыл соединение.")(scope, receive, send)
+    await error_factory(499, "Клиент закрыл соединение.")(scope, receive, send)
 
 
 async def _send_unless_client_left(

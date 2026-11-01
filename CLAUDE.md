@@ -110,3 +110,7 @@ app/
 ## Конфигурация через env
 
 Все настройки читаются через `os.getenv` в `app/config.py`. Шаблон — `env_example` → `.env`. Ключевые переменные: `API_PORT` (7555), `WORKERS` (prod: `2*CPU_CORES+1`), `OCR_LANGUAGES` (`rus+eng`), `PROCESSING_TIMEOUT_SECONDS` (300), `MAX_FILE_SIZE` (20MB), `ENABLE_JAVASCRIPT` (false по умолчанию для безопасности), `BLOCKED_IP_RANGES`, `BLOCKED_HOSTNAMES`. Ограничения памяти подпроцессов: `MAX_SUBPROCESS_MEMORY` (1GB), `MAX_LIBREOFFICE_MEMORY` (1.5GB), `MAX_TESSERACT_MEMORY` (512MB) — применяются только если `ENABLE_RESOURCE_LIMITS=true`.
+
+### OpenAI-совместимая транскрибация (1.14.0)
+
+`app/openai_compat.py` содержит формат ошибок, каталог модели и представления ответа (`json`, `verbose_json`, `text`). Новые `/v1/models` и `/v1/audio/transcriptions` зарегистрированы отдельным роутером; старый `/v1/transcribe` использует тот же `_run_transcription` и сохраняет прежний ответ. На всех `/v1` доступны Bearer и X-API-Key (приоритет у непустого X-API-Key), проверка общая в `app/auth.py`. Ingress и прокси обслуживают оба пути, выбирая формат ошибок по пути; все ограничения до multipart и удержание слота после отмены остаются обязательными. Полный контракт и пример OpenAI SDK — в README.md, нормативное дополнение — в docs/TZ.md.

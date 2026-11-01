@@ -1171,6 +1171,48 @@ curl http://localhost:7555/v1/supported-formats
 curl -X POST -F "file=@tests/test.txt" http://localhost:7555/v1/extract/file
 ```
 
+## OpenAI-совместимый API (1.14.0)
+
+Для клиентов OpenAI SDK доступны `GET /v1/models` и `POST /v1/audio/transcriptions`. На всех маршрутах `/v1` ключ можно передать через `Authorization: Bearer <ключ>` или `X-API-Key`; при одновременной передаче приоритет у непустого `X-API-Key`. При `AUTH_MODE=none` ключ не требуется. Старый `/v1/transcribe` сохраняет прежний контракт.
+
+`GET /v1/models` возвращает список с единственной моделью из `TRANSCRIPTION_MODEL` (по умолчанию `gigaam-v3-e2e-rnnt`), `object=model`, `created` (метка запуска процесса), `owned_by=extract-text` и `architecture.input_modalities=[audio]`, `output_modalities=[text]`. Если локальная транскрибация выключена и upstream не задан, список пуст. Это каталог настроенных моделей, а готовность проверяется через `/health?check=transcription`.
+
+Транскрибация принимает multipart: обязательные `file` и `model`; `response_format=json` по умолчанию, также `verbose_json` и `text`. Поля `language`, `prompt`, `temperature`, `timestamp_granularities[]` принимаются для совместимости, но не меняют распознавание; язык результата — `ru`. Расширения `channel_labels` и `external_id` сохраняют прежние ограничения (256 символов суммарно/64 на метку и 128 символов соответственно). Модель должна точно совпадать с каталогом.
+
+- `json`: `text`, `usage={type: duration, seconds: N}`, `text_status`.
+- `verbose_json`: дополнительно `task=transcribe`, `language`, `duration`, `segments` с последовательным `id`, временем, текстом, `speaker` и `channel`; `channels`, `detected_format`, `model`, `external_id`.
+- `text`: только текст с `Content-Type: text/plain`.
+- `text_status`: `ok`, `partial`, `unrecognized`, `no_speech`; тишина и нераспознанные сегменты сохраняют HTTP 200.
+
+Ошибки новых маршрутов имеют форму `{"error":{"message":"...","type":"invalid_request_error","param":null,"code":"..."}}`. Для 5xx и 429 тип — `server_error`. Неизвестная модель: 404 `model_not_found`; нет `file`/`model`: 400 `missing_required_parameter`; `srt`/`vtt`: 400 `unsupported_response_format`; неверный ключ: 401 `invalid_api_key` с `WWW-Authenticate: Bearer`; слишком большой файл: 413 `audio_too_large`; неподдерживаемое аудио: 415 `unsupported_audio_format`; занятость: 503 `service_busy` с `Retry-After`; выключенная транскрибация: 503 `transcription_disabled`; таймаут: 504 `request_timeout`.
+
+Проверка доступа, обязательного `Content-Length`, лимита тела и резервирование слота выполняются до разбора multipart. Лимиты аудио, отмена, удержание слота до завершения рабочего потока и ограниченная очередь общие с `/v1/transcribe`. Сервис документов пересылает новый путь в `api-audio` без изменения пути и Bearer-заголовка; новые переменные окружения не нужны. Значение `TRANSCRIPTION_MODEL` у обоих сервисов должно совпадать.
+
+```python
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:7555/v1",
+    api_key=os.environ.get("EXTRACT_TEXT_API_KEY", "unused"),
+    timeout=960,
+    max_retries=0,
+)
+model = client.models.list().data[0].id
+with open("call.wav", "rb") as audio:
+    result = client.audio.transcriptions.create(
+        model=model, file=audio, response_format="verbose_json"
+    )
+print(result.text)
+```
+
+```bash
+curl http://localhost:7555/v1/models -H "Authorization: Bearer $EXTRACT_TEXT_API_KEY"
+curl http://localhost:7555/v1/audio/transcriptions \
+  -H "Authorization: Bearer $EXTRACT_TEXT_API_KEY" \
+  -F file=@call.wav -F model=gigaam-v3-e2e-rnnt -F response_format=verbose_json
+```
+
 ## Контрибуция
 
 1. Форк репозитория
@@ -1192,5 +1234,5 @@ curl -X POST -F "file=@tests/test.txt" http://localhost:7555/v1/extract/file
 
 ---
 
-**Версия**: 1.10.5
+**Версия**: 1.14.0
 **Разработчик**: Барилко Виталий

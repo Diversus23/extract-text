@@ -25,13 +25,30 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.concurrency import run_in_threadpool
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth import verify_api_key
 from app.config import settings
 from app.extractors import TextExtractor
+from app.openai_compat import (
+    OpenAIAPIError,
+    is_openai_path,
+    models_payload,
+    openai_credentials,
+    openai_error_handler,
+    openai_error_response,
+    transcription_payload,
+    validate_model,
+    validate_response_format,
+)
 from app.transcription import (
     TranscriptionCancelled,
     TranscriptionError,
@@ -761,6 +778,83 @@ def _transcribe_error(
     )
 
 
+async def _run_transcription(request, file, labels, original_filename):
+    """Shared execution, retaining the slot until the worker actually finishes."""
+    if file.size is None:
+        logger.warning(f"Файл {original_filename} не содержит Content-Length")
+        raise TranscriptionError(
+            status_code=400,
+            message="Отсутствует заголовок Content-Length. Пожалуйста, убедитесь, что размер файла указан в запросе.",
+        )
+
+    if file.size > settings.MAX_AUDIO_FILE_SIZE:
+        logger.warning(f"Файл {original_filename} слишком большой: {file.size} bytes")
+        raise TranscriptionError(
+            status_code=413,
+            message=f"Размер аудиофайла превышает допустимые {settings.MAX_AUDIO_FILE_SIZE} "
+            f"байт ({settings.MAX_AUDIO_FILE_SIZE / (1024 * 1024):g} МиБ).",
+        )
+
+    content = await file.read()
+    if not content:
+        logger.warning(f"Файл {original_filename} пуст")
+        raise TranscriptionError("Файл пуст.", status_code=422)
+
+    cancel_event = threading.Event()
+    timeout = settings.TRANSCRIPTION_TIMEOUT_SECONDS
+    deadline = time.monotonic() + timeout
+    start_time = time.time()
+    try:
+        future = asyncio.wrap_future(
+            get_transcriber().submit(
+                request.state.transcription_slot,
+                transcribe_bytes,
+                content,
+                channel_labels=labels,
+                cancel_event=cancel_event,
+                deadline=deadline,
+            )
+        )
+        # Даже после 504 слот принадлежит потоку до его фактического завершения.
+        # Забираем исключение завершившегося после таймаута задания из Future.
+        future.add_done_callback(
+            lambda done: None if done.cancelled() else done.exception()
+        )
+        result = await asyncio.wait_for(
+            asyncio.shield(future),
+            timeout=timeout,
+        )
+    except asyncio.CancelledError:
+        cancel_event.set()
+        raise
+    except (asyncio.TimeoutError, TranscriptionCancelled):
+        # Рабочий поток остановится сам: проверяет флаг отмены между сегментами
+        cancel_event.set()
+        logger.error(
+            f"Таймаут расшифровки {original_filename}: превышен лимит {timeout} секунд"
+        )
+        raise TranscriptionError(
+            status_code=504,
+            message=f"Расшифровка файла превысила установленный лимит времени ({timeout} секунд).",
+        )
+    except TranscriptionError as error:
+        logger.warning(
+            f"Ошибка расшифровки {original_filename}: {error.message} ({error.status_code})"
+        )
+        raise
+    except Exception:
+        logger.exception(f"Непредвиденная ошибка расшифровки {original_filename}")
+        raise TranscriptionError(
+            status_code=500, message="Внутренняя ошибка при расшифровке аудио."
+        )
+
+    logger.info(
+        f"Расшифровка {original_filename} завершена за {time.time() - start_time:.1f}s: "
+        f"сегментов {len(result.segments)}, длительность {result.duration:.1f}s"
+    )
+    return result
+
+
 @v1_router.post("/transcribe")
 async def transcribe(
     request: Request,
@@ -797,84 +891,13 @@ async def transcribe(
         )
 
     # Content-Length и общий размер тела проверены middleware до разбора формы.
-    if file.size is None:
-        logger.warning(f"Файл {original_filename} не содержит Content-Length")
-        return _transcribe_error(
-            400,
-            original_filename,
-            "Отсутствует заголовок Content-Length. Пожалуйста, убедитесь, что размер файла указан в запросе.",
-        )
-
-    if file.size > settings.MAX_AUDIO_FILE_SIZE:
-        logger.warning(f"Файл {original_filename} слишком большой: {file.size} bytes")
-        return _transcribe_error(
-            413,
-            original_filename,
-            f"Размер аудиофайла превышает допустимые {settings.MAX_AUDIO_FILE_SIZE} "
-            f"байт ({settings.MAX_AUDIO_FILE_SIZE / (1024 * 1024):g} МиБ).",
-        )
-
-    content = await file.read()
-    if not content:
-        logger.warning(f"Файл {original_filename} пуст")
-        return _transcribe_error(422, original_filename, "Файл пуст.")
-
-    cancel_event = threading.Event()
-    timeout = settings.TRANSCRIPTION_TIMEOUT_SECONDS
-    deadline = time.monotonic() + timeout
-    start_time = time.time()
     try:
-        future = asyncio.wrap_future(
-            get_transcriber().submit(
-                request.state.transcription_slot,
-                transcribe_bytes,
-                content,
-                channel_labels=labels,
-                cancel_event=cancel_event,
-                deadline=deadline,
-            )
-        )
-        # Даже после 504 слот принадлежит потоку до его фактического завершения.
-        # Забираем исключение завершившегося после таймаута задания из Future.
-        future.add_done_callback(
-            lambda done: None if done.cancelled() else done.exception()
-        )
-        result = await asyncio.wait_for(
-            asyncio.shield(future),
-            timeout=timeout,
-        )
-    except asyncio.CancelledError:
-        cancel_event.set()
-        raise
-    except (asyncio.TimeoutError, TranscriptionCancelled):
-        # Рабочий поток остановится сам: проверяет флаг отмены между сегментами
-        cancel_event.set()
-        logger.error(
-            f"Таймаут расшифровки {original_filename}: превышен лимит {timeout} секунд"
-        )
-        return _transcribe_error(
-            504,
-            original_filename,
-            f"Расшифровка файла превысила установленный лимит времени ({timeout} секунд).",
-        )
+        result = await _run_transcription(request, file, labels, original_filename)
     except TranscriptionError as error:
-        logger.warning(
-            f"Ошибка расшифровки {original_filename}: {error.message} ({error.status_code})"
-        )
         headers = {"Retry-After": str(error.retry_after)} if error.retry_after else None
         return _transcribe_error(
             error.status_code, original_filename, error.message, headers
         )
-    except Exception:
-        logger.exception(f"Непредвиденная ошибка расшифровки {original_filename}")
-        return _transcribe_error(
-            500, original_filename, "Внутренняя ошибка при расшифровке аудио."
-        )
-
-    logger.info(
-        f"Расшифровка {original_filename} завершена за {time.time() - start_time:.1f}s: "
-        f"сегментов {len(result.segments)}, длительность {result.duration:.1f}s"
-    )
     return build_response(
         filename=original_filename,
         external_id=external_id,
@@ -886,6 +909,85 @@ async def transcribe(
 
 
 # Регистрируем v1-роутер с единым auth-dependency.
+openai_router = APIRouter(prefix="/v1", dependencies=[Depends(openai_credentials)])
+app.add_exception_handler(OpenAIAPIError, openai_error_handler)
+
+
+@app.exception_handler(RequestValidationError)
+async def compatibility_validation_error(request, error):
+    """Keep malformed compatibility requests in the OpenAI error envelope."""
+    if is_openai_path(request.url.path, request.scope.get("root_path", "")):
+        return openai_error_response(
+            400, "Invalid multipart parameters", code="invalid_request"
+        )
+    return await request_validation_exception_handler(request, error)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def compatibility_http_error(request, error):
+    """Format parser errors only for compatibility routes."""
+    if is_openai_path(request.url.path, request.scope.get("root_path", "")):
+        return openai_error_response(error.status_code, error.detail, error.headers)
+    return await http_exception_handler(request, error)
+
+
+OPTIONAL_FILE = File(None)
+OPTIONAL_FORM = Form(None)
+RESPONSE_FORMAT_FORM = Form("json")
+TIMESTAMPS_FORM = Form(None, alias="timestamp_granularities[]")
+
+
+@openai_router.get("/models")
+async def openai_models():
+    """Advertise the configured speech model with its input modality."""
+    return models_payload()
+
+
+@openai_router.post("/audio/transcriptions")
+async def openai_transcriptions(
+    request: Request,
+    file: Optional[UploadFile] = OPTIONAL_FILE,
+    model: Optional[str] = OPTIONAL_FORM,
+    response_format: str = RESPONSE_FORMAT_FORM,
+    language: Optional[str] = OPTIONAL_FORM,
+    prompt: Optional[str] = OPTIONAL_FORM,
+    temperature: Optional[str] = OPTIONAL_FORM,
+    timestamp_granularities: Optional[list[str]] = TIMESTAMPS_FORM,
+    channel_labels: Optional[str] = CHANNEL_LABELS_FORM,
+    external_id: Optional[str] = EXTERNAL_ID_FORM,
+):
+    """Accept multipart audio and ignore optional tuning fields."""
+    if file is None:
+        raise OpenAIAPIError(
+            400,
+            "Required parameter: file",
+            code="missing_required_parameter",
+            param="file",
+        )
+    validate_model(model)
+    validate_response_format(response_format)
+    labels = parse_channel_labels(channel_labels)
+    if external_id is not None and len(external_id) > MAX_EXTERNAL_ID_LENGTH:
+        raise OpenAIAPIError(400, "external_id is too long", param="external_id")
+    if len(channel_labels or "") > MAX_CHANNEL_LABELS_LENGTH or any(
+        len(label) > MAX_CHANNEL_LABEL_LENGTH for label in labels
+    ):
+        raise OpenAIAPIError(400, "channel_labels is too long", param="channel_labels")
+    filename = file.filename or "unknown_file"
+    try:
+        result = await _run_transcription(request, file, labels, filename)
+    except TranscriptionError as error:
+        raise OpenAIAPIError(
+            error.status_code,
+            error.message,
+            headers=(
+                {"Retry-After": str(error.retry_after)} if error.retry_after else None
+            ),
+        ) from error
+    return transcription_payload(result, response_format, filename, external_id)
+
+
+app.include_router(openai_router)
 app.include_router(v1_router)
 
 

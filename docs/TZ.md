@@ -1,6 +1,6 @@
 # Техническое задание: API для извлечения текста для RAG
 
-**Версия:** 1.12.0
+**Версия:** 1.14.0
 **Дата:** 16.10.2026
 
 ---
@@ -1166,3 +1166,15 @@ safety-report.json
 ---
 
 **Примечание:** Данные рекомендации основаны на критических исправлениях версии 1.8.3 и должны соблюдаться при любых дальнейших изменениях в проекте для обеспечения стабильности, безопасности и производительности системы.
+
+## Дополнение 1.14.0: OpenAI-совместимый API
+
+`GET /v1/models` возвращает `object=list` и `data` с моделью `TRANSCRIPTION_MODEL`, полями `id`, `name`, `object=model`, `created` (метка запуска процесса), `owned_by=extract-text`, `architecture={input_modalities:[audio],output_modalities:[text]}`. При выключенной локальной транскрибации без upstream `data` пуст; готовность отдельно проверяется `/health?check=transcription`.
+
+`POST /v1/audio/transcriptions` принимает multipart `file`, `model` (обязательны), `response_format=json|verbose_json|text`, `channel_labels`, `external_id`. Поля `language`, `prompt`, `temperature`, `timestamp_granularities[]` принимаются и игнорируются. Ответ `json`: `text`, `usage={type:duration,seconds:N}`, `text_status`; `verbose_json` добавляет `task=transcribe`, `language=ru`, `duration`, `segments[{id,start,end,text,speaker,channel}]`, `channels`, `detected_format`, `model`, `external_id`. Ответ `text` — `text/plain`. Статусы текста `ok`, `partial`, `unrecognized`, `no_speech` совпадают со старым API.
+
+Ошибки: `error={message,type,param,code}`; тип `invalid_request_error` для 4xx кроме 429, `server_error` для 5xx и 429. Нет обязательного поля — 400 `missing_required_parameter`; чужая модель — 404 `model_not_found`; `srt`/`vtt` — 400 `unsupported_response_format`; неверный ключ — 401 `invalid_api_key`; файл слишком велик — 413 `audio_too_large`; неподдерживаемое аудио — 415 `unsupported_audio_format`; повреждённое/пустое — 422 `invalid_audio`; занятость — 503 `service_busy` с `Retry-After`; выключено — 503 `transcription_disabled`; таймаут — 408/504 `request_timeout`.
+
+Все `/v1` поддерживают `X-API-Key` и `Authorization: Bearer` с приоритетом непустого `X-API-Key`, общим constant-time сравнением и прежним `AUTH_MODE`. Старые маршруты сохраняют прежние тела ошибок и `WWW-Authenticate: ApiKey`; новые используют `Bearer`. Входной middleware обрабатывает оба пути транскрибации до multipart: аутентификация, Content-Length, потоковый лимит тела, слот очереди. Прокси пересылает исходный путь и Bearer в `api-audio`; ошибки прокси оформляются по маршруту. Runner, таймаут и отмена общие, слот освобождается после фактического завершения рабочего потока. Новых env-параметров нет; `TRANSCRIPTION_MODEL` должен совпадать у api и api-audio.
+
+Пример OpenAI SDK и curl — в разделе «OpenAI-совместимый API (1.14.0)» README.md. Старый `/v1/transcribe` и распознавание по содержимому сохраняются без изменения контракта.

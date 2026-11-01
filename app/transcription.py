@@ -226,6 +226,25 @@ def build_segments(
     return segments
 
 
+def joined_text(segments: list[Segment]) -> str:
+    """Объединяет непустые тексты сегментов, сохраняя прежний формат."""
+    return " ".join(segment.text for segment in segments if segment.text)
+
+
+def text_status_of(segments: list[Segment]) -> str:
+    """Отличает тишину от нераспознанной и частично распознанной речи."""
+    texts = [segment.text for segment in segments if segment.text]
+    if not segments:
+        text_status = "no_speech"
+    elif not texts:
+        text_status = "unrecognized"
+    elif len(texts) < len(segments):
+        text_status = "partial"
+    else:
+        text_status = "ok"
+    return text_status
+
+
 def build_response(
     *,
     filename: str,
@@ -236,15 +255,6 @@ def build_response(
     segments: list[Segment],
 ) -> dict:
     """Формирует тело успешного ответа /v1/transcribe."""
-    texts = [segment.text for segment in segments if segment.text]
-    if not segments:
-        text_status = "no_speech"
-    elif not texts:
-        text_status = "unrecognized"
-    elif len(texts) < len(segments):
-        text_status = "partial"
-    else:
-        text_status = "ok"
     return {
         "status": "success",
         "filename": filename,
@@ -254,8 +264,8 @@ def build_response(
         "detected_format": detected_format,
         "model": settings.TRANSCRIPTION_MODEL,
         "language": "ru",
-        "text_status": text_status,
-        "text": " ".join(texts),
+        "text_status": text_status_of(segments),
+        "text": joined_text(segments),
         "segments": [
             {
                 "start": round(segment.start, 2),
