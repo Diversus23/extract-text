@@ -933,7 +933,7 @@ async def compatibility_http_error(request, error):
 
 OPTIONAL_FILE = File(None)
 OPTIONAL_FORM = Form(None)
-RESPONSE_FORMAT_FORM = Form("json")
+RESPONSE_FORMAT_FORM = Form("verbose_json")
 TIMESTAMPS_FORM = Form(None, alias="timestamp_granularities[]")
 
 

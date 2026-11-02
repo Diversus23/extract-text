@@ -68,6 +68,14 @@ def test_formats(test_client, recognition, response_format):
         assert body["task"] == "transcribe"
 
 
+def test_default_format_is_verbose_json(test_client, recognition):
+    response = post(test_client)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["task"] == "transcribe"
+    assert [segment["text"] for segment in body["segments"]] == ["hello"]
+
+
 @pytest.mark.parametrize(
     "fields,status,code,param",
     [
