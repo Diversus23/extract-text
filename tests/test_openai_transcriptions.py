@@ -68,6 +68,21 @@ def test_formats(test_client, recognition, response_format):
         assert body["task"] == "transcribe"
 
 
+def test_form_defaults(test_client, recognition):
+    response = test_client.post(PATH, files={"file": ("call.wav", b"audio")})
+    assert response.status_code == 200
+    assert response.json()["model"] == settings.TRANSCRIPTION_MODEL
+    assert response.json()["language"] == "ru"
+    assert recognition.call_args.kwargs["channel_labels"] == ["operator", "client"]
+
+
+def test_empty_form_fields_use_defaults(test_client, recognition):
+    # Swagger UI шлёт очищенные поля пустыми строками
+    response = post(test_client, model="", language="", channel_labels="")
+    assert response.status_code == 200
+    assert recognition.call_args.kwargs["channel_labels"] == ["operator", "client"]
+
+
 def test_default_format_is_verbose_json(test_client, recognition):
     response = post(test_client)
     assert response.status_code == 200
@@ -80,7 +95,6 @@ def test_default_format_is_verbose_json(test_client, recognition):
     "fields,status,code,param",
     [
         ({"model": "other"}, 404, "model_not_found", "model"),
-        ({"model": ""}, 400, "missing_required_parameter", "model"),
         (
             {"response_format": "srt"},
             400,

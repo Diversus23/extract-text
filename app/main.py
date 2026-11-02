@@ -934,7 +934,19 @@ async def compatibility_http_error(request, error):
 OPTIONAL_FILE = File(None)
 OPTIONAL_FORM = Form(None)
 RESPONSE_FORMAT_FORM = Form("verbose_json")
-TIMESTAMPS_FORM = Form(None, alias="timestamp_granularities[]")
+MODEL_FORM = Form(settings.TRANSCRIPTION_MODEL)
+LANGUAGE_FORM = Form("ru", description="Принимается для совместимости, язык всегда ru")
+OPENAI_CHANNEL_LABELS_FORM = Form(
+    "operator,client",
+    description="Метки каналов стерео через запятую: первая для канала 0, вторая "
+    "для канала 1",
+)
+TIMESTAMPS_FORM = Form(
+    None,
+    alias="timestamp_granularities[]",
+    description="Принимается для совместимости и игнорируется: сегменты с "
+    "тайм-кодами возвращаются всегда, пословных меток нет",
+)
 
 
 @openai_router.get("/models")
@@ -947,13 +959,13 @@ async def openai_models():
 async def openai_transcriptions(
     request: Request,
     file: Optional[UploadFile] = OPTIONAL_FILE,
-    model: Optional[str] = OPTIONAL_FORM,
+    model: Optional[str] = MODEL_FORM,
     response_format: str = RESPONSE_FORMAT_FORM,
-    language: Optional[str] = OPTIONAL_FORM,
+    language: Optional[str] = LANGUAGE_FORM,
     prompt: Optional[str] = OPTIONAL_FORM,
     temperature: Optional[str] = OPTIONAL_FORM,
     timestamp_granularities: Optional[list[str]] = TIMESTAMPS_FORM,
-    channel_labels: Optional[str] = CHANNEL_LABELS_FORM,
+    channel_labels: Optional[str] = OPENAI_CHANNEL_LABELS_FORM,
     external_id: Optional[str] = EXTERNAL_ID_FORM,
 ):
     """Accept multipart audio and ignore optional tuning fields."""
