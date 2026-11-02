@@ -21,7 +21,7 @@ openpyxl==3.1.5
 xlrd==2.0.2
 
 # OCR и изображения
-Pillow==12.3.0
+Pillow==13.0.0
 pytesseract==0.3.13
 
 # HTML и Markdown
