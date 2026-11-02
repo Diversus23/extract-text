@@ -172,6 +172,14 @@ curl -X POST \
   http://localhost:7555/v1/extract/file
 ```
 
+Необязательное поле формы `model` (с 1.15.0) принимает идентификатор модели извлечения из `GET /v1/models` (`softonit/extracttext`). Пустое значение и отсутствие поля равнозначны, ответ при этом прежний. Любое другое значение отклоняется до чтения файла: `404` и тело `{"status": "error", "filename": "...", "message": "..."}`.
+```bash
+curl -X POST \
+  -F "file=@document.pdf" \
+  -F "model=softonit/extracttext" \
+  http://localhost:7555/v1/extract/file
+```
+
 #### `POST /v1/extract/base64` - Извлечение текста из base64-файла
 ```bash
 curl -X POST \
@@ -1204,13 +1212,22 @@ curl http://localhost:7555/v1/supported-formats
 curl -X POST -F "file=@tests/test.txt" http://localhost:7555/v1/extract/file
 ```
 
-## OpenAI-совместимый API (1.14.0)
+## OpenAI-совместимый API (1.15.0)
 
 Для клиентов OpenAI SDK доступны `GET /v1/models` и `POST /v1/audio/transcriptions`. На всех маршрутах `/v1` ключ можно передать через `Authorization: Bearer <ключ>` или `X-API-Key`; при одновременной передаче приоритет у непустого `X-API-Key`. При `AUTH_MODE=none` ключ не требуется. Старый `/v1/transcribe` сохраняет прежний контракт.
 
-`GET /v1/models` возвращает список с единственной моделью из `TRANSCRIPTION_MODEL` (по умолчанию `gigaam-v3-e2e-rnnt`), `object=model`, `created` (метка запуска процесса), `owned_by=extract-text` и `architecture.input_modalities=[audio]`, `output_modalities=[text]`. Если локальная транскрибация выключена и upstream не задан, список пуст. Это каталог настроенных моделей, а готовность проверяется через `/health?check=transcription`.
+`GET /v1/models` возвращает каталог из двух моделей в фиксированном порядке (у каждой `object=model`, `name`, `description`, `created` — метка запуска процесса, `owned_by=extract-text`):
 
-Транскрибация принимает multipart: обязателен только `file`; `model` по умолчанию `gigaam-v3-e2e-rnnt`, `language=ru`, `channel_labels=operator,client` (первая метка для канала 0, вторая для канала 1); `response_format=verbose_json` по умолчанию (сегменты с говорящими и каналами), также `json` (только `text`, без сегментов) и `text`. Поля `language`, `prompt`, `temperature`, `timestamp_granularities[]` принимаются для совместимости, но не меняют распознавание; язык результата — `ru`. Расширения `channel_labels` и `external_id` сохраняют прежние ограничения (256 символов суммарно/64 на метку и 128 символов соответственно). Модель должна точно совпадать с каталогом.
+| `id` | `architecture` | Где используется |
+|------|----------------|------------------|
+| `softonit/extracttext` | вход `file`, выход `text` | `POST /v1/extract/file` (поле `model`); публикуется всегда |
+| `softonit/gigaam-v3-e2e-rnnt` | вход `audio`, выход `text` | `POST /v1/audio/transcriptions`; публикуется, если транскрибация включена или задан `TRANSCRIPTION_UPSTREAM_URL` |
+
+Если локальная транскрибация выключена и upstream не задан, в списке остаётся только `softonit/extracttext`. Это каталог, а готовность транскрибации проверяется через `/health?check=transcription`.
+
+Политика именования: все публичные идентификаторы начинаются с префикса `softonit/`, а идентификатор модели извлечения содержит `extract` (по этой подстроке клиенты, например 1С, отличают её от моделей для чата). Префикс добавляется в коде: `TRANSCRIPTION_MODEL` по-прежнему задаёт имя каталога весов (по умолчанию `gigaam-v3-e2e-rnnt`) и пишется без префикса. Прежний идентификатор транскрибации `gigaam-v3-e2e-rnnt` по-прежнему принимается, но в каталоге больше не публикуется.
+
+Транскрибация принимает multipart: обязателен только `file`; `model` по умолчанию `softonit/gigaam-v3-e2e-rnnt` (принимается и прежний `gigaam-v3-e2e-rnnt`), `language=ru`, `channel_labels=operator,client` (первая метка для канала 0, вторая для канала 1); `response_format=verbose_json` по умолчанию (сегменты с говорящими и каналами), также `json` (только `text`, без сегментов) и `text`. Поля `language`, `prompt`, `temperature`, `timestamp_granularities[]` принимаются для совместимости, но не меняют распознавание; язык результата — `ru`. Расширения `channel_labels` и `external_id` сохраняют прежние ограничения (256 символов суммарно/64 на метку и 128 символов соответственно). Модель должна совпадать с публичным идентификатором транскрибации или с прежним; `softonit/extracttext` для аудио не подходит (404 `model_not_found`). В `verbose_json` поле `model` содержит публичный идентификатор `softonit/gigaam-v3-e2e-rnnt` (старый `/v1/transcribe` по-прежнему возвращает имя из `TRANSCRIPTION_MODEL`).
 
 - `json`: `text`, `usage={type: duration, seconds: N}`, `text_status`.
 - `verbose_json`: дополнительно `task=transcribe`, `language`, `duration`, `segments` с последовательным `id`, временем, текстом, `speaker` и `channel`; `channels`, `detected_format`, `model`, `external_id`.
@@ -1219,7 +1236,7 @@ curl -X POST -F "file=@tests/test.txt" http://localhost:7555/v1/extract/file
 
 Ошибки новых маршрутов имеют форму `{"error":{"message":"...","type":"invalid_request_error","param":null,"code":"..."}}`. Для 5xx и 429 тип — `server_error`. Неизвестная модель: 404 `model_not_found`; нет `file`/`model`: 400 `missing_required_parameter`; `srt`/`vtt`: 400 `unsupported_response_format`; неверный ключ: 401 `invalid_api_key` с `WWW-Authenticate: Bearer`; слишком большой файл: 413 `audio_too_large`; неподдерживаемое аудио: 415 `unsupported_audio_format`; занятость: 503 `service_busy` с `Retry-After`; выключенная транскрибация: 503 `transcription_disabled`; таймаут: 504 `request_timeout`.
 
-Проверка доступа, обязательного `Content-Length`, лимита тела и резервирование слота выполняются до разбора multipart. Лимиты аудио, отмена, удержание слота до завершения рабочего потока и ограниченная очередь общие с `/v1/transcribe`. Сервис документов пересылает новый путь в `api-audio` без изменения пути и Bearer-заголовка; новые переменные окружения не нужны. Значение `TRANSCRIPTION_MODEL` у обоих сервисов должно совпадать.
+Проверка доступа, обязательного `Content-Length`, лимита тела и резервирование слота выполняются до разбора multipart. Лимиты аудио, отмена, удержание слота до завершения рабочего потока и ограниченная очередь общие с `/v1/transcribe`. Сервис документов пересылает новый путь в `api-audio` без изменения пути и Bearer-заголовка; новые переменные окружения не нужны. Значение `TRANSCRIPTION_MODEL` у обоих сервисов должно совпадать, а контейнеры `api` и `api-audio` обновляются одним релизом: идентификатор `model` пересылается в `api-audio` без изменений и проверяется там.
 
 ```python
 import os
@@ -1231,7 +1248,7 @@ client = OpenAI(
     timeout=960,
     max_retries=0,
 )
-model = client.models.list().data[0].id
+model = "softonit/gigaam-v3-e2e-rnnt"  # id из client.models.list()
 with open("call.wav", "rb") as audio:
     result = client.audio.transcriptions.create(
         model=model, file=audio, response_format="verbose_json"
@@ -1243,7 +1260,7 @@ print(result.text)
 curl http://localhost:7555/v1/models -H "Authorization: Bearer $EXTRACT_TEXT_API_KEY"
 curl http://localhost:7555/v1/audio/transcriptions \
   -H "Authorization: Bearer $EXTRACT_TEXT_API_KEY" \
-  -F file=@call.wav -F model=gigaam-v3-e2e-rnnt -F response_format=verbose_json
+  -F file=@call.wav -F model=softonit/gigaam-v3-e2e-rnnt -F response_format=verbose_json
 ```
 
 ## Контрибуция
@@ -1267,5 +1284,5 @@ curl http://localhost:7555/v1/audio/transcriptions \
 
 ---
 
-**Версия**: 1.14.2
+**Версия**: 1.15.0
 **Разработчик**: Барилко Виталий

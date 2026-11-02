@@ -17,6 +17,13 @@ BEARER_SECURITY = Security(bearer_scheme)
 STARTED_AT = int(time.time())
 OPENAI_PATHS = {"/v1/models", "/v1/audio/transcriptions"}
 
+# Публичные идентификаторы моделей сервиса. Префикс принадлежит каталогу, а не
+# конфигурации: TRANSCRIPTION_MODEL остаётся именем каталога весов (model_dir).
+# Идентификатор модели извлечения обязан содержать «extract»: по этой подстроке
+# клиент (1С) относит модель к извлечению текста, а не к чату.
+PUBLIC_MODEL_PREFIX = "softonit/"
+EXTRACTION_MODEL_ID = PUBLIC_MODEL_PREFIX + "extracttext"
+
 
 def is_openai_path(path, root_path=""):
     """Identify compatibility routes without matching unrelated endpoints."""
@@ -94,8 +101,21 @@ async def openai_credentials(
         ) from error
 
 
+def transcription_model_id():
+    """Public identifier of the speech model: prefix + weights directory name."""
+    name = settings.TRANSCRIPTION_MODEL
+    if name.startswith(PUBLIC_MODEL_PREFIX):
+        return name
+    return PUBLIC_MODEL_PREFIX + name
+
+
+def is_transcription_model(model):
+    """Accept the public identifier and the legacy unprefixed one."""
+    return model in (transcription_model_id(), settings.TRANSCRIPTION_MODEL)
+
+
 def validate_model(model):
-    """Reject missing or unknown model identifiers."""
+    """Reject missing or unknown transcription model identifiers."""
     if not model:
         raise OpenAIAPIError(
             400,
@@ -103,9 +123,21 @@ def validate_model(model):
             code="missing_required_parameter",
             param="model",
         )
-    if model != settings.TRANSCRIPTION_MODEL:
+    if is_transcription_model(model):
+        return
+    message = (
+        "Not a transcription model"
+        if model == EXTRACTION_MODEL_ID
+        else "Unknown transcription model"
+    )
+    raise OpenAIAPIError(404, message, code="model_not_found", param="model")
+
+
+def validate_extraction_model(model):
+    """Allow an omitted model or the extraction model; reject anything else."""
+    if model and model != EXTRACTION_MODEL_ID:
         raise OpenAIAPIError(
-            404, "Unknown transcription model", code="model_not_found", param="model"
+            404, "Unknown extraction model", code="model_not_found", param="model"
         )
 
 
@@ -121,22 +153,40 @@ def validate_response_format(response_format):
 
 
 def models_payload():
-    """Advertise the configured model without loading its weights."""
+    """Advertise the public models without loading any weights."""
     available = settings.ENABLE_TRANSCRIPTION or settings.TRANSCRIPTION_UPSTREAM_URL
     data = [
         {
-            "id": settings.TRANSCRIPTION_MODEL,
+            "id": EXTRACTION_MODEL_ID,
             "object": "model",
             "created": STARTED_AT,
             "owned_by": "extract-text",
-            "name": settings.TRANSCRIPTION_MODEL,
+            "name": "softonit.ru: извлечение текста",
+            "description": "Извлечение текста из документов, изображений и "
+            "архивов (POST /v1/extract/file)",
             "architecture": {
-                "input_modalities": ["audio"],
+                "input_modalities": ["file"],
                 "output_modalities": ["text"],
             },
         }
     ]
-    return {"object": "list", "data": data if available else []}
+    if available:
+        data.append(
+            {
+                "id": transcription_model_id(),
+                "object": "model",
+                "created": STARTED_AT,
+                "owned_by": "extract-text",
+                "name": "softonit.ru: транскрибация речи",
+                "description": "Распознавание русской речи GigaAM v3 "
+                "(POST /v1/audio/transcriptions)",
+                "architecture": {
+                    "input_modalities": ["audio"],
+                    "output_modalities": ["text"],
+                },
+            }
+        )
+    return {"object": "list", "data": data}
 
 
 def transcription_payload(result, response_format, filename, external_id):
@@ -160,6 +210,7 @@ def transcription_payload(result, response_format, filename, external_id):
         }
     body.pop("status")
     body.pop("filename")
+    body["model"] = transcription_model_id()
     body["task"] = "transcribe"
     body["usage"] = usage
     body["segments"] = [

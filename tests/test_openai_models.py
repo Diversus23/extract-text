@@ -1,15 +1,14 @@
-﻿"""Model discovery advertises the configured speech model without inference."""
+﻿"""Model discovery advertises the public models without inference."""
 
 import pytest
 
 from app.config import settings
+from app.openai_compat import EXTRACTION_MODEL_ID, PUBLIC_MODEL_PREFIX
+
+TRANSCRIPTION_ID = "softonit/gigaam-v3-e2e-rnnt"
 
 
-@pytest.mark.parametrize(
-    "enabled,upstream,count",
-    [(True, "", 1), (False, "http://audio", 1), (False, "", 0)],
-)
-def test_models(test_client, monkeypatch, enabled, upstream, count):
+def get_models(test_client, monkeypatch, enabled, upstream):
     monkeypatch.setattr(settings, "AUTH_MODE", "none")
     monkeypatch.setattr(settings, "ENABLE_TRANSCRIPTION", enabled)
     monkeypatch.setattr(settings, "TRANSCRIPTION_UPSTREAM_URL", upstream)
@@ -17,18 +16,51 @@ def test_models(test_client, monkeypatch, enabled, upstream, count):
     assert response.status_code == 200
     body = response.json()
     assert body["object"] == "list"
-    assert len(body["data"]) == count
-    if count:
-        model = body["data"][0]
-        assert model["id"] == settings.TRANSCRIPTION_MODEL
-        assert model["architecture"] == {
-            "input_modalities": ["audio"],
-            "output_modalities": ["text"],
-        }
+    return body["data"]
+
+
+@pytest.mark.parametrize(
+    "enabled,upstream",
+    [(True, ""), (False, "http://audio")],
+)
+def test_models_with_transcription(test_client, monkeypatch, enabled, upstream):
+    data = get_models(test_client, monkeypatch, enabled, upstream)
+    assert [model["id"] for model in data] == [EXTRACTION_MODEL_ID, TRANSCRIPTION_ID]
+    extraction, transcription = data
+    assert extraction["architecture"] == {
+        "input_modalities": ["file"],
+        "output_modalities": ["text"],
+    }
+    assert transcription["architecture"] == {
+        "input_modalities": ["audio"],
+        "output_modalities": ["text"],
+    }
+    for model in data:
+        assert model["object"] == "model"
+        assert model["owned_by"] == "extract-text"
         assert isinstance(model["created"], int)
         assert model["created"] > 0
-        assert model["owned_by"] == "extract-text"
+        assert model["name"]
+        assert model["description"]
+
+
+def test_models_without_transcription_keep_extraction(test_client, monkeypatch):
+    data = get_models(test_client, monkeypatch, False, "")
+    assert [model["id"] for model in data] == [EXTRACTION_MODEL_ID]
+
+
+def test_model_ids_contract():
+    # 1С относит модель к извлечению текста по подстроке «extract» в идентификаторе
+    assert EXTRACTION_MODEL_ID == "softonit/extracttext"
+    assert EXTRACTION_MODEL_ID.startswith(PUBLIC_MODEL_PREFIX)
+    assert "extract" in EXTRACTION_MODEL_ID
+
+
+def test_prefix_is_not_doubled(test_client, monkeypatch):
+    monkeypatch.setattr(settings, "TRANSCRIPTION_MODEL", TRANSCRIPTION_ID)
+    data = get_models(test_client, monkeypatch, True, "")
+    assert data[1]["id"] == TRANSCRIPTION_ID
 
 
 def test_version(test_client):
-    assert test_client.get("/").json()["version"] == "1.14.2"
+    assert test_client.get("/").json()["version"] == "1.15.0"

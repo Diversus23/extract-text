@@ -201,6 +201,8 @@ ENABLE_TRANSCRIPTION=true
 # TRANSCRIPTION_UPSTREAM_URL=http://api-audio:7556
 
 # Модель распознавания (onnx-asr). GigaAM v3 e2e RNN-T: русский язык, с пунктуацией.
+# Это имя каталога весов в MODELS_DIR, БЕЗ префикса: публичный id в /v1/models
+# получается добавлением "softonit/" в коде (softonit/gigaam-v3-e2e-rnnt).
 TRANSCRIPTION_MODEL=gigaam-v3-e2e-rnnt
 
 # Вариант весов: пусто = fp32 (лучшее качество, ~0.9 GB), int8 = ~230 MB энкодера.

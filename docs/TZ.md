@@ -1,7 +1,7 @@
 # Техническое задание: API для извлечения текста для RAG
 
-**Версия:** 1.14.2
-**Дата:** 01.11.2026
+**Версия:** 1.15.0
+**Дата:** 02.11.2026
 
 ---
 
@@ -276,7 +276,7 @@
 
 **4.5. Эндпоинт `POST /v1/extract/file` — Извлечение текста**
 * **Метод:** `POST`.
-* **Тело запроса:** `multipart/form-data` с полем `file`.
+* **Тело запроса:** `multipart/form-data` с полем `file` и необязательным полем `model` (с 1.15.0). `model` принимает идентификатор модели извлечения `softonit/extracttext` из `GET /v1/models`; пустое значение и отсутствие поля равнозначны, ответ при этом не меняется. Проверка выполняется до чтения файла и не затрагивает контроль `Content-Length` и размера файла.
 * **Успешный ответ (`HTTP 200 OK`):**
 ```json
 {
@@ -321,6 +321,7 @@
 ```
 * **Ответы с ошибкой:**
     * **`400 Bad Request`**: Отсутствует заголовок Content-Length или некорректный запрос.
+    * **`404 Not Found`** (с 1.15.0): в поле `model` передан идентификатор, отличный от `softonit/extracttext`. Тело в формате маршрута: `{"status": "error", "filename": "...", "message": "..."}`; файл не читается и не обрабатывается.
     * **`413 Payload Too Large`**: Файл превышает максимальный размер.
     * **`415 Unsupported Media Type`**: Формат файла не поддерживается, обнаружен архив, или расширение файла не соответствует его содержимому.
     * **`422 Unprocessable Entity`**: Файл поврежден, пуст или защищен паролем.
@@ -1171,7 +1172,9 @@ safety-report.json
 
 ## Дополнение 1.14.0: OpenAI-совместимый API
 
-`GET /v1/models` возвращает `object=list` и `data` с моделью `TRANSCRIPTION_MODEL`, полями `id`, `name`, `object=model`, `created` (метка запуска процесса), `owned_by=extract-text`, `architecture={input_modalities:[audio],output_modalities:[text]}`. При выключенной локальной транскрибации без upstream `data` пуст; готовность отдельно проверяется `/health?check=transcription`.
+Дополнение 1.15.0 ниже меняет каталог моделей и идентификаторы; остальной контракт 1.14.0 сохраняется.
+
+`GET /v1/models` возвращает `object=list` и `data` из двух моделей в фиксированном порядке: `softonit/extracttext` (всегда; `architecture={input_modalities:[file],output_modalities:[text]}`) и `softonit/gigaam-v3-e2e-rnnt` (транскрибация; `architecture={input_modalities:[audio],output_modalities:[text]}`). У каждой есть `id`, `name`, `description`, `object=model`, `created` (метка запуска процесса), `owned_by=extract-text`. При выключенной локальной транскрибации без upstream `data` содержит только `softonit/extracttext`; готовность транскрибации отдельно проверяется `/health?check=transcription`.
 
 `POST /v1/audio/transcriptions` принимает multipart `file` (обязателен), `model` (по умолчанию `TRANSCRIPTION_MODEL`), `response_format=verbose_json|json|text` (по умолчанию `verbose_json`), `channel_labels` (по умолчанию `operator,client`), `external_id`. Поля `language`, `prompt`, `temperature`, `timestamp_granularities[]` принимаются и игнорируются. Ответ `json`: `text`, `usage={type:duration,seconds:N}`, `text_status`; `verbose_json` добавляет `task=transcribe`, `language=ru`, `duration`, `segments[{id,start,end,text,speaker,channel}]`, `channels`, `detected_format`, `model`, `external_id`. Ответ `text` — `text/plain`. Статусы текста `ok`, `partial`, `unrecognized`, `no_speech` совпадают со старым API.
 
@@ -1179,4 +1182,12 @@ safety-report.json
 
 Все `/v1` поддерживают `X-API-Key` и `Authorization: Bearer` с приоритетом непустого `X-API-Key`, общим constant-time сравнением и прежним `AUTH_MODE`. Старые маршруты сохраняют прежние тела ошибок и `WWW-Authenticate: ApiKey`; новые используют `Bearer`. Входной middleware обрабатывает оба пути транскрибации до multipart: аутентификация, Content-Length, потоковый лимит тела, слот очереди. Прокси пересылает исходный путь и Bearer в `api-audio`; ошибки прокси оформляются по маршруту. Runner, таймаут и отмена общие, слот освобождается после фактического завершения рабочего потока. Новых env-параметров нет; `TRANSCRIPTION_MODEL` должен совпадать у api и api-audio.
 
-Пример OpenAI SDK и curl — в разделе «OpenAI-совместимый API (1.14.0)» README.md. Старый `/v1/transcribe` и распознавание по содержимому сохраняются без изменения контракта.
+Пример OpenAI SDK и curl — в разделе «OpenAI-совместимый API (1.15.0)» README.md. Старый `/v1/transcribe` и распознавание по содержимому сохраняются без изменения контракта.
+
+## Дополнение 1.15.0: публичные идентификаторы моделей
+
+* **Политика именования.** Публичные идентификаторы начинаются с префикса `softonit/`: `softonit/extracttext` (извлечение текста) и `softonit/<TRANSCRIPTION_MODEL>` (по умолчанию `softonit/gigaam-v3-e2e-rnnt`). Идентификатор модели извлечения обязан содержать подстроку `extract`: по ней клиент (1С) относит модель к извлечению текста, а не к чату. Префикс добавляется в коде (`app/openai_compat.py`); `TRANSCRIPTION_MODEL` остаётся именем каталога весов без префикса (если значение уже начинается с `softonit/`, префикс не удваивается). Новых переменных окружения нет.
+* **Приём идентификаторов.** `POST /v1/audio/transcriptions` принимает и публичный идентификатор транскрибации, и прежний (`gigaam-v3-e2e-rnnt`); публикуется только префиксный. `softonit/extracttext` и любое неизвестное значение дают 404 `model_not_found` (для модели извлечения сообщение «Not a transcription model»). Пустое `model` или его отсутствие означает значение по умолчанию. В `verbose_json` поле `model` равно публичному идентификатору; ответы `/v1/transcribe` не изменены.
+* **Каталог.** Порядок записей `[softonit/extracttext, softonit/gigaam-v3-e2e-rnnt]`; модель извлечения публикуется всегда, транскрибация — при `ENABLE_TRANSCRIPTION` или заданном `TRANSCRIPTION_UPSTREAM_URL`.
+* **`POST /v1/extract/file`.** Необязательное поле формы `model`: пусто или `softonit/extracttext` — ответ прежний; иное значение — `404` в формате маршрута `{status, filename, message}` до чтения файла.
+* **Развёртывание.** Контейнеры `api` и `api-audio` обновляются одним релизом: `model` пересылается в `api-audio` без изменений и проверяется там. На время рестарта необновлённый `api-audio` отвечает 404 `model_not_found` на префиксный идентификатор; клиенты со старым идентификатором работают на обеих версиях.

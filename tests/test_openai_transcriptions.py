@@ -8,6 +8,7 @@ from app.config import settings
 from app.transcription import Segment, TranscriptionError, TranscriptionResult
 
 PATH = "/v1/audio/transcriptions"
+PUBLIC_ID = "softonit/gigaam-v3-e2e-rnnt"
 
 
 def post(client, **data):
@@ -71,9 +72,34 @@ def test_formats(test_client, recognition, response_format):
 def test_form_defaults(test_client, recognition):
     response = test_client.post(PATH, files={"file": ("call.wav", b"audio")})
     assert response.status_code == 200
-    assert response.json()["model"] == settings.TRANSCRIPTION_MODEL
+    assert response.json()["model"] == PUBLIC_ID
     assert response.json()["language"] == "ru"
     assert recognition.call_args.kwargs["channel_labels"] == ["operator", "client"]
+
+
+def test_legacy_and_public_ids_give_same_result(test_client, recognition):
+    legacy = post(test_client, model="gigaam-v3-e2e-rnnt")
+    public = post(test_client, model=PUBLIC_ID)
+    assert legacy.status_code == public.status_code == 200
+    assert legacy.json() == public.json()
+    assert public.json()["model"] == PUBLIC_ID
+    assert recognition.call_count == 2
+
+
+def test_public_id_in_json_and_text_formats(test_client, recognition):
+    for response_format in ("json", "text"):
+        response = post(test_client, model=PUBLIC_ID, response_format=response_format)
+        assert response.status_code == 200
+
+
+def test_extraction_model_is_not_a_transcription_model(test_client, recognition):
+    response = post(test_client, model="softonit/extracttext")
+    assert response.status_code == 404
+    error = response.json()["error"]
+    assert error["code"] == "model_not_found"
+    assert error["param"] == "model"
+    assert "not a transcription model" in error["message"].lower()
+    recognition.assert_not_called()
 
 
 def test_empty_form_fields_use_defaults(test_client, recognition):
@@ -95,6 +121,8 @@ def test_default_format_is_verbose_json(test_client, recognition):
     "fields,status,code,param",
     [
         ({"model": "other"}, 404, "model_not_found", "model"),
+        ({"model": "softonit/other"}, 404, "model_not_found", "model"),
+        ({"model": "softonit/extracttext"}, 404, "model_not_found", "model"),
         (
             {"response_format": "srt"},
             400,

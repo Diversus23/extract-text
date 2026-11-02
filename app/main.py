@@ -45,7 +45,9 @@ from app.openai_compat import (
     openai_credentials,
     openai_error_handler,
     openai_error_response,
+    transcription_model_id,
     transcription_payload,
+    validate_extraction_model,
     validate_model,
     validate_response_format,
 )
@@ -74,6 +76,11 @@ logger = logging.getLogger(__name__)
 
 # Константы для FastAPI аргументов
 FILE_UPLOAD = File(...)
+EXTRACT_MODEL_FORM = Form(
+    None,
+    description="Модель извлечения из GET /v1/models (softonit/extracttext). "
+    "Необязательна: пустое значение и отсутствие поля равнозначны",
+)
 CHANNEL_LABELS_FORM = Form(
     None,
     description="Метки каналов через запятую, например: client,operator",
@@ -329,9 +336,26 @@ async def supported_formats() -> Dict[str, list]:
 
 
 @v1_router.post("/extract/file")
-async def extract_text(file: UploadFile = FILE_UPLOAD):
+async def extract_text(
+    file: UploadFile = FILE_UPLOAD, model: Optional[str] = EXTRACT_MODEL_FORM
+):
     """Извлечение текста из файла."""
     try:
+        # Чужая модель отклоняется до чтения файла; формат ошибки маршрута прежний
+        try:
+            validate_extraction_model(model)
+        except OpenAIAPIError as error:
+            shown = model[:64]
+            logger.warning(f"Неизвестная модель извлечения: {shown!r}")
+            return JSONResponse(
+                status_code=error.status,
+                content={
+                    "status": "error",
+                    "filename": file.filename or "unknown_file",
+                    "message": f"Неизвестная модель извлечения: {shown}. "
+                    "Допустима только softonit/extracttext или пустое значение.",
+                },
+            )
         # Санитизация имени файла
         original_filename = file.filename or "unknown_file"
         safe_filename_for_processing = sanitize_filename(original_filename)
@@ -934,7 +958,7 @@ async def compatibility_http_error(request, error):
 OPTIONAL_FILE = File(None)
 OPTIONAL_FORM = Form(None)
 RESPONSE_FORMAT_FORM = Form("verbose_json")
-MODEL_FORM = Form(settings.TRANSCRIPTION_MODEL)
+MODEL_FORM = Form(transcription_model_id())
 LANGUAGE_FORM = Form("ru", description="Принимается для совместимости, язык всегда ru")
 OPENAI_CHANNEL_LABELS_FORM = Form(
     "operator,client",

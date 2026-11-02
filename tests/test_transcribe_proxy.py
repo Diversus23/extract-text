@@ -468,6 +468,34 @@ async def test_openai_path_and_bearer_forwarded(proxy_mode, monkeypatch):
     assert b'name="response_format"' in seen["body"]
 
 
+async def test_openai_prefixed_model_forwarded_verbatim(proxy_mode, monkeypatch):
+    seen = {}
+
+    async def handler(request):
+        seen["body"] = await request.aread()
+        return httpx.Response(200, json={"text": "hello"})
+
+    use_upstream(monkeypatch, handler)
+    async with gateway() as client:
+        response = await client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", b"audio")},
+            data={"model": "softonit/gigaam-v3-e2e-rnnt"},
+        )
+    assert response.json() == {"text": "hello"}
+    assert b'name="model"\r\n\r\nsoftonit/gigaam-v3-e2e-rnnt\r\n' in seen["body"]
+
+
+async def test_models_in_proxy_mode_list_both_models(proxy_mode, monkeypatch):
+    forbid_upstream(monkeypatch)
+    async with gateway() as client:
+        response = await client.get("/v1/models")
+    assert [model["id"] for model in response.json()["data"]] == [
+        "softonit/extracttext",
+        "softonit/gigaam-v3-e2e-rnnt",
+    ]
+
+
 @pytest.mark.parametrize(
     "exception,status,code",
     [
