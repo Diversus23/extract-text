@@ -47,6 +47,7 @@ from app.chat_completions import (
 )
 from app.chat_ingress import ChatBodyGuardMiddleware
 from app.config import settings
+from app.document_ingress import DocumentIngressMiddleware
 from app.extractors import TextExtractor
 from app.openai_compat import (
     OpenAIAPIError,
@@ -61,6 +62,7 @@ from app.openai_compat import (
     validate_model,
     validate_response_format,
 )
+from app.temp_workspace import TempWorkspace
 from app.transcription import (
     TranscriptionCancelled,
     TranscriptionError,
@@ -72,8 +74,6 @@ from app.transcription import (
 from app.transcription_ingress import TranscriptionIngressMiddleware
 from app.transcription_proxy import probe_readiness, proxy_enabled
 from app.utils import (
-    cleanup_recent_temp_files,
-    cleanup_temp_files,
     get_file_extension,
     sanitize_filename,
     setup_logging,
@@ -171,8 +171,8 @@ class ExtractionOptions(BaseModel):
         False,
         description=(
             "Следовать ли редиректам. По умолчанию False (защита от SSRF "
-            "через цепочку редиректов). При True каждый final_url повторно "
-            "проверяется через _is_safe_url."
+            "через цепочку редиректов). При True каждый переход проверяется "
+            "до отправки запроса."
         ),
     )
     max_redirects: Optional[int] = Field(
@@ -213,39 +213,51 @@ async def lifespan(app: FastAPI):
         )
     logger.info(f"Режим аутентификации: {settings.AUTH_MODE}")
 
-    # Очистка временных файлов при старте
-    cleanup_temp_files()
+    workspace = TempWorkspace().start()
 
-    # Прогрев модели: ошибка конфигурации (нет весов) видна сразу при старте, а не на
-    # первом запросе. Сбой не роняет API: документы продолжают обрабатываться.
-    if settings.ENABLE_TRANSCRIPTION:
+    async def collect_abandoned():
+        while True:
+            await asyncio.sleep(60)
+            try:
+                await run_in_threadpool(workspace.collect)
+            except OSError:
+                logger.warning("Ошибка уборки временных каталогов", exc_info=True)
+
+    collector = asyncio.create_task(collect_abandoned())
+    try:
+        # Прогрев модели: ошибка конфигурации (нет весов) видна сразу при старте, а не на
+        # первом запросе. Сбой не роняет API: документы продолжают обрабатываться.
+        if settings.ENABLE_TRANSCRIPTION:
+            try:
+                await run_in_threadpool(get_transcriber().warm_up)
+                logger.info("Модель распознавания речи загружена")
+            except TranscriptionError as error:
+                logger.error(
+                    f"Модель распознавания речи недоступна: {error.message} "
+                    "Эндпоинт /v1/transcribe будет отвечать 503."
+                )
+
+        yield
+    finally:
+        collector.cancel()
         try:
-            await run_in_threadpool(get_transcriber().warm_up)
-            logger.info("Модель распознавания речи загружена")
-        except TranscriptionError as error:
-            logger.error(
-                f"Модель распознавания речи недоступна: {error.message} "
-                "Эндпоинт /v1/transcribe будет отвечать 503."
-            )
+            await collector
+        except asyncio.CancelledError:
+            pass
+        try:
 
-    yield
-
-    # Graceful shutdown: корректно закрываем пул потоков
-    logger.info("Завершение работы Text Extraction API")
-    await run_in_threadpool(get_transcriber().close)
-    try:
-        if hasattr(text_extractor, "_thread_pool"):
-            logger.info("Закрытие пула потоков...")
-            text_extractor._thread_pool.shutdown(wait=True)
-            logger.info("Пул потоков успешно закрыт")
-    except Exception as e:
-        logger.warning(f"Ошибка при закрытии пула потоков: {str(e)}")
-
-    # Финальная очистка временных файлов
-    try:
-        cleanup_temp_files()
-    except Exception as e:
-        logger.warning(f"Ошибка при финальной очистке: {str(e)}")
+            # Graceful shutdown: корректно закрываем пул потоков
+            logger.info("Завершение работы Text Extraction API")
+            await run_in_threadpool(get_transcriber().close)
+            try:
+                if hasattr(text_extractor, "_thread_pool"):
+                    logger.info("Закрытие пула потоков...")
+                    text_extractor._thread_pool.shutdown(wait=True)
+                    logger.info("Пул потоков успешно закрыт")
+            except Exception as e:
+                logger.warning(f"Ошибка при закрытии пула потоков: {str(e)}")
+        finally:
+            workspace.close()
 
 
 # Создание FastAPI приложения
@@ -263,6 +275,7 @@ app = FastAPI(
 )
 app.add_middleware(TranscriptionIngressMiddleware)
 app.add_middleware(ChatBodyGuardMiddleware)
+app.add_middleware(DocumentIngressMiddleware)
 
 # Добавление CORS middleware. allow_credentials=True не совместим с allow_origins=["*"]
 # по спецификации CORS — браузер просто проигнорирует ответ. Поэтому при wildcard
@@ -391,14 +404,6 @@ async def _extract_document(content: bytes, original_filename: str) -> list:
                 504,
                 f"Обработка файла превысила установленный лимит времени ({settings.PROCESSING_TIMEOUT_SECONDS} секунд).",
             )
-        finally:
-            # Дополнительная очистка временных файлов после обработки
-            try:
-                cleanup_recent_temp_files()
-            except Exception as cleanup_error:
-                logger.warning(
-                    f"Ошибка при очистке временных файлов: {str(cleanup_error)}"
-                )
 
         process_time = time.time() - start_time
 
@@ -604,14 +609,6 @@ async def extract_text_base64(request: Base64FileRequest):
                     "message": f"Обработка файла превысила установленный лимит времени ({settings.PROCESSING_TIMEOUT_SECONDS} секунд).",
                 },
             )
-        finally:
-            # Дополнительная очистка временных файлов после обработки base64-файла
-            try:
-                cleanup_recent_temp_files()
-            except Exception as cleanup_error:
-                logger.warning(
-                    f"Ошибка при очистке временных файлов: {str(cleanup_error)}"
-                )
 
         process_time = time.time() - start_time
 

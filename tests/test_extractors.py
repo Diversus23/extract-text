@@ -504,13 +504,16 @@ class TestWebExtractionWithMockRequests:
     """Тесты веб-экстракции с мокированием HTTP-запросов."""
 
     @pytest.fixture
-    def text_extractor(self):
+    def text_extractor(self, monkeypatch):
         """Фикстура для создания экстрактора."""
         from app.extractors import TextExtractor
 
-        return TextExtractor()
+        extractor = TextExtractor()
+        monkeypatch.setattr(extractor, "_is_safe_url", lambda url: True)
+        monkeypatch.setattr("app.config.settings.ENABLE_JAVASCRIPT", False)
+        return extractor
 
-    @patch("requests.get")
+    @patch("app.web_fetch._PublicAdapter.send")
     def test_extract_from_url_with_base64_images(self, mock_get, text_extractor):
         """Тест извлечения URL с base64 изображениями."""
         # HTML с base64 изображением
@@ -525,12 +528,17 @@ class TestWebExtractionWithMockRequests:
         """
 
         # Настройка мока
-        mock_response = Mock()
-        mock_response.text = html_content
-        mock_response.content = html_content.encode("utf-8")
-        mock_response.status_code = 200
-        mock_response.headers = {"content-type": "text/html; charset=utf-8"}
-        mock_get.return_value = mock_response
+        def respond(request, **kwargs):
+            import requests
+
+            response = requests.Response()
+            response.status_code = 200
+            response.url = request.url
+            response.headers["content-type"] = "text/html; charset=utf-8"
+            response.raw = io.BytesIO(html_content.encode("utf-8"))
+            return response
+
+        mock_get.side_effect = respond
 
         # Выполнение теста
         result = text_extractor.extract_from_url("https://example.com")
@@ -541,17 +549,22 @@ class TestWebExtractionWithMockRequests:
             "Test Page with Base64 Image" in file_data["text"] for file_data in result
         )
 
-    @patch("requests.get")
+    @patch("app.web_fetch._PublicAdapter.send")
     def test_extract_from_url_requests_fallback(self, mock_get, text_extractor):
         """Тест fallback на requests при выключенном JavaScript."""
         html_content = "<html><body><h1>Simple Page</h1></body></html>"
 
-        mock_response = Mock()
-        mock_response.text = html_content
-        mock_response.content = html_content.encode("utf-8")
-        mock_response.status_code = 200
-        mock_response.headers = {"content-type": "text/html; charset=utf-8"}
-        mock_get.return_value = mock_response
+        def respond(request, **kwargs):
+            import requests
+
+            response = requests.Response()
+            response.status_code = 200
+            response.url = request.url
+            response.headers["content-type"] = "text/html; charset=utf-8"
+            response.raw = io.BytesIO(html_content.encode("utf-8"))
+            return response
+
+        mock_get.side_effect = respond
 
         # Временно отключаем JavaScript
         with patch("app.config.settings.ENABLE_JAVASCRIPT", False):

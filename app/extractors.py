@@ -66,7 +66,9 @@ except ImportError:
     Presentation = None
 
 try:
-    from bs4 import BeautifulSoup
+    from bs4 import BeautifulSoup as _BeautifulSoup
+
+    BeautifulSoup: Any = _BeautifulSoup
 except ImportError:
     BeautifulSoup = None
 
@@ -114,8 +116,10 @@ except ImportError:
 
 from fastapi import BackgroundTasks
 
+from app.browser_proxy import BrowserProxy
 from app.config import settings
 from app.utils import get_file_extension, is_archive_format, is_supported_format
+from app.web_fetch import read_limited, safe_request, web_session
 
 logger = logging.getLogger(__name__)
 
@@ -2236,15 +2240,24 @@ class TextExtractor:
         html_content = ""
         final_url = url
 
-        with sync_playwright() as p:
+        with (
+            sync_playwright() as p,
+            BrowserProxy(
+                self._is_safe_url, settings.MAX_FILE_SIZE, web_page_timeout
+            ) as proxy,
+        ):
             # Запускаем Chromium (установлен в Dockerfile)
             browser = p.chromium.launch(
                 headless=True,
+                proxy={"server": proxy.url, "bypass": "<-loopback>"},
                 args=[
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
                     "--disable-extensions",
+                    "--disable-background-networking",
+                    "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+                    "--proxy-bypass-list=<-loopback>",
                 ],
             )
 
@@ -2321,6 +2334,8 @@ class TextExtractor:
 
                 # Получаем финальный HTML
                 html_content = page.content()
+                if len(html_content.encode("utf-8")) > settings.MAX_FILE_SIZE:
+                    raise ValueError("Rendered HTML too large")
                 logger.info(f"HTML получен, размер: {len(html_content)} символов")
 
             finally:
@@ -2407,150 +2422,36 @@ class TextExtractor:
         except Exception as e:
             logger.warning(f"Ошибка при скролле для lazy loading: {str(e)}")
 
-    def _determine_content_type(
-        self,
-        url: str,
-        user_agent: Optional[str] = None,
-        extraction_options: Optional[Any] = None,
-    ) -> tuple[str, str]:
-        """
-        Определение типа контента через HEAD запрос (новое в v1.10.3).
-
-        Args:
-            url: URL для проверки
-            user_agent: Пользовательский User-Agent
-            extraction_options: Настройки извлечения
-
-        Returns:
-            tuple[str, str]: (content_type, final_url) - тип контента и финальный URL после редиректов
-        """
-        if not requests:
-            raise ValueError(
-                "requests library not available for content type determination"
-            )
-
-        # Определяем настройки с учетом переданных параметров или значений по умолчанию
-        head_timeout = (
-            extraction_options.web_page_timeout
-            if extraction_options and extraction_options.web_page_timeout is not None
-            else settings.HEAD_REQUEST_TIMEOUT
+    def _determine_content_type(self, url, user_agent=None, extraction_options=None):
+        """Проверка типа с ограниченными редиректами, без чтения тела."""
+        timeout = (
+            getattr(extraction_options, "web_page_timeout", None)
+            or settings.HEAD_REQUEST_TIMEOUT
         )
-
-        # Безопасный default — не следовать редиректам (защита от SSRF при цепочке).
-        follow_redirects = (
-            extraction_options.follow_redirects
-            if extraction_options and extraction_options.follow_redirects is not None
-            else False
-        )
-
-        # Hard cap на max_redirects — игнорируем пользовательские значения выше 10.
-        user_max_redirects = (
-            extraction_options.max_redirects
-            if extraction_options and extraction_options.max_redirects is not None
-            else 5
-        )
-        max_redirects = min(max(user_max_redirects, 0), 10)
-
-        # Установка User-Agent и заголовков
-        headers = {
-            "User-Agent": user_agent or settings.DEFAULT_USER_AGENT,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "ru,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate",
-            "Connection": "keep-alive",
-        }
-
-        # Создание сессии для следования редиректам
-        session = requests.Session()
-        session.headers.update(headers)
-
-        try:
-            logger.info(f"Выполняю HEAD запрос для определения типа контента: {url}")
-
-            response = session.head(
-                url,
-                timeout=head_timeout,
-                allow_redirects=follow_redirects,
-                stream=True,
-                verify=True,
-            )
-
-            if follow_redirects and len(response.history) > max_redirects:
-                response.close()
-                raise ValueError(
-                    f"Too many redirects: {len(response.history)} > {max_redirects}"
-                )
-
-            response.raise_for_status()
-
-            content_type = response.headers.get("content-type", "").lower()
-            final_url = response.url
-
-            # Защита от SSRF через цепочку редиректов: если url изменился,
-            # повторно проверяем безопасность final_url.
-            if (
-                isinstance(final_url, str)
-                and final_url != url
-                and not self._is_safe_url(final_url)
-            ):
-                response.close()
-                raise ValueError(
-                    f"Redirected to blocked URL: {self._redact_url(final_url)}"
-                )
-
-            logger.info(f"Определен Content-Type: {content_type} для URL: {final_url}")
-
-            return content_type, final_url
-
-        except ValueError:
-            # SSRF-блок и too-many-redirects пробрасываем без fallback на GET.
-            raise
-        except Exception as e:
-            logger.warning(f"Ошибка HEAD запроса: {str(e)}, попробуем GET запрос")
-            # Fallback: делаем GET запрос но читаем только заголовки
-            try:
-                response = session.get(
-                    url,
-                    timeout=head_timeout,
-                    allow_redirects=follow_redirects,
-                    stream=True,
-                    verify=True,
-                )
-
-                if follow_redirects and len(response.history) > max_redirects:
-                    response.close()
-                    raise ValueError(
-                        f"Too many redirects: {len(response.history)} > {max_redirects}"
-                    )
-
-                response.raise_for_status()
-
-                content_type = response.headers.get("content-type", "").lower()
-                final_url = response.url
-
-                # Закрываем соединение, не читая тело
-                response.close()
-
-                # Повторная SSRF-проверка после редиректов.
-                if (
-                    isinstance(final_url, str)
-                    and final_url != url
-                    and not self._is_safe_url(final_url)
-                ):
-                    raise ValueError(
-                        f"Redirected to blocked URL: {self._redact_url(final_url)}"
-                    )
-
-                logger.info(
-                    f"Определен Content-Type через GET: {content_type} для URL: {final_url}"
-                )
-                return content_type, final_url
-
-            except Exception as get_error:
-                logger.error(f"Ошибка при определении типа контента: {str(get_error)}")
-                raise ValueError(f"Unable to determine content type: {str(get_error)}")
-        finally:
-            session.close()
+        follow = bool(getattr(extraction_options, "follow_redirects", False))
+        redirects = getattr(extraction_options, "max_redirects", None)
+        with web_session() as session:
+            session.headers["User-Agent"] = user_agent or settings.DEFAULT_USER_AGENT
+            for method in ("HEAD", "GET"):
+                try:
+                    with safe_request(
+                        session,
+                        method,
+                        url,
+                        self._is_safe_url,
+                        timeout=timeout,
+                        follow_redirects=follow,
+                        max_redirects=5 if redirects is None else redirects,
+                    ) as response:
+                        response.raise_for_status()
+                        return (
+                            response.headers.get("content-type", "").lower(),
+                            response.url,
+                        )
+                except requests.RequestException:
+                    if method == "GET":
+                        raise
+        raise ValueError("Unable to determine content type")
 
     def _is_html_content(self, content_type: str, url: str) -> bool:
         """
@@ -2628,19 +2529,26 @@ class TextExtractor:
         }
 
         # Создание сессии
-        session = requests.Session()
+        session = web_session()
         session.headers.update(headers)
 
         temp_file_path = None
+        response = None
         try:
             logger.info(f"Скачиваю файл с URL: {url}")
 
-            response = session.get(
+            response = safe_request(
+                session,
+                "GET",
                 url,
+                self._is_safe_url,
                 timeout=download_timeout,
-                allow_redirects=follow_redirects,
-                stream=True,
-                verify=True,
+                follow_redirects=follow_redirects,
+                max_redirects=(
+                    5
+                    if getattr(extraction_options, "max_redirects", None) is None
+                    else extraction_options.max_redirects
+                ),
             )
             response.raise_for_status()
 
@@ -2709,6 +2617,8 @@ class TextExtractor:
                     logger.warning(
                         f"Не удалось удалить временный файл {temp_file_path}: {str(e)}"
                     )
+            if response is not None:
+                response.close()
             session.close()
 
     def _extract_filename_from_response(self, response, url: str) -> str:
@@ -2893,87 +2803,31 @@ class TextExtractor:
             raise ValueError(f"Error processing HTML page: {str(e)}")
 
     def _extract_page_with_requests(
-        self,
-        url: str,
-        user_agent: Optional[str] = None,
-        extraction_options: Optional[Any] = None,
-    ) -> tuple[str, str]:
-        """
-        Извлечение HTML контента страницы с помощью requests (без JS, обновлено в v1.10.2).
-
-        Args:
-            url: URL страницы
-            user_agent: Пользовательский User-Agent
-            extraction_options: Настройки извлечения
-
-        Returns:
-            tuple[str, str]: (html_content, final_url)
-        """
-        if not requests:
-            raise ValueError("requests library not available for web extraction")
-
-        # Определяем настройки с учетом переданных параметров или значений по умолчанию
-        web_page_timeout = (
-            extraction_options.web_page_timeout
-            if extraction_options and extraction_options.web_page_timeout is not None
-            else settings.WEB_PAGE_TIMEOUT
+        self, url, user_agent=None, extraction_options=None
+    ):
+        """Загрузка HTML с лимитом распакованных байтов и безопасными редиректами."""
+        timeout = (
+            getattr(extraction_options, "web_page_timeout", None)
+            or settings.WEB_PAGE_TIMEOUT
         )
-
-        # Безопасный default — не следовать редиректам.
-        follow_redirects = (
-            extraction_options.follow_redirects
-            if extraction_options and extraction_options.follow_redirects is not None
-            else False
-        )
-
-        # Установка User-Agent
-        headers = {
-            "User-Agent": user_agent or settings.DEFAULT_USER_AGENT,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "ru,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate",
-            "Connection": "keep-alive",
-        }
-
-        try:
-            # Загрузка страницы с таймаутом
-            response = requests.get(
+        follow = bool(getattr(extraction_options, "follow_redirects", False))
+        redirects = getattr(extraction_options, "max_redirects", None)
+        with web_session() as session:
+            session.headers["User-Agent"] = user_agent or settings.DEFAULT_USER_AGENT
+            with safe_request(
+                session,
+                "GET",
                 url,
-                headers=headers,
-                timeout=web_page_timeout,
-                allow_redirects=follow_redirects,
-                stream=False,
-                verify=True,
-            )
-            response.raise_for_status()
-
-            # Автоопределение кодировки
-            response.encoding = response.apparent_encoding or "utf-8"
-            html_content = response.text
-            final_url = response.url
-
-            # Повторная SSRF-проверка после редиректов.
-            if (
-                isinstance(final_url, str)
-                and final_url != url
-                and not self._is_safe_url(final_url)
-            ):
-                raise ValueError(
-                    f"Redirected to blocked URL: {self._redact_url(final_url)}"
-                )
-
-            logger.info(
-                f"HTML получен через requests, размер: {len(html_content)} символов"
-            )
-            return html_content, final_url
-
-        except requests.RequestException as e:
-            if "timeout" in str(e).lower():
-                raise ValueError(f"Page loading timeout: {str(e)}")
-            elif "connection" in str(e).lower():
-                raise ValueError(f"Connection error: {str(e)}")
-            else:
-                raise ValueError(f"Failed to load page: {str(e)}")
+                self._is_safe_url,
+                timeout=timeout,
+                follow_redirects=follow,
+                max_redirects=5 if redirects is None else redirects,
+            ) as response:
+                response.raise_for_status()
+                content = read_limited(response, settings.MAX_FILE_SIZE)
+                response._content = content
+                response.encoding = response.apparent_encoding or "utf-8"
+                return response.text, response.url
 
     def _is_safe_url(self, url: str) -> bool:
         """Проверка безопасности URL (защита от SSRF)."""
@@ -3346,17 +3200,18 @@ class TextExtractor:
             # Загрузка изображения
             headers = {"User-Agent": settings.DEFAULT_USER_AGENT, "Referer": base_url}
 
-            response = requests.get(
-                img_url,
-                headers=headers,
-                timeout=image_download_timeout,
-                stream=True,
-                verify=True,
-            )
-            response.raise_for_status()
-
-            # Проверяем размер изображения
-            img_content = response.content
+            with web_session() as session:
+                with safe_request(
+                    session,
+                    "GET",
+                    img_url,
+                    self._is_safe_url,
+                    timeout=image_download_timeout,
+                    follow_redirects=True,
+                    headers=headers,
+                ) as response:
+                    response.raise_for_status()
+                    img_content = read_limited(response, settings.MAX_FILE_SIZE)
             logger.info(f"Image content size: {len(img_content)} bytes")
             if len(img_content) == 0:
                 logger.warning("Image content is empty")

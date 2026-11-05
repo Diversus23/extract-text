@@ -594,22 +594,6 @@ def test_timeout_is_504(test_client, monkeypatch):
     assert error["type"] == "server_error"
 
 
-def test_temp_files_are_cleaned_after_success_and_failure(test_client):
-    with patch("app.main.cleanup_recent_temp_files") as cleanup:
-        post_chat(test_client, chat_payload())
-        assert cleanup.call_count == 1
-        with patch(
-            "app.extractors.TextExtractor.extract_text", side_effect=ValueError("x")
-        ):
-            post_chat(test_client, chat_payload())
-        assert cleanup.call_count == 2
-
-
-def test_failure_of_cleanup_does_not_break_the_response(test_client):
-    with patch("app.main.cleanup_recent_temp_files", side_effect=OSError("disk")):
-        assert post_chat(test_client, chat_payload()).status_code == 200
-
-
 def test_extraction_runs_in_threadpool(test_client):
     with patch("app.main.run_in_threadpool") as pool:
 
