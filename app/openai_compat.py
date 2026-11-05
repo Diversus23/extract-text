@@ -15,7 +15,7 @@ API_KEY_SECURITY = Security(api_key_scheme)
 BEARER_SECURITY = Security(bearer_scheme)
 
 STARTED_AT = int(time.time())
-OPENAI_PATHS = {"/v1/models", "/v1/audio/transcriptions"}
+OPENAI_PATHS = {"/v1/models", "/v1/audio/transcriptions", "/v1/chat/completions"}
 
 # Публичные идентификаторы моделей сервиса. Префикс принадлежит каталогу, а не
 # конфигурации: TRANSCRIPTION_MODEL остаётся именем каталога весов (model_dir).
@@ -50,6 +50,7 @@ def openai_error_response(status, message, headers=None, *, code=None, param=Non
     default_codes = {
         400: "invalid_request",
         401: "invalid_api_key",
+        405: "method_not_allowed",
         408: "request_timeout",
         413: "audio_too_large",
         415: "unsupported_audio_format",
@@ -163,7 +164,7 @@ def models_payload():
             "owned_by": "extract-text",
             "name": "softonit.ru: извлечение текста",
             "description": "Извлечение текста из документов, изображений и "
-            "архивов (POST /v1/extract/file)",
+            "архивов (POST /v1/chat/completions, часть type=file)",
             "architecture": {
                 "input_modalities": ["file"],
                 "output_modalities": ["text"],

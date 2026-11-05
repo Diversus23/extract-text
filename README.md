@@ -473,6 +473,11 @@ API теперь поддерживает гибкие настройки изв
 - Работаете с прямыми ссылками на документы, PDF, архивы и другие файлы
 - Интегрируетесь с системами где файлы доступны через HTTP/HTTPS ссылки
 
+**Используйте `/v1/chat/completions`** (с 1.16.0) когда:
+- Клиент умеет только OpenAI-совместимый чат и передаёт документ частью `type=file`
+- Нужен один JSON-запрос вместо multipart; текст возвращается в `choices[0].message.content` блоками `--- FILE: имя ---`
+- `/v1/extract/file` остаётся для прямой загрузки и не меняется
+
 **Используйте `/v1/transcribe`** когда:
 - Нужна расшифровка аудиозаписи (звонки, совещания) с тайм-кодами
 - Запись стерео и нужно знать, какая реплика чья (метки каналов)
@@ -872,6 +877,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 7555
 ├── app/
 │   ├── __init__.py
 │   ├── main.py           # Главный модуль FastAPI
+│   ├── chat_completions.py # POST /v1/chat/completions: разбор запроса и ответ
+│   ├── chat_ingress.py   # Доступ и лимит тела chat/completions до чтения
 │   ├── config.py         # Конфигурация
 │   ├── extractors.py     # Извлечение текста из всех форматов
 │   └── utils.py          # Утилиты (включая функции безопасности)
@@ -1212,15 +1219,15 @@ curl http://localhost:7555/v1/supported-formats
 curl -X POST -F "file=@tests/test.txt" http://localhost:7555/v1/extract/file
 ```
 
-## OpenAI-совместимый API (1.15.0)
+## OpenAI-совместимый API (1.15.0, извлечение текста через chat/completions — 1.16.0)
 
-Для клиентов OpenAI SDK доступны `GET /v1/models` и `POST /v1/audio/transcriptions`. На всех маршрутах `/v1` ключ можно передать через `Authorization: Bearer <ключ>` или `X-API-Key`; при одновременной передаче приоритет у непустого `X-API-Key`. При `AUTH_MODE=none` ключ не требуется. Старый `/v1/transcribe` сохраняет прежний контракт.
+Для клиентов OpenAI SDK доступны `GET /v1/models`, `POST /v1/audio/transcriptions` и (с 1.16.0) `POST /v1/chat/completions`. На всех маршрутах `/v1` ключ можно передать через `Authorization: Bearer <ключ>` или `X-API-Key`; при одновременной передаче приоритет у непустого `X-API-Key`. При `AUTH_MODE=none` ключ не требуется. Старый `/v1/transcribe` сохраняет прежний контракт.
 
 `GET /v1/models` возвращает каталог из двух моделей в фиксированном порядке (у каждой `object=model`, `name`, `description`, `created` — метка запуска процесса, `owned_by=extract-text`):
 
 | `id` | `architecture` | Где используется |
 |------|----------------|------------------|
-| `softonit/extracttext` | вход `file`, выход `text` | `POST /v1/extract/file` (поле `model`); публикуется всегда |
+| `softonit/extracttext` | вход `file`, выход `text` | `POST /v1/chat/completions` (часть `type=file`) и `POST /v1/extract/file` (поле `model`); публикуется всегда |
 | `softonit/gigaam-v3-e2e-rnnt` | вход `audio`, выход `text` | `POST /v1/audio/transcriptions`; публикуется, если транскрибация включена или задан `TRANSCRIPTION_UPSTREAM_URL` |
 
 Если локальная транскрибация выключена и upstream не задан, в списке остаётся только `softonit/extracttext`. Это каталог, а готовность транскрибации проверяется через `/health?check=transcription`.
@@ -1263,6 +1270,105 @@ curl http://localhost:7555/v1/audio/transcriptions \
   -F file=@call.wav -F model=softonit/gigaam-v3-e2e-rnnt -F response_format=verbose_json
 ```
 
+### Извлечение текста через `POST /v1/chat/completions` (1.16.0)
+
+Модель `softonit/extracttext` извлекает текст из одного файла, переданного частью `type=file` пользовательского сообщения. Ответ — не потоковый `chat.completion`, а извлечённый текст лежит в `choices[0].message.content`. Те же ограничения безопасности, что у `/v1/extract/file`: проверка соответствия расширения содержимому, `MAX_FILE_SIZE`, `PROCESSING_TIMEOUT_SECONDS`, защита архивов. Прежние маршруты `/v1/extract/*` не изменились.
+
+Запрос (`Content-Type: application/json`, заголовок `Content-Length` обязателен):
+
+```json
+{
+  "model": "softonit/extracttext",
+  "messages": [
+    {"role": "user", "content": [
+      {"type": "text", "text": "необязательная подпись, игнорируется"},
+      {"type": "file", "file": {"filename": "invoice.pdf", "file_data": "data:application/pdf;base64,JVBERi0x..."}}
+    ]}
+  ]
+}
+```
+
+- `model` обязательна: `softonit/extracttext`. Модель транскрибации даёт `404 model_not_found` («Not an extraction model»), любая другая — `404 model_not_found` («Unknown extraction model»), отсутствие — `400 missing_required_parameter`.
+- File-часть ровно одна на весь запрос (в любых сообщениях): нет — `400 missing_required_parameter`, больше одной — `400 too_many_files`. Для архива блоки порождаются внутри одного файла. `file_id` не поддерживается (`400 unsupported_parameter`).
+- `filename` — непустая строка, расширение определяет формат. `file_data` — строка `data:<mime>;base64,<данные>`; MIME игнорируется, переводы строк внутри base64 допускаются, иной формат или невалидный base64 — `400 invalid_file_data`.
+- Части типа `text` и строковый `content` игнорируются; любой иной тип части (`image_url`, `input_audio`) — `400 unsupported_content_type`.
+- `stream=true` отклоняется (`400 unsupported_parameter`), `stream=false` и отсутствие принимаются. Остальные параметры OpenAI (`temperature`, `max_tokens`, `n`, `user` и т.д.) принимаются и игнорируются.
+- Размер файла: не больше `MAX_FILE_SIZE` (по умолчанию 20 МиБ) до и после декодирования base64, иначе `413 file_too_large`. Тело запроса ограничено `ceil(MAX_FILE_SIZE / 3) * 4 + 256 КиБ` (для 20 МиБ — 27 962 028 + 262 144 байт, ≈ 4/3 `MAX_FILE_SIZE`): `Content-Length` сверяется с лимитом до чтения тела, при чтении байты считаются независимо от заголовка. Новых переменных окружения нет.
+
+Ответ `200`:
+
+```json
+{
+  "id": "chatcmpl-<uuid4 hex>", "object": "chat.completion", "created": 1762300000,
+  "model": "softonit/extracttext",
+  "choices": [{"index": 0, "message": {"role": "assistant",
+    "content": "--- FILE: invoice.pdf ---\nтекст...\n--- FILE: a.txt ---\nтекст"},
+    "finish_reason": "stop"}],
+  "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+}
+```
+
+`content` — это `"\n".join("--- FILE: {filename} ---\n{text}")` по элементам `files[]`, которые вернул бы `/v1/extract/file` для того же файла, **в том числе для единственного файла**; `filename` — имя из результата извлечения (без пробелов по краям), элемент без `text` пропускается, текст не обрезается.
+
+Ошибки — только в конверте OpenAI (`{"error": {"message", "type", "param", "code"}}`):
+
+| HTTP | `code` | Когда |
+|------|--------|-------|
+| 400 | `invalid_request`, `missing_required_parameter`, `unsupported_parameter`, `unsupported_content_type`, `too_many_files`, `invalid_file_data` | нет `Content-Length` или он некорректен, битый JSON, неверные типы, правила выше |
+| 401 | `invalid_api_key` | нет или неверный ключ, заголовок `WWW-Authenticate: Bearer` |
+| 404 | `model_not_found` | модель не `softonit/extracttext` |
+| 405 | `method_not_allowed` | любой метод, кроме `POST` |
+| 413 | `file_too_large` | тело или файл больше лимита |
+| 415 | `unsupported_media_type`, `unsupported_file_format` | не JSON; формат не поддержан или расширение не соответствует содержимому |
+| 422 | `invalid_file` | файл пустой, повреждён или защищён паролем |
+| 500 | `internal_error` | непредвиденное исключение при извлечении |
+| 504 | `request_timeout` | превышен `PROCESSING_TIMEOUT_SECONDS` |
+
+Кодов 429 и 503 маршрут в 1.16.0 не формирует (очереди допуска для документов нет). Для клиентов, которые различают окончательные и повторяемые ошибки: `413`, `415`, `422` относятся к файлу и повтор не поможет, `500` и `504` — сбой или перегрузка сервиса. Проверка доступа, `Content-Length` и лимита выполняется до чтения тела (отдельный слой `app/chat_ingress.py`); содержимое `file_data` и base64 в логи не пишутся.
+
+```python
+import base64
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:7555/v1",
+    api_key=os.environ.get("EXTRACT_TEXT_API_KEY", "unused"),
+    timeout=330,
+    max_retries=0,
+)
+with open("invoice.pdf", "rb") as document:
+    encoded = base64.b64encode(document.read()).decode("ascii")
+result = client.chat.completions.create(
+    model="softonit/extracttext",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "file",
+                    "file": {
+                        "filename": "invoice.pdf",
+                        "file_data": f"data:application/pdf;base64,{encoded}",
+                    },
+                }
+            ],
+        }
+    ],
+)
+print(result.choices[0].message.content)
+```
+
+```bash
+B64=$(base64 -w0 document.pdf)   # на macOS: base64 -i document.pdf
+curl http://localhost:7555/v1/chat/completions \
+  -H "Authorization: Bearer $EXTRACT_TEXT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"model\":\"softonit/extracttext\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"file\",\"file\":{\"filename\":\"document.pdf\",\"file_data\":\"data:application/pdf;base64,$B64\"}}]}]}"
+```
+
+Для больших файлов `curl -d` упирается в лимит длины командной строки: передайте тело из файла (`-d @request.json`).
+
 ## Контрибуция
 
 1. Форк репозитория
@@ -1284,5 +1390,5 @@ curl http://localhost:7555/v1/audio/transcriptions \
 
 ---
 
-**Версия**: 1.15.0
+**Версия**: 1.16.0
 **Разработчик**: Барилко Виталий

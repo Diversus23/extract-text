@@ -1,7 +1,7 @@
 # Техническое задание: API для извлечения текста для RAG
 
-**Версия:** 1.15.0
-**Дата:** 02.11.2026
+**Версия:** 1.16.0
+**Дата:** 05.11.2026
 
 ---
 
@@ -1191,3 +1191,19 @@ safety-report.json
 * **Каталог.** Порядок записей `[softonit/extracttext, softonit/gigaam-v3-e2e-rnnt]`; модель извлечения публикуется всегда, транскрибация — при `ENABLE_TRANSCRIPTION` или заданном `TRANSCRIPTION_UPSTREAM_URL`.
 * **`POST /v1/extract/file`.** Необязательное поле формы `model`: пусто или `softonit/extracttext` — ответ прежний; иное значение — `404` в формате маршрута `{status, filename, message}` до чтения файла.
 * **Развёртывание.** Контейнеры `api` и `api-audio` обновляются одним релизом: `model` пересылается в `api-audio` без изменений и проверяется там. На время рестарта необновлённый `api-audio` отвечает 404 `model_not_found` на префиксный идентификатор; клиенты со старым идентификатором работают на обеих версиях.
+
+## Дополнение 1.16.0: извлечение текста через POST /v1/chat/completions
+
+Маршрут `POST /v1/chat/completions` (модель `softonit/extracttext`) даёт OpenAI-совместимым клиентам извлечение текста из одного файла. Прежние `/v1/extract/file`, `/v1/extract/base64`, `/v1/extract/url`, `/v1/transcribe` и `/v1/audio/transcriptions` не меняются. Новых переменных окружения нет.
+
+* **Запрос.** `Content-Type: application/json` (иначе 415 `unsupported_media_type`); `Content-Length` обязателен (иначе 400 `invalid_request`). Поля: `model` (обязательна, `softonit/extracttext`), `messages` (непустой массив), `stream` (`true` — 400 `unsupported_parameter`; `false` и отсутствие принимаются). Прочие параметры OpenAI (`temperature`, `max_tokens`, `n`, `user` и т.д.) принимаются и игнорируются. `content` сообщения — строка (игнорируется) или массив частей: `text` (игнорируется) и `file`; иной тип части — 400 `unsupported_content_type`. File-часть ровно одна во всех сообщениях (нет — 400 `missing_required_parameter`; больше одной — 400 `too_many_files`); `file.file_id` — 400 `unsupported_parameter`; `file.filename` — непустая строка (расширение определяет формат и сверяется с содержимым, как в `/v1/extract/file`); `file.file_data` — `data:<mime>;base64,<данные>`, MIME игнорируется, переводы строк внутри base64 допускаются, иной формат и невалидный base64 — 400 `invalid_file_data`.
+* **Модель.** Нет — 400 `missing_required_parameter`; идентификатор транскрибации — 404 `model_not_found` («Not an extraction model»); иное — 404 `model_not_found` («Unknown extraction model»).
+* **Порядок проверок.** Доступ (Bearer / `X-API-Key`, приоритет непустого `X-API-Key`, `AUTH_MODE`) и `Content-Length` — до чтения тела (`app/chat_ingress.py`); затем `Content-Type`, JSON, `model`, `stream`, части сообщений, размер файла, извлечение.
+* **Лимиты.** Файл — не больше `MAX_FILE_SIZE` до декодирования (по длине base64) и после (по байтам), иначе 413 `file_too_large`. Тело — не больше `ceil(MAX_FILE_SIZE / 3) * 4 + 256 КиБ` (константа `CHAT_BODY_OVERHEAD_BYTES` в коде; для 20 МиБ это 27 962 028 + 262 144 байт, ≈ 4/3 `MAX_FILE_SIZE`). Заявленный `Content-Length` сверяется с лимитом до чтения, фактические байты считаются при чтении независимо от заголовка. Файл на диск до проверок не пишется; `file_data` и base64 в логи не попадают.
+* **Извлечение.** Общая функция `_extract_document` (`app/main.py`) делит логику с `/v1/extract/file`: пустой файл, `validate_file_type`, `run_in_threadpool` с `asyncio.wait_for(PROCESSING_TIMEOUT_SECONDS)`, `cleanup_recent_temp_files` в `finally`. Прежний маршрут отвечает как раньше (в том числе 422 «Файл поврежден…» на непредвиденное исключение), новый — в конверте OpenAI.
+* **Ответ 200.** Не потоковый `chat.completion`: `id=chatcmpl-<uuid4 hex>`, `object`, `created`, `model=softonit/extracttext`, `choices[0]={index:0, message:{role:assistant, content}, finish_reason:stop}`, `usage` из нулей. `content` — `"\n".join("--- FILE: {filename.strip()} ---\n{text}")` по элементам `files[]` результата извлечения, включая единственный файл; элемент без `text` пропускается, пустой список даёт пустую строку, текст не обрезается. Имя блока — `filename` из результата извлечения, а не исходное имя запроса.
+* **Ошибки.** Только конверт `{"error": {message, type, param, code}}`: 400 `invalid_request` / `missing_required_parameter` / `unsupported_parameter` / `unsupported_content_type` / `too_many_files` / `invalid_file_data`; 401 `invalid_api_key` (`WWW-Authenticate: Bearer`); 404 `model_not_found`; 405 `method_not_allowed` (код добавлен в общую таблицу; затрагивает все пути из `OPENAI_PATHS`); 413 `file_too_large`; 415 `unsupported_media_type` / `unsupported_file_format`; 422 `invalid_file`; 500 `internal_error` (непредвиденное исключение извлечения); 504 `request_timeout`. Коды 429 и 503 маршрутом не формируются.
+* **Каталог.** `description` модели `softonit/extracttext` в `GET /v1/models`: «Извлечение текста из документов, изображений и архивов (POST /v1/chat/completions, часть type=file)».
+* **Развёртывание.** Маршрут обслуживает контейнер `api`; `api-audio` не затрагивается. После `make prod-up` проверить `GET /` (версия 1.16.0) и `GET /v1/models`.
+
+Пример OpenAI SDK и curl — в разделе «OpenAI-совместимый API» README.md.

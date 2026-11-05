@@ -36,6 +36,16 @@ from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth import verify_api_key
+from app.chat_completions import (
+    ExtractionError,
+    build_chat_response,
+    chat_body_limit,
+    format_extraction_content,
+    parse_chat_request,
+    parse_json_body,
+    read_limited_body,
+)
+from app.chat_ingress import ChatBodyGuardMiddleware
 from app.config import settings
 from app.extractors import TextExtractor
 from app.openai_compat import (
@@ -252,6 +262,7 @@ app = FastAPI(
     },
 )
 app.add_middleware(TranscriptionIngressMiddleware)
+app.add_middleware(ChatBodyGuardMiddleware)
 
 # Добавление CORS middleware. allow_credentials=True не совместим с allow_origins=["*"]
 # по спецификации CORS — браузер просто проигнорирует ответ. Поэтому при wildcard
@@ -335,6 +346,106 @@ async def supported_formats() -> Dict[str, list]:
     return settings.SUPPORTED_FORMATS
 
 
+async def _extract_document(content: bytes, original_filename: str) -> list:
+    """
+    Общее извлечение текста из байтов файла для /v1/extract/file и chat/completions.
+
+    Пустой файл, проверка соответствия расширения содержимому, извлечение в пуле
+    потоков с таймаутом и очистка временных файлов. Размер файла проверяет
+    вызывающий маршрут. Любая ошибка возвращается как ExtractionError: каждый
+    маршрут показывает её в своём формате. Функция остаётся в app.main, потому
+    что тесты подменяют здесь validate_file_type и TextExtractor.extract_text.
+    """
+    if not content:
+        logger.warning(f"Файл {original_filename} пуст")
+        raise ExtractionError(422, "File is empty", legacy_detail="File is empty")
+
+    try:
+        safe_filename_for_processing = sanitize_filename(original_filename)
+
+        # Проверка соответствия расширения файла его содержимому
+        is_valid, validation_error = validate_file_type(content, original_filename)
+        if not is_valid:
+            logger.warning(
+                f"Файл {original_filename} не прошел проверку типа: {validation_error}"
+            )
+            raise ExtractionError(
+                415,
+                "Расширение файла не соответствует его содержимому. Возможная подделка типа файла.",
+            )
+
+        # Извлечение текста - КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: выполняем в пуле потоков с таймаутом
+        start_time = time.time()
+        try:
+            extracted_files = await asyncio.wait_for(
+                run_in_threadpool(
+                    text_extractor.extract_text, content, safe_filename_for_processing
+                ),
+                timeout=settings.PROCESSING_TIMEOUT_SECONDS,  # 300 секунд согласно ТЗ п.5.1
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Таймаут обработки файла {original_filename}: превышен лимит {settings.PROCESSING_TIMEOUT_SECONDS} секунд"
+            )
+            raise ExtractionError(
+                504,
+                f"Обработка файла превысила установленный лимит времени ({settings.PROCESSING_TIMEOUT_SECONDS} секунд).",
+            )
+        finally:
+            # Дополнительная очистка временных файлов после обработки
+            try:
+                cleanup_recent_temp_files()
+            except Exception as cleanup_error:
+                logger.warning(
+                    f"Ошибка при очистке временных файлов: {str(cleanup_error)}"
+                )
+
+        process_time = time.time() - start_time
+
+        # Подсчет общей длины текста
+        total_text_length = sum(
+            len(file_data.get("text", "")) for file_data in extracted_files
+        )
+
+        logger.info(
+            f"Текст успешно извлечен из {original_filename} за {process_time:.3f}s. "
+            f"Обработано файлов: {len(extracted_files)}, общая длина текста: {total_text_length} символов"
+        )
+        return extracted_files
+
+    except ExtractionError:
+        raise
+    except ValueError as e:
+        error_msg = str(e)
+        if "Unsupported file format" in error_msg:
+            logger.warning(f"Неподдерживаемый формат файла: {original_filename}")
+            raise ExtractionError(415, "Неподдерживаемый формат файла.") from e
+        logger.error(
+            f"Ошибка при обработке файла {original_filename}: {error_msg}",
+            exc_info=True,
+        )
+        raise ExtractionError(
+            422, "Файл поврежден или формат не поддерживается."
+        ) from e
+    except Exception as e:
+        logger.error(
+            f"Ошибка при обработке файла {original_filename}: {str(e)}", exc_info=True
+        )
+        raise ExtractionError(
+            422, "Файл поврежден или формат не поддерживается.", internal=True
+        ) from e
+
+
+def _legacy_extraction_error(error: ExtractionError, filename: str) -> JSONResponse:
+    """Ошибка общей функции в прежнем формате /v1/extract/file."""
+    if error.legacy_detail is not None:
+        raise HTTPException(status_code=error.status, detail=error.legacy_detail)
+    return JSONResponse(
+        status_code=error.status,
+        content={"status": "error", "filename": filename, "message": error.message},
+    )
+
+
 @v1_router.post("/extract/file")
 async def extract_text(
     file: UploadFile = FILE_UPLOAD, model: Optional[str] = EXTRACT_MODEL_FORM
@@ -356,9 +467,7 @@ async def extract_text(
                     "Допустима только softonit/extracttext или пустое значение.",
                 },
             )
-        # Санитизация имени файла
         original_filename = file.filename or "unknown_file"
-        safe_filename_for_processing = sanitize_filename(original_filename)
 
         logger.info(f"Получен файл для обработки: {original_filename}")
 
@@ -388,67 +497,10 @@ async def extract_text(
         # Чтение содержимого файла
         content = await file.read()
 
-        # Проверка на пустой файл
-        if not content:
-            logger.warning(f"Файл {original_filename} пуст")
-            raise HTTPException(status_code=422, detail="File is empty")
-
-        # Проверка соответствия расширения файла его содержимому
-        is_valid, validation_error = validate_file_type(content, original_filename)
-        if not is_valid:
-            logger.warning(
-                f"Файл {original_filename} не прошел проверку типа: {validation_error}"
-            )
-            return JSONResponse(
-                status_code=415,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": "Расширение файла не соответствует его содержимому. Возможная подделка типа файла.",
-                },
-            )
-
-        # Извлечение текста - КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: выполняем в пуле потоков с таймаутом
-        start_time = time.time()
         try:
-            extracted_files = await asyncio.wait_for(
-                run_in_threadpool(
-                    text_extractor.extract_text, content, safe_filename_for_processing
-                ),
-                timeout=settings.PROCESSING_TIMEOUT_SECONDS,  # 300 секунд согласно ТЗ п.5.1
-            )
-        except asyncio.TimeoutError:
-            logger.error(
-                f"Таймаут обработки файла {original_filename}: превышен лимит {settings.PROCESSING_TIMEOUT_SECONDS} секунд"
-            )
-            return JSONResponse(
-                status_code=504,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": f"Обработка файла превысила установленный лимит времени ({settings.PROCESSING_TIMEOUT_SECONDS} секунд).",
-                },
-            )
-        finally:
-            # Дополнительная очистка временных файлов после обработки
-            try:
-                cleanup_recent_temp_files()
-            except Exception as cleanup_error:
-                logger.warning(
-                    f"Ошибка при очистке временных файлов: {str(cleanup_error)}"
-                )
-
-        process_time = time.time() - start_time
-
-        # Подсчет общей длины текста
-        total_text_length = sum(
-            len(file_data.get("text", "")) for file_data in extracted_files
-        )
-
-        logger.info(
-            f"Текст успешно извлечен из {original_filename} за {process_time:.3f}s. "
-            f"Обработано файлов: {len(extracted_files)}, общая длина текста: {total_text_length} символов"
-        )
+            extracted_files = await _extract_document(content, original_filename)
+        except ExtractionError as error:
+            return _legacy_extraction_error(error, original_filename)
 
         return {
             "status": "success",
@@ -459,31 +511,6 @@ async def extract_text(
 
     except HTTPException:
         raise
-    except ValueError as e:
-        error_msg = str(e)
-        if "Unsupported file format" in error_msg:
-            logger.warning(f"Неподдерживаемый формат файла: {original_filename}")
-            return JSONResponse(
-                status_code=415,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": "Неподдерживаемый формат файла.",
-                },
-            )
-        else:
-            logger.error(
-                f"Ошибка при обработке файла {original_filename}: {error_msg}",
-                exc_info=True,
-            )
-            return JSONResponse(
-                status_code=422,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": "Файл поврежден или формат не поддерживается.",
-                },
-            )
     except Exception as e:
         # Определяем имя файла для логирования
         filename_for_error = getattr(file, "filename", "unknown_file") or "unknown_file"
@@ -1021,6 +1048,68 @@ async def openai_transcriptions(
             ),
         ) from error
     return transcription_payload(result, response_format, filename, external_id)
+
+
+# Коды OpenAI-ошибок для результатов общей функции извлечения.
+CHAT_EXTRACTION_CODES = {
+    413: "file_too_large",
+    415: "unsupported_file_format",
+    422: "invalid_file",
+    504: "request_timeout",
+}
+
+
+def _chat_extraction_error(error: ExtractionError) -> OpenAIAPIError:
+    """Ошибка общей функции в конверте OpenAI; сбой извлечения - 500."""
+    if error.internal:
+        return OpenAIAPIError(
+            500, "Internal error while extracting text", code="internal_error"
+        )
+    return OpenAIAPIError(
+        error.status,
+        error.message,
+        code=CHAT_EXTRACTION_CODES.get(error.status, "invalid_file"),
+    )
+
+
+@openai_router.post("/chat/completions")
+async def chat_completions(request: Request):
+    """
+    Извлечение текста через модель softonit/extracttext.
+
+    Файл передаётся частью type=file сообщения (file_data - data URL с base64),
+    ответ - chat.completion с блоками «--- FILE: имя ---» в content. Тело и
+    file_data в логи не пишутся.
+    """
+    media_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if media_type != "application/json":
+        raise OpenAIAPIError(
+            415, "Content-Type must be application/json", code="unsupported_media_type"
+        )
+    try:
+        body = await read_limited_body(request, chat_body_limit())
+        payload = parse_json_body(body)
+        del body
+        chat_file = parse_chat_request(payload)
+        del payload
+        logger.info(
+            f"Получен файл для обработки (chat/completions): {chat_file.filename}, "
+            f"{len(chat_file.content)} байт"
+        )
+        try:
+            extracted_files = await _extract_document(
+                chat_file.content, chat_file.filename
+            )
+        except ExtractionError as error:
+            raise _chat_extraction_error(error) from error
+        return build_chat_response(format_extraction_content(extracted_files))
+    except OpenAIAPIError:
+        raise
+    except Exception:
+        logger.error("Непредвиденная ошибка chat/completions", exc_info=True)
+        raise OpenAIAPIError(
+            500, "Internal server error", code="internal_error"
+        ) from None
 
 
 app.include_router(openai_router)

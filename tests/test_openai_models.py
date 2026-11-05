@@ -49,6 +49,14 @@ def test_models_without_transcription_keep_extraction(test_client, monkeypatch):
     assert [model["id"] for model in data] == [EXTRACTION_MODEL_ID]
 
 
+def test_extraction_description_points_to_chat_completions(test_client, monkeypatch):
+    data = get_models(test_client, monkeypatch, False, "")
+    description = data[0]["description"]
+    assert "/v1/chat/completions" in description
+    assert "type=file" in description
+    assert "/v1/extract/file" not in description
+
+
 def test_model_ids_contract():
     # 1С относит модель к извлечению текста по подстроке «extract» в идентификаторе
     assert EXTRACTION_MODEL_ID == "softonit/extracttext"
@@ -63,4 +71,4 @@ def test_prefix_is_not_doubled(test_client, monkeypatch):
 
 
 def test_version(test_client):
-    assert test_client.get("/").json()["version"] == "1.15.0"
+    assert test_client.get("/").json()["version"] == "1.16.0"

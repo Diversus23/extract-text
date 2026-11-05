@@ -46,7 +46,9 @@ CI (`.github/workflows/ci.yml`) запускает `lint` → `test-docker` → 
 
 ```
 app/
-├── main.py        # FastAPI: 4 эндпоинта, lifespan, middleware, Pydantic-модели
+├── main.py        # FastAPI: эндпоинты /v1/extract/*, /v1/transcribe, /v1/audio/transcriptions, /v1/chat/completions; lifespan, middleware, Pydantic-модели
+├── chat_completions.py  # POST /v1/chat/completions: разбор запроса, content-блоки, ответ (без импорта app.main)
+├── chat_ingress.py      # ASGI-предохранитель chat/completions: доступ и Content-Length до чтения тела
 ├── extractors.py  # TextExtractor: единая точка извлечения по расширению (~3300 строк)
 ├── config.py      # Settings (env-vars), SUPPORTED_FORMATS, MIME_TO_EXTENSION, VERSION
 ├── transcription.py  # /v1/transcribe: ffprobe/ffmpeg → GigaAM v3 (onnx-asr) + silero VAD, сегменты, говорящие по каналам
@@ -55,7 +57,7 @@ app/
 
 ### Ключевой инвариант: всё CPU-bound выполняется в threadpool с таймаутом
 
-Эндпоинты `/v1/extract/{file,base64,url}` оборачивают вызов `text_extractor.extract_text(...)` в `asyncio.wait_for(run_in_threadpool(...), timeout=settings.PROCESSING_TIMEOUT_SECONDS)` (300 сек по умолчанию). Это критично — event loop не должен блокироваться. Любой новый extractor должен оставаться синхронным и не делать `asyncio.run` внутри. У `TextExtractor` есть собственный `_thread_pool` (max_workers=4), корректно закрываемый в `lifespan` shutdown.
+Эндпоинты `/v1/extract/{file,base64,url}` (а `file` и `/v1/chat/completions` через общую `_extract_document`) оборачивают вызов `text_extractor.extract_text(...)` в `asyncio.wait_for(run_in_threadpool(...), timeout=settings.PROCESSING_TIMEOUT_SECONDS)` (300 сек по умолчанию). Это критично — event loop не должен блокироваться. Любой новый extractor должен оставаться синхронным и не делать `asyncio.run` внутри. У `TextExtractor` есть собственный `_thread_pool` (max_workers=4), корректно закрываемый в `lifespan` shutdown.
 
 ### Маршрутизация по форматам в `extractors.py`
 
@@ -117,3 +119,7 @@ app/
 ### OpenAI-совместимая транскрибация (1.14.0) и каталог моделей (1.15.0)
 
 `app/openai_compat.py` содержит формат ошибок, каталог моделей и представления ответа (`json`, `verbose_json`, `text`). С 1.15.0 каталог публикует `softonit/extracttext` (всегда; вход `file`) и `softonit/<TRANSCRIPTION_MODEL>` (по доступности транскрибации): префикс `PUBLIC_MODEL_PREFIX` добавляется в коде, `TRANSCRIPTION_MODEL` остаётся именем каталога весов, новых env нет. Идентификатор модели извлечения обязан содержать `extract` (1С по подстроке ставит флаг `text_extraction`; закреплено тестом). Транскрибация принимает публичный и прежний id (`is_transcription_model`), `POST /v1/extract/file` принимает необязательное поле `model` (`validate_extraction_model`, чужая → 404 в формате `{status, filename, message}` до чтения файла). `api` и `api-audio` обновляются одним релизом: `model` пересылается в `api-audio` verbatim. Новые `/v1/models` и `/v1/audio/transcriptions` зарегистрированы отдельным роутером; старый `/v1/transcribe` использует тот же `_run_transcription` и сохраняет прежний ответ. На всех `/v1` доступны Bearer и X-API-Key (приоритет у непустого X-API-Key), проверка общая в `app/auth.py`. Ingress и прокси обслуживают оба пути, выбирая формат ошибок по пути; все ограничения до multipart и удержание слота после отмены остаются обязательными. Полный контракт и пример OpenAI SDK — в README.md, нормативное дополнение — в docs/TZ.md.
+
+### Извлечение через POST /v1/chat/completions (1.16.0)
+
+`openai_router` обслуживает `POST /v1/chat/completions` (модель `softonit/extracttext`; одна file-часть сообщения, `file_data` = `data:<mime>;base64,...`). Ответ — не потоковый `chat.completion`, а `content` собран как `"\n".join("--- FILE: {filename.strip()} ---\n{text}")` по `files[]` результата извлечения (блок есть и у единственного файла; элемент без `text` пропускается). Общая логика извлечения вынесена в `_extract_document(content, original_filename)` в `app/main.py` (должна оставаться там: тесты прежних маршрутов патчат `app.main.validate_file_type` и `TextExtractor.extract_text`); ошибки передаются как `ExtractionError(status, message, legacy_detail, internal)`: `/v1/extract/file` показывает их побайтно как раньше (в том числе 422 для непредвиденного исключения), новый маршрут - в конверте OpenAI (непредвиденное исключение - 500 `internal_error`). Чистые функции разбора и сборки - в `app/chat_completions.py` (без импорта `app.main`). Лимит тела `chat_body_limit() = ceil(MAX_FILE_SIZE/3)*4 + 256 КиБ` проверяется дважды: `ChatBodyGuardMiddleware` (`app/chat_ingress.py`) - доступ и `Content-Length` до чтения тела, `read_limited_body` - потоковый подсчёт при чтении (ложный Content-Length не обходит лимит). Все ошибки маршрута - в конверте OpenAI (`/v1/chat/completions` входит в `OPENAI_PATHS`; для 405 добавлен код `method_not_allowed`). `file_data` и base64 в логи не писать. Новых env нет; маршрут обслуживает контейнер `api`. Контракт - в README.md, нормативное дополнение - в docs/TZ.md («Дополнение 1.16.0»).
